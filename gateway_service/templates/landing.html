@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}ФСП · Оренбургская область — код стал спортом{% endblock %}
+{% block content %}
+
+{# ============================== HERO (FSP composition: feature panel + events column) ============================== #}
+<section id="navigator" class="grid scroll-mt-24 gap-6 pt-8 lg:grid-cols-12 lg:pt-10" aria-labelledby="hero-title">
+
+  {# ---- feature panel ---- #}
+  <div class="relative flex min-h-[560px] min-w-0 flex-col overflow-hidden rounded-xl border border-fsp-line bg-fsp-panel bg-fsp-grid lg:col-span-7" data-parallax-root>
+    <span class="beam" aria-hidden="true"></span>
+    <div class="fsp-glow -right-24 -top-24 h-80 w-80 [transition:translate_0.9s_cubic-bezier(0.16,1,0.3,1)]" data-parallax="0.12" aria-hidden="true"></div>
+    <div class="fsp-glow -bottom-40 left-1/4 h-64 w-64 !opacity-20 [transition:translate_1.2s_cubic-bezier(0.16,1,0.3,1)]" data-parallax="-0.08" aria-hidden="true"></div>
+    <canvas class="pointer-events-none absolute inset-0 h-full w-full [mask-image:linear-gradient(to_right,rgba(0,0,0,0.25),#000_55%)]" data-network aria-hidden="true"></canvas>
+    {# animated circuit traces #}
+    <svg class="pointer-events-none absolute inset-y-0 right-0 h-full w-[62%] [mask-image:linear-gradient(to_left,#000_45%,transparent_95%)]" viewBox="0 0 440 560" preserveAspectRatio="xMaxYMid slice" fill="none" aria-hidden="true">
+      <g stroke="#3D3E42" stroke-width="1.2">
+        <path d="M440 70H360l-30 30v90"/><path d="M440 150H390v120l-40 40h-90"/><path d="M330 560V430l60-60h50"/>
+        <path d="M250 560V480h-60l-30-30"/><path d="M330 0v40h-50"/><path d="M400 560v-60"/>
+      </g>
+      <g stroke="#8C80FF" stroke-width="2" stroke-linecap="round">
+        <path class="trace" d="M440 70H360l-30 30v90"/><path class="trace" d="M440 150H390v120l-40 40h-90"/>
+        <path class="trace" d="M330 560V430l60-60h50"/><path class="trace" d="M250 560V480h-60l-30-30"/>
+        <path class="trace" d="M330 0v40h-50"/>
+      </g>
+      <g>
+        <rect x="322" y="182" width="16" height="16" rx="4" fill="#402FFF" class="node-pulse"/>
+        <rect x="252" y="302" width="16" height="16" rx="4" fill="none" stroke="#EDEDED" stroke-width="1.5"/>
+        <circle cx="160" cy="450" r="5" fill="#EC1D35" class="node-pulse"/>
+        <circle cx="280" cy="40" r="5" fill="#C7C7C7"/>
+        <rect x="384" y="364" width="12" height="12" transform="rotate(45 390 370)" fill="none" stroke="#402FFF" stroke-width="1.5"/>
+      </g>
+    </svg>
+
+    <div class="relative flex-1 p-7 sm:p-10">
+      <p class="inline-flex items-center gap-2 rounded-md bg-fsp-light px-3 py-1 font-mono text-xs text-fsp-blue" data-reveal>
+        <span class="relative flex h-1.5 w-1.5"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-fsp-red opacity-75 motion-reduce:animate-none"></span><span class="relative h-1.5 w-1.5 rounded-full bg-fsp-red"></span></span> Навигатор для новичка · регион 56
+      </p>
+      <h1 id="hero-title" class="mt-8 font-mono text-[44px] font-light leading-[1.02] tracking-tight text-fsp-light sm:text-6xl xl:text-[76px]">
+        <span class="sr-only">Код стал спортом</span>
+        <span aria-hidden="true" class="block"><span class="text-fsp-violet">//</span> <span class="caret transition-[text-shadow] duration-1000" data-scramble="КОД СТАЛ СПОРТОМ">КОД СТАЛ СПОРТОМ</span></span>
+      </h1>
+      <p class="mt-7 max-w-xl text-pretty text-[17px] leading-relaxed text-fsp-soft" data-reveal style="--d: 900ms">
+        Единая цифровая платформа регионального отделения Федерации спортивного программирования: реестр, календарь,
+        живые протоколы, прозрачный рейтинг и документы — один аккаунт для спортсмена, тренера, судьи и федерации.
+      </p>
+      <div class="mt-9 flex flex-wrap gap-4" data-reveal style="--d: 1100ms">
+        <a href="/register" class="{{ m.BTN }} group/cta">Начать путь {{ m.icon("arrow", "h-4 w-4 transition-transform duration-200 group-hover/cta:translate-x-1 motion-reduce:transition-none") }}</a>
+        <a href="/rating" class="{{ m.BTN_GHOST }}">Рейтинг сезона</a>
+      </div>
+    </div>
+
+    {# FSP signature solid brand strip #}
+    <dl class="relative grid grid-cols-3 overflow-hidden bg-fsp-blue text-white">
+      <span class="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/20 to-transparent motion-safe:animate-[shine_5s_ease-in-out_2s_infinite]" aria-hidden="true"></span>
+      {% for label, value in [("спортсменов в реестре", stats.athletes if stats else "—"),
+                              ("соревнований сезона", health.competition.competitions if health.competition.ok else "—"),
+                              ("дисциплин", D.DISCIPLINES|length)] %}
+      <div class="group/stat relative px-5 py-5 transition-colors duration-200 hover:bg-white/10 sm:px-8 {% if not loop.last %}border-r border-white/20{% endif %}">
+        <dd class="font-mono text-3xl font-light tabular-nums sm:text-[40px]"{% if value is integer %} data-count="{{ value }}"{% endif %}>{{ value }}</dd>
+        <dt class="mt-1 font-mono text-[11px] text-white/75">{{ label }}</dt>
+      </div>
+      {% endfor %}
+    </dl>
+  </div>
+
+  {# ---- right column: live terminal + events (as on fsp-russia.ru) ---- #}
+  <div class="flex min-w-0 flex-col gap-6 lg:col-span-5">
+    <div class="relative overflow-hidden rounded-xl border border-fsp-line bg-[#141519] scanlines" data-reveal style="--d: 150ms">
+      <div class="flex items-center gap-2 border-b border-fsp-line px-4 py-2.5">
+        <span class="h-2.5 w-2.5 rounded-full bg-fsp-red"></span><span class="h-2.5 w-2.5 rounded-full bg-fsp-soft"></span><span class="h-2.5 w-2.5 rounded-full bg-fsp-blue"></span>
+        <span class="ml-2 font-mono text-[11px] text-fsp-muted">fsp@orenburg: ~/platform</span>
+        <span class="ml-auto font-mono text-[10px] text-fsp-dim2">GET /health</span>
+      </div>
+      <div class="space-y-1 overflow-x-auto p-4 font-mono text-[12px] leading-relaxed" role="log" aria-label="Статус микросервисов платформы">
+        {% set lines = [
+          ("cmd", "$ ./fsp-orenburg --init --region=56"),
+          ("ok", "// FSP_ORENBURG_INIT... SUCCESS"),
+          ("svc", ("gateway_service", ":8000", True, "ui · api-gateway")),
+          ("svc", ("sportsman_service", ":8001", health.sportsman.ok, (health.sportsman.persons ~ " в реестре") if health.sportsman.ok else "OFFLINE")),
+          ("svc", ("competition_service", ":8002", health.competition.ok, (health.competition.protocols ~ " протоколов") if health.competition.ok else "OFFLINE")),
+          ("svc", ("rating_engine", "k", health.competition.ok, "×" ~ (rating.settings.coefficient if rating else 1.2) ~ " при ≥" ~ (rating.settings.min_podiums if rating else 2) ~ " призовых")),
+        ] %}
+        {% for kind, val in lines %}
+        <p class="boot-line whitespace-nowrap" style="animation-delay: {{ loop.index * 170 }}ms">
+          {% if kind == "cmd" %}<span class="text-fsp-light">{{ val }}</span>
+          {% elif kind == "ok" %}<span class="text-fsp-violet">{{ val }}</span>
+          {% else %}
+            {% if val[2] %}<span class="text-emerald-400">[&nbsp;OK&nbsp;]</span>{% else %}<span class="text-fsp-red">[FAIL]</span>{% endif %}
+            <span class="text-fsp-light">{{ "%-19s"|format(val[0]) }}</span><span class="text-fsp-dim2">{{ val[1] }}</span>
+            <span class="text-fsp-muted">· {{ val[3] }}</span>
+          {% endif %}
+        </p>
+        {% endfor %}
+        <p class="boot-line pt-1" style="animation-delay: {{ (lines|length + 1) * 170 }}ms"><span class="text-fsp-violet">❯</span> <span class="caret text-fsp-soft">выбери дисциплину ниже</span></p>
+      </div>
+    </div>
+
+    <div class="spotlight flex-1 rounded-xl border border-fsp-line bg-fsp-panel p-6" data-reveal style="--d: 300ms">
+      <div class="relative flex items-center justify-between">
+        <h2 class="font-mono text-2xl font-normal text-fsp-light">События</h2>
+        <a href="/calendar" class="font-mono text-xs text-fsp-violet hover:underline">весь календарь →</a>
+      </div>
+      <ul class="relative mt-4 min-w-0 divide-y divide-fsp-line">
+        {% if live %}
+        <li class="py-3">
+          <a href="#live" class="group block">
+            <p class="flex items-center gap-2 font-mono text-[13px] text-fsp-light group-hover:text-fsp-violet">{{ m.comp_status(live) }} {{ live.title }}</p>
+            <p class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-fsp-muted"><span>{{ m.icon("calendar", "mr-1 inline h-3 w-3") }}сегодня</span><span>{{ live.format_label }}</span><span>{{ m.icon("map", "mr-1 inline h-3 w-3") }}{{ live.venue }}</span></p>
+          </a>
+        </li>
+        {% endif %}
+        {% for c in upcoming %}
+        <li class="group/ev relative overflow-hidden py-3">
+          <span class="absolute inset-y-3 left-0 w-0.5 origin-top scale-y-0 rounded-full bg-fsp-blue transition-transform duration-200 group-hover/ev:scale-y-100" aria-hidden="true"></span>
+          <div class="transition-transform duration-200 group-hover/ev:translate-x-3 motion-reduce:transition-none">
+            <p class="font-mono text-[13px] leading-snug text-fsp-light">{{ c.title }}</p>
+            <p class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-fsp-muted">
+              <span>{{ m.icon("calendar", "mr-1 inline h-3 w-3") }}{{ c.start_date|ru_date(true) }}</span>
+              <span>{{ c.format_label }}</span>
+              <span class="truncate">{{ m.icon("map", "mr-1 inline h-3 w-3") }}{{ c.venue }}</span>
+            </p>
+          </div>
+        </li>
+        {% else %}
+        <li class="py-4 font-mono text-sm text-fsp-muted">// календарь временно недоступен</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="mt-6">{{ m.degraded_notice(degraded) }}</div>
+
+{# ============================== TICKER — crossing brand strips (decorative) ============================== #}
+{% set ticker_a = D.DISCIPLINES|map(attribute="short")|list %}
+{% set ticker_b = ["код стал спортом", "ФСП · 56", "живые протоколы", "прозрачный рейтинг", "один аккаунт — все роли", "Оренбургская область"] %}
+<div class="no-print relative left-1/2 mt-12 w-screen -translate-x-1/2 overflow-hidden py-12" aria-hidden="true">
+  <div class="ticker-wrap relative z-10 -rotate-[1.5deg] bg-fsp-blue py-3.5 shadow-[0_10px_40px_rgba(64,47,255,0.35)]">
+    <div class="ticker font-mono text-sm uppercase tracking-[0.14em] text-white">
+      {% for _ in range(2) %}<div class="flex shrink-0 items-center gap-8 pr-8">{% for _ in range(2) %}{% for t in ticker_a %}<span class="whitespace-nowrap">{{ t }}</span><span class="h-2 w-2 shrink-0 rotate-45 rounded-[1px] bg-white"></span>{% endfor %}{% endfor %}</div>{% endfor %}
+    </div>
+  </div>
+  <div class="ticker-wrap relative -mt-12 rotate-[1.5deg] bg-fsp-light py-3.5 shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
+    <div class="ticker ticker-rev font-mono text-sm uppercase tracking-[0.14em] text-fsp-bg">
+      {% for _ in range(2) %}<div class="flex shrink-0 items-center gap-8 pr-8">{% for _ in range(2) %}{% for t in ticker_b %}<span class="whitespace-nowrap"><span class="text-fsp-blue">//</span> {{ t }}</span><span class="h-2 w-2 shrink-0 rounded-full bg-fsp-red"></span>{% endfor %}{% endfor %}</div>{% endfor %}
+    </div>
+  </div>
+</div>
+
+{# ============================== HOW TO START — FSP rail timeline ============================== #}
+<section class="grid gap-10 pt-16 lg:grid-cols-12" aria-labelledby="start-title">
+  <div class="lg:col-span-5" data-reveal="left">
+    <h2 id="start-title" class="font-mono text-4xl font-normal leading-[1.15] tracking-tight text-fsp-light sm:text-[46px]">С чего начать в спортивном программировании</h2>
+    <div class="rail-draw rail rail-curve rail-end ml-1 mt-10 hidden h-40 lg:block" aria-hidden="true"></div>
+  </div>
+  <ol class="grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:col-span-7" data-stagger>
+    {% for n, title, text, href in [
+      ("шаг 01", "Выбери дисциплину", "Шесть дисциплин — от олимпиадных задач до беспилотников. Каждая ведёт в рейтинг и календарь.", "#disciplines"),
+      ("шаг 02", "Найди, где заниматься", "Кванториум, IT-куб, вузы и школы области — тренеры ведут спортсменов прямо в платформе.", "#where"),
+      ("шаг 03", "Получи ФСП ID", "Один аккаунт — несколько ролей. Региональный идентификатор с контрольной цифрой выдаётся сразу.", "/register"),
+      ("шаг 04", "Выйди на старт", "Подай заявку, а результат сам попадёт в историю выступлений и рейтинг сезона.", "/calendar"),
+    ] %}
+    <li>
+      <a href="{{ href }}" class="group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet">
+        <span class="inline-flex rounded-md bg-fsp-light px-3 py-1 font-mono text-xs text-fsp-blue transition-colors duration-150 group-hover:bg-fsp-blue group-hover:text-white">{{ n }}</span>
+        <span class="mt-4 block font-mono text-lg text-fsp-light">{{ title }}</span>
+        <span class="mt-2 block text-sm leading-relaxed text-fsp-muted">{{ text }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+
+{# ============================== DISCIPLINES GRID ============================== #}
+<section id="disciplines" class="scroll-mt-24 pt-24">
+  {{ m.section_head("ls ./disciplines --all", "Дисциплины спортивного программирования", "Учёт, календарь, разряды и рейтинг не завязаны на одну дисциплину — платформа обслуживает все шесть.") }}
+  <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3" data-stagger>
+    {% for d in D.DISCIPLINES %}
+    {% set next = nearest.get(d.code) %}
+    <a href="/rating?discipline={{ d.code }}"
+       class="spotlight group flex flex-col overflow-hidden rounded-xl border border-fsp-line bg-fsp-panel bg-fsp-grid p-7 transition-all duration-200 ease-out hover:-translate-x-1 hover:-translate-y-1 hover:border-fsp-blue hover:shadow-[4px_4px_0px_0px_#402FFF] focus-visible:-translate-x-1 focus-visible:-translate-y-1 focus-visible:border-fsp-blue focus-visible:shadow-[4px_4px_0px_0px_#402FFF] focus-visible:outline-none motion-reduce:transition-none motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0">
+      <div class="fsp-glow -right-20 -top-20 h-40 w-40 !opacity-0 transition-opacity duration-300 group-hover:!opacity-30" aria-hidden="true"></div>
+      <div class="relative flex items-start justify-between">
+        {{ m.disc_icon(d.code, "h-12 w-12 transition-transform duration-300 group-hover:scale-110 motion-reduce:transition-none") }}
+        <span class="rounded-md border border-fsp-line px-2 py-0.5 font-mono text-[11px] text-fsp-muted">0{{ loop.index }} · {{ d.code }}</span>
+      </div>
+      <h3 class="relative mt-6 font-mono text-xl font-normal leading-snug text-fsp-light">{{ d.title }}</h3>
+      <p class="relative mt-3 flex-1 text-sm leading-relaxed text-fsp-soft">{{ d.description }}</p>
+      <div class="relative mt-5 flex flex-wrap gap-1.5">{% for s in d.skills %}{{ m.tag(s) }}{% endfor %}</div>
+      <div class="relative mt-6 border-t border-fsp-line pt-4 font-mono text-[11px] text-fsp-muted">
+        <p class="flex items-center justify-between gap-2"><span class="truncate"><span class="text-fsp-violet">$</span> {{ d.cmd }}</span>{{ m.icon("arrow", "h-3.5 w-3.5 shrink-0 -translate-x-2 text-fsp-violet opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 motion-reduce:transition-none") }}</p>
+        <p class="mt-2 flex justify-between">
+          <span>спортсменов: <span class="text-fsp-light">{{ stats.by_discipline.get(d.code, 0) if stats else "—" }}</span></span>
+          <span>{% if next %}старт: <span class="text-fsp-violet">{{ next.start_date|ru_date }}</span>{% else %}<span class="text-fsp-dim2">нет стартов</span>{% endif %}</span>
+        </p>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+{# ============================== LIVE PROTOCOL ============================== #}
+{% if live %}
+<section id="live" class="scroll-mt-24 pt-24" aria-labelledby="live-title">
+  <div class="mb-8 flex flex-wrap items-end justify-between gap-4" data-reveal>
+    <div>
+      <p class="font-mono text-xs uppercase tracking-[0.2em] text-fsp-violet">$ tail -f ./protocols/live</p>
+      <h2 id="live-title" class="mt-3 font-mono text-3xl font-normal text-fsp-light sm:text-[42px]">Живой протокол</h2>
+      <p class="mt-2 text-fsp-muted">{{ live.title }} · {{ live.format_label }} · ранжирование пересчитывается из лога автоматически</p>
+    </div>
+    {{ m.comp_status(live) }}
+  </div>
+  <div data-live-src="/partials/live/{{ live.id }}?compact=1" aria-live="off">
+    <div class="h-64 animate-pulse rounded-xl border border-fsp-line bg-fsp-panel motion-reduce:animate-none"></div>
+  </div>
+</section>
+{% endif %}
+
+{# ============================== LIVE RATING ============================== #}
+<section class="pt-24" aria-labelledby="rating-title">
+  <div class="mb-8 flex flex-wrap items-end justify-between gap-4" data-reveal>
+    <div>
+      <p class="font-mono text-xs uppercase tracking-[0.2em] text-fsp-violet">$ rating --season={{ rating.season if rating else today.year }} --explain</p>
+      <h2 id="rating-title" class="mt-3 font-mono text-3xl font-normal text-fsp-light sm:text-[42px]">Рейтинг сезона — прозрачно</h2>
+      <p class="mt-2 max-w-2xl text-fsp-muted">По каждому спортсмену видны исходные результаты, начисленные баллы и применённый коэффициент стабильности. Раскройте строку, чтобы увидеть расчёт.</p>
+    </div>
+    <a href="/rating" class="{{ m.BTN_GHOST }}">Полный рейтинг {{ m.icon("arrow", "h-4 w-4") }}</a>
+  </div>
+  <div class="mb-4 flex flex-wrap gap-2" aria-label="Дисциплины">
+    {% for d in D.DISCIPLINES %}
+    <a href="/rating?discipline={{ d.code }}" class="rounded-md px-3 py-1.5 font-mono text-xs transition-colors duration-150 {% if rating and rating.discipline == d.code %}bg-fsp-light text-fsp-blue{% else %}border border-fsp-line text-fsp-soft hover:border-fsp-blue hover:text-fsp-light{% endif %}">{{ d.short }}</a>
+    {% endfor %}
+  </div>
+  <div class="grid gap-6 xl:grid-cols-4">
+    <div class="xl:col-span-3" data-reveal>
+      {% if rating %}{% with limit=6 %}{% include "_rating_table.html" %}{% endwith %}{% else %}<p class="rounded-xl border border-fsp-line p-8 font-mono text-sm text-fsp-muted">// рейтинг временно недоступен</p>{% endif %}
+    </div>
+    <aside class="relative overflow-hidden rounded-xl bg-fsp-blue p-6 font-mono text-xs text-white" data-reveal style="--d: 150ms">
+      <div class="fsp-glow -bottom-16 -right-16 h-44 w-44 !opacity-40" aria-hidden="true"></div>
+      <p class="relative text-[13px]">Формула кейса</p>
+      <table class="relative mt-4 w-full">
+        <thead><tr class="text-[10px] uppercase text-white/70"><th class="pb-2 text-left font-normal">уровень</th><th class="pb-2 text-right font-normal">1</th><th class="pb-2 text-right font-normal">2</th><th class="pb-2 text-right font-normal">3</th></tr></thead>
+        <tbody>
+        {% for lvl, pts in (rating.settings.points if rating else D.DEFAULT_POINTS_TABLE).items() %}
+          <tr class="border-t border-white/20"><td class="py-2 pr-2">{{ D.LEVEL_LABELS[lvl].split(' (')[0] }}</td>{% for p in pts %}<td class="py-2 text-right tabular-nums">{{ p }}</td>{% endfor %}</tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="relative mt-5 rounded-md bg-fsp-bg/40 p-3 leading-relaxed">
+        <p><span class="text-white/70">if</span> podiums ≥ {{ rating.settings.min_podiums if rating else 2 }}:</p>
+        <p class="pl-4">rating *= <span class="rounded bg-white px-1.5 font-bold text-fsp-blue">{{ rating.settings.coefficient if rating else 1.2 }}</span></p>
+      </div>
+      <p class="relative mt-4 text-white/80">// дисквалифицированные и отстранённые в рейтинг не попадают</p>
+    </aside>
+  </div>
+</section>
+
+{# ============================== GEOGRAPHY / WHERE TO TRAIN (FSP "География" block) ============================== #}
+<section id="where" class="scroll-mt-24 pt-24">
+  <div class="relative overflow-hidden rounded-xl border border-fsp-line bg-fsp-panel bg-fsp-grid p-7 sm:p-12" data-reveal data-parallax-root>
+    <div class="fsp-glow -left-24 bottom-0 h-64 w-64 !opacity-20 [transition:translate_1s_cubic-bezier(0.16,1,0.3,1)]" data-parallax="0.1" aria-hidden="true"></div>
+    <div class="relative flex flex-wrap items-end justify-between gap-6">
+      <h2 class="font-mono text-3xl font-normal text-fsp-light sm:text-[42px]">География ФСП-56</h2>
+      <p class="flex items-center gap-4">
+        {% set mun_count = stats.by_municipality|length if stats else D.MUNICIPALITIES|length %}
+        <span class="font-mono text-6xl font-light leading-none tabular-nums text-fsp-violet" data-count="{{ mun_count }}">{{ mun_count }}</span>
+        <span class="max-w-[220px] font-mono text-sm leading-snug text-fsp-light">муниципалитетов, где занимаются спортсмены региона</span>
+      </p>
+    </div>
+    <div class="relative mt-10 grid gap-8 lg:grid-cols-2">
+      <div>
+        <p class="font-mono text-xs uppercase tracking-wider text-fsp-muted">Организации спортивной подготовки</p>
+        <ul class="mt-4 grid gap-2" data-stagger="left">
+          {% for org in D.ORGANIZATIONS if org != "Без организации" %}
+          <li class="group/org flex items-center gap-3 rounded-md border border-fsp-line bg-fsp-bg/60 px-4 py-3 text-sm text-fsp-soft transition-colors duration-150 hover:border-fsp-blue hover:text-fsp-light">
+            <span class="h-2 w-2 shrink-0 rounded-[2px] bg-fsp-blue transition-transform duration-200 group-hover/org:rotate-45 group-hover/org:scale-125"></span>{{ org }}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <p class="font-mono text-xs uppercase tracking-wider text-fsp-muted">Спортсмены по муниципалитетам</p>
+        {% if stats %}
+        {% set maxn = stats.by_municipality.values()|max %}
+        <ul class="mt-4 grid gap-2.5">
+          {% for mun, n in stats.by_municipality.items() %}
+          <li class="grid grid-cols-[150px_1fr_28px] items-center gap-3 font-mono text-xs">
+            <span class="truncate text-fsp-soft">{{ mun }}</span>
+            <span class="h-2 overflow-hidden rounded-full bg-fsp-card"><span class="block h-full origin-left" style="width: {{ (n / maxn * 100)|round }}%"><span class="block h-full rounded-full bg-gradient-to-r from-fsp-blue to-fsp-violet" data-bar style="--d: {{ loop.index0 * 70 }}ms"></span></span></span>
+            <span class="text-right tabular-nums text-fsp-light">{{ n }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ============================== CTA — solid brand block ============================== #}
+<section class="pt-24">
+  <div class="relative overflow-hidden rounded-xl bg-fsp-blue px-7 py-12 sm:px-12" data-reveal="scale" data-parallax-root>
+    <span class="beam beam-light" aria-hidden="true"></span>
+    <div class="fsp-glow -right-10 -top-24 h-72 w-72 !opacity-50 [transition:translate_0.9s_cubic-bezier(0.16,1,0.3,1)]" data-parallax="0.15" aria-hidden="true"></div>
+    <svg class="pointer-events-none absolute bottom-0 right-0 h-full" viewBox="0 0 400 240" fill="none" aria-hidden="true">
+      <g stroke="#fff" stroke-width="1.5" opacity="0.3"><path d="M400 40H300l-30 30v80h-90"/><path d="M400 120H330v60l-30 30H160"/></g>
+      <g stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path class="trace" d="M400 40H300l-30 30v80h-90"/><path class="trace" d="M400 120H330v60l-30 30H160"/></g>
+      <rect x="172" y="142" width="14" height="14" rx="3.5" fill="#fff" opacity="0.6" class="node-pulse"/><circle cx="160" cy="210" r="5" fill="#EC1D35" class="node-pulse"/>
+    </svg>
+    <div class="relative grid items-center gap-8 lg:grid-cols-[1fr_auto]">
+      <div>
+        <p class="font-mono text-xs text-white/70">$ fsp register --multi-role</p>
+        <h2 class="mt-3 font-mono text-3xl font-normal text-white sm:text-[42px]">Один аккаунт — все роли</h2>
+        <p class="mt-3 max-w-xl text-white/85">Спортсмен и тренер, тренер и судья: переключайтесь между кабинетами без повторного входа, а права проверяются по активной роли.</p>
+      </div>
+      <div class="flex flex-wrap gap-4">
+        <a href="/register" class="{{ m.BTN_LIGHT }}">Зарегистрироваться {{ m.icon("arrow", "h-4 w-4") }}</a>
+        <a href="/login" class="inline-flex items-center rounded-md border border-white/40 px-5 py-3 font-mono text-sm text-white transition-colors duration-150 hover:bg-white/10">Демо-вход</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

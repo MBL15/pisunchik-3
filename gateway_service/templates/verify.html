@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Проверка подлинности справки · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-2xl pt-14">
+  {{ m.degraded_notice(degraded) }}
+  {% set d = result.document %}
+  <div class="relative overflow-hidden border-2 {% if result.valid %}border-emerald-400{% else %}border-rose-500{% endif %} bg-black/70 p-6 shadow-[6px_6px_0px_0px_#402FFF] scanlines rounded-xl">
+    <p class="font-mono text-xs text-fsp-muted">$ fsp verify --document={{ result.number }}</p>
+    {% if result.valid %}
+    <p class="mt-2 flex items-center gap-2 font-mono text-sm font-bold text-emerald-400">{{ m.icon("check", "h-4 w-4") }} // SIGNATURE... VALID</p>
+    <h1 class="mt-5 font-mono text-2xl font-normal text-fsp-light">Справка № {{ d.number }} подлинная</h1>
+    <dl class="mt-5 grid gap-3 text-sm sm:grid-cols-[180px_1fr]">
+      <dt class="font-mono text-xs uppercase text-fsp-muted">Участник</dt><dd class="text-fsp-light">{{ d.person.full_name }} <span class="font-mono text-xs text-fsp-muted">{{ d.person.fsp_id }}</span></dd>
+      <dt class="font-mono text-xs uppercase text-fsp-muted">Соревнование</dt><dd class="text-fsp-light">{{ d.competition.title }}</dd>
+      <dt class="font-mono text-xs uppercase text-fsp-muted">Даты</dt><dd class="font-mono text-fsp-light">{{ d.competition.start_date|ru_date }}{% if d.competition.end_date != d.competition.start_date %} — {{ d.competition.end_date|ru_date }}{% endif %}</dd>
+      <dt class="font-mono text-xs uppercase text-fsp-muted">Результат</dt><dd class="text-fsp-light">{% if d.result.status == "DSQ" %}дисквалифицирован{% else %}<span class="font-mono font-bold text-emerald-300">{{ d.result.place }} место</span> из {{ d.result.participants }}{% endif %}</dd>
+      <dt class="font-mono text-xs uppercase text-fsp-muted">Выдана</dt><dd class="font-mono text-fsp-light">{{ d.issued_at|ru_date }}</dd>
+      <dt class="font-mono text-xs uppercase text-fsp-muted">Код проверки</dt><dd class="font-mono text-emerald-300">{{ d.verification_code }}</dd>
+    </dl>
+    {% else %}
+    <p class="mt-2 flex items-center gap-2 font-mono text-sm font-bold text-rose-400">{{ m.icon("x", "h-4 w-4") }} // SIGNATURE... INVALID</p>
+    <h1 class="mt-5 font-mono text-2xl font-normal text-fsp-light">Документ не подтверждён</h1>
+    <p class="mt-3 text-sm text-fsp-soft">Справка с номером <span class="font-mono">{{ result.number }}</span> не найдена или код проверки не совпадает. Обратитесь в региональное отделение ФСП.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

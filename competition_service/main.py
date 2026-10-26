@@ -1,0 +1,499 @@
+"""competition_service (port 8002): calendar, applications, live protocols from logs, rating engine, documents."""
+import hashlib
+import hmac
+import time
+from contextlib import asynccontextmanager
+from datetime import datetime
+
+from fastapi import FastAPI, HTTPException, Query
+
+from competition_service.log_parser import parse_log
+from competition_service.models import (
+    ActorIn, Application, ApplicationIn, Competition, CompetitionCreateIn, DecisionIn, DocumentIn, IngestIn,
+    JudgeAssignIn, JudgeAssignment, Protocol, ResultsIn, SettingsIn,
+)
+from competition_service.rating import RatingSettings, compute_rating
+from competition_service.seed import seed
+from competition_service.store import store
+from shared import config
+from shared.domain import (
+    AGE_GROUPS, DISCIPLINE_BY_CODE, JUDGE_POSITIONS, RANK_ORDER, REGION_CODE, SANCTION_LABELS, ApplicationStatus,
+    CompetitionStatus, LinkStatus, protocol_mode,
+)
+from shared.http import ServiceClient, ServiceError
+
+clients: dict[str, ServiceClient] = {}
+LIVE_TICK_MIN_INTERVAL = 1.5  # seconds; many open dashboards must not fast-forward the stream
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    seed(store)
+    clients["sportsman"] = ServiceClient("sportsman_service", config.SPORTSMAN_URL, caller="competition_service")
+    yield
+    await clients["sportsman"].aclose()
+
+
+app = FastAPI(title="ФСП Оренбург · Competition Service", version="1.0.0", lifespan=lifespan)
+
+
+def _competition(cid: int) -> Competition:
+    c = store.competitions.get(cid)
+    if not c:
+        raise HTTPException(404, "Соревнование не найдено")
+    return c
+
+
+def _present_protocol(cid: int) -> dict:
+    proto = store.protocols.get(cid)
+    if not proto:
+        raise HTTPException(404, "Протокол ещё не сформирован")
+    tasks = sorted({t for e in proto.entries for t in e["tasks"]})
+    return {
+        "competition": store.present_competition(store.competitions[cid]),
+        "mode": proto.mode, "entries": proto.entries, "warnings": proto.warnings, "events": proto.events,
+        "last_time": proto.last_time, "published": proto.published,
+        "published_at": proto.published_at.isoformat(timespec="seconds") if proto.published_at else None,
+        "updated_at": proto.updated_at.isoformat(timespec="seconds"), "source": proto.source,
+        "raw_tail": proto.raw_log[-14:], "live_remaining": len(store.live_queue.get(cid, [])), "tasks": tasks,
+    }
+
+
+@app.get("/health")
+async def health():
+    return {"service": "competition_service", "status": "ok", "competitions": len(store.competitions),
+            "protocols": len(store.protocols)}
+
+
+@app.get("/api/v1/audit")
+async def audit(limit: int = Query(30, le=200)):
+    return store.audit[:limit]
+
+
+# ---------------------------------------------------------------- calendar
+@app.get("/api/v1/competitions")
+async def list_competitions(discipline: str | None = None, status: str | None = None, plan: str | None = None,
+                            format: str | None = None, season: int | None = None, upcoming: bool = False):
+    today = config.today()
+    out = []
+    for c in store.competitions.values():
+        if (discipline and c.discipline != discipline) or (status and c.status != status) \
+                or (plan and c.calendar_plan != plan) or (format and c.format != format) \
+                or (season and c.end_date.year != season):
+            continue
+        if upcoming and c.end_date < today and c.status != CompetitionStatus.LIVE:
+            continue
+        out.append(store.present_competition(c, today))
+    return sorted(out, key=lambda x: x["start_date"], reverse=not upcoming)
+
+
+@app.get("/api/v1/competitions/{cid}")
+async def get_competition(cid: int):
+    return store.present_competition(_competition(cid))
+
+
+@app.post("/api/v1/competitions", status_code=201)
+async def create_competition(data: CompetitionCreateIn):
+    today = config.today()
+    cid = max(store.competitions, default=0) + 1
+    status = CompetitionStatus.REGISTRATION_OPEN if data.registration_deadline >= today else CompetitionStatus.PLANNED
+    c = Competition(id=cid, code=f"ОРБ-{data.discipline}-{data.start_date.year}-{cid:02d}", status=status,
+                    **data.model_dump(exclude={"actor"}))
+    store.competitions[cid] = c
+    store.log(data.actor, "Создано соревнование", f"{c.code} · {c.title}")
+    return store.present_competition(c, today)
+
+
+# ---------------------------------------------------------------- protocols (logs → ranking)
+@app.get("/api/v1/competitions/{cid}/protocol")
+async def get_protocol(cid: int):
+    _competition(cid)
+    return _present_protocol(cid)
+
+
+@app.post("/api/v1/competitions/{cid}/protocol/ingest")
+async def ingest_log(cid: int, data: IngestIn):
+    c = _competition(cid)
+    parsed = parse_log(data.log)
+    if not parsed.entries:
+        raise HTTPException(422, {"message": "В логе не найдено ни одного участника", "warnings": parsed.warnings[:10]})
+    proto = store.protocols.get(cid)
+    names = dict(proto.names) if proto else {}
+    unknown = [e["fsp_id"] for e in parsed.entries if e["fsp_id"] not in names]
+    if unknown:
+        try:
+            found = await clients["sportsman"].post("/api/v1/persons/lookup", json={"fsp_ids": unknown})
+            names.update({fid: {"full_name": v["full_name"], "region": v["municipality"]} for fid, v in found.items()})
+        except ServiceError:
+            pass  # protocol still builds; unresolved names are flagged in the table
+    published = c.status == CompetitionStatus.FINISHED
+    new = Protocol(competition_id=cid, mode=parsed.mode, raw_log=data.log.strip().splitlines(), names=names,
+                   updated_at=datetime.now(), published=published,
+                   published_at=datetime.now() if published else None, source="upload")
+    store.protocols[cid] = new
+    store.live_queue.pop(cid, None)
+    store.live_replay.pop(cid, None)
+    store.reparse(new)
+    store.log(data.actor, "Загружен лог протокола", f"{c.code}: {new.events} событий, {len(new.entries)} участников")
+    return _present_protocol(cid)
+
+
+@app.post("/api/v1/competitions/{cid}/live/tick")
+async def live_tick(cid: int):
+    _competition(cid)
+    queue = store.live_queue.get(cid)
+    now = time.monotonic()
+    proto = store.protocols.get(cid)
+    if not queue and cid in store.live_replay and proto and not proto.published \
+            and now - store.last_tick.get(cid, 0) >= LIVE_TICK_MIN_INTERVAL * 4:
+        # Demo loop: the seeded live round replays from its initial snapshot so the stream never runs dry.
+        initial, future = store.live_replay[cid]
+        proto.raw_log, store.live_queue[cid] = list(initial), list(future)
+        store.last_tick[cid] = now
+        store.reparse(proto)
+    elif queue and now - store.last_tick.get(cid, 0) >= LIVE_TICK_MIN_INTERVAL:
+        store.last_tick[cid] = now
+        batch, store.live_queue[cid] = queue[:2], queue[2:]
+        proto.raw_log.extend(batch)
+        store.reparse(proto)
+    return _present_protocol(cid)
+
+
+def _publish(c: Competition, proto: Protocol, actor: str) -> None:
+    proto.raw_log.extend(store.live_queue.pop(c.id, []))
+    proto.published, proto.published_at = True, datetime.now()
+    c.status = CompetitionStatus.FINISHED
+    store.reparse(proto)
+    store.log(actor, "Протокол опубликован", f"{c.code}: {len(proto.entries)} участников → рейтинг и история")
+
+
+@app.post("/api/v1/competitions/{cid}/protocol/publish")
+async def publish_protocol(cid: int, data: ActorIn):
+    c = _competition(cid)
+    proto = store.protocols.get(cid)
+    if not proto:
+        raise HTTPException(404, "Протокол ещё не сформирован")
+    if proto.published:
+        raise HTTPException(409, "Протокол уже опубликован")
+    _publish(c, proto, data.actor)
+    return _present_protocol(cid)
+
+
+# ---------------------------------------------------------------- protocols (approved applications → manual results)
+@app.get("/api/v1/competitions/{cid}/protocol/entry-sheet")
+async def entry_sheet(cid: int):
+    """Who goes into the protocol (approved applications) and what has already been entered."""
+    c = _competition(cid)
+    proto = store.protocols.get(cid)
+    entered = {r["fsp_id"]: r for r in proto.results} if proto and proto.source == "manual" else {}
+    participants = [{"fsp_id": a.athlete_fsp_id, "full_name": a.athlete_name, "application_id": a.id,
+                     "result": entered.get(a.athlete_fsp_id)}
+                    for a in sorted(store.approved(cid).values(), key=lambda a: a.athlete_name)]
+    return {
+        "competition": store.present_competition(c), "mode": protocol_mode(c.discipline),
+        "participants": participants,
+        "pending": [store.present_application(a) for a in store.applications
+                    if a.competition_id == cid and a.status == ApplicationStatus.PENDING],
+        "protocol": _present_protocol(cid) if proto else None,
+    }
+
+
+@app.post("/api/v1/competitions/{cid}/protocol/results")
+async def enter_results(cid: int, data: ResultsIn):
+    c = _competition(cid)
+    proto = store.protocols.get(cid)
+    if proto and proto.published:
+        raise HTTPException(409, "Протокол уже опубликован — результаты изменить нельзя")
+    if cid in store.live_replay or store.live_queue.get(cid):
+        raise HTTPException(409, "Протокол этого соревнования ведётся в live-режиме из лога")
+    if c.start_date > config.today():
+        raise HTTPException(422, "Результаты вносятся после начала соревнования")
+    approved = store.approved(cid)
+    if not approved:
+        raise HTTPException(422, "Нет одобренных заявок — протокол формируется из участников с одобренными заявками")
+    ids = [r.fsp_id for r in data.results]
+    if len(set(ids)) != len(ids):
+        raise HTTPException(422, "Результат участника указан дважды")
+    if strangers := [fid for fid in ids if fid not in approved]:
+        raise HTTPException(422, f"Нет одобренной заявки на соревнование: {', '.join(strangers)}")
+
+    names = {fid: {"full_name": approved[fid].athlete_name, "region": "—"} for fid in ids}
+    try:
+        found = await clients["sportsman"].post("/api/v1/persons/lookup", json={"fsp_ids": ids})
+        for fid, v in found.items():
+            names[fid]["region"] = v["municipality"]
+    except ServiceError:
+        pass  # names come from the applications; only the territory column stays empty
+    new = Protocol(competition_id=cid, mode=protocol_mode(c.discipline), raw_log=[], names=names,
+                   results=[r.model_dump() for r in data.results], updated_at=datetime.now(), source="manual")
+    store.protocols[cid] = new
+    store.reparse(new)
+    store.log(data.actor, "Внесены результаты", f"{c.code}: {len(new.entries)} участников из одобренных заявок")
+    if data.publish:
+        _publish(c, new, data.actor)
+    return _present_protocol(cid)
+
+
+@app.get("/api/v1/results")
+async def results(fsp_ids: str = Query(..., max_length=20_000), season: int | None = None):
+    wanted = set(filter(None, fsp_ids.split(",")))
+    return [r for r in store.published_results(season) if r["fsp_id"] in wanted]
+
+
+# ---------------------------------------------------------------- rating engine
+@app.get("/api/v1/rating/settings")
+async def get_settings():
+    return {"points": store.settings.points, "coefficient": store.settings.coefficient,
+            "min_podiums": store.settings.min_podiums}
+
+
+@app.put("/api/v1/rating/settings")
+async def put_settings(data: SettingsIn):
+    store.settings = RatingSettings(points={str(k): v for k, v in data.points.items()},
+                                    coefficient=data.coefficient, min_podiums=data.min_podiums)
+    for proto in store.protocols.values():
+        store.reparse(proto)
+    store.log(data.actor, "Изменены настройки рейтинга", f"×{data.coefficient} при ≥{data.min_podiums} призовых")
+    return await get_settings()
+
+
+def _seasons() -> list[int]:
+    return sorted({store.competitions[cid].end_date.year for cid, p in store.protocols.items() if p.published}, reverse=True)
+
+
+@app.get("/api/v1/rating")
+async def rating(discipline: str = "ALG", season: int | None = None, age_group: str | None = None,
+                 min_rank: str | None = None):
+    if discipline not in DISCIPLINE_BY_CODE:
+        raise HTTPException(422, "Неизвестная дисциплина")
+    seasons = _seasons()
+    season = season or (seasons[0] if seasons else config.today().year)
+    rows = store.published_results(season, discipline)
+
+    persons: dict[str, dict] = {}
+    sanctions_checked = True
+    try:
+        persons = {p["fsp_id"]: p for p in await clients["sportsman"].get("/api/v1/persons", role="athlete")}
+    except ServiceError:
+        sanctions_checked = False
+
+    excluded = {}
+    for fid, p in persons.items():
+        for s in p["sanctions"]:
+            if s["active"]:
+                excluded[fid] = f"{SANCTION_LABELS[s['type']]} до {s['date_to']}: {s['reason']}"
+    if persons and (age_group or min_rank):
+        lo, hi = AGE_GROUPS.get(age_group, (0, 200))
+        allowed = {fid for fid, p in persons.items()
+                   if lo <= p["age"] <= hi and (not min_rank or (p["rank"] and RANK_ORDER[p["rank"]["code"]] >= RANK_ORDER.get(min_rank, 0)))}
+        rows = [r for r in rows if r["fsp_id"] in allowed]
+
+    out = compute_rating(rows, store.settings, excluded, region=REGION_CODE)
+    for row in out["rows"] + out["excluded"]:
+        p = persons.get(row["fsp_id"])
+        row["rank_short"] = p["rank"]["short"] if p and p["rank"] else "б/р"
+        row["municipality"] = p["municipality"] if p else "—"
+        row["age"] = p["age"] if p else None
+    counted = sorted({(r["competition_id"], r["competition_code"], r["title"], r["level"], r["date"]) for r in rows},
+                     key=lambda x: x[4])
+    return {
+        "discipline": discipline, "discipline_label": DISCIPLINE_BY_CODE[discipline]["short"],
+        "discipline_title": DISCIPLINE_BY_CODE[discipline]["title"], "season": season, "seasons": seasons,
+        "settings": await get_settings(), "rows": out["rows"], "excluded": out["excluded"],
+        "sanctions_checked": sanctions_checked, "filters": {"age_group": age_group, "min_rank": min_rank},
+        "competitions": [{"id": c[0], "code": c[1], "title": c[2], "level": c[3], "date": c[4]} for c in counted],
+    }
+
+
+# ---------------------------------------------------------------- applications
+@app.get("/api/v1/applications")
+async def list_applications(competition_id: int | None = None, athlete_fsp_id: str | None = None,
+                            submitted_by: str | None = None, status: str | None = None):
+    out = [store.present_application(a) for a in store.applications
+           if (competition_id is None or a.competition_id == competition_id)
+           and (athlete_fsp_id is None or a.athlete_fsp_id == athlete_fsp_id)
+           and (submitted_by is None or a.submitted_by == submitted_by)
+           and (status is None or a.status == status)]
+    return sorted(out, key=lambda x: x["created_at"], reverse=True)
+
+
+@app.post("/api/v1/applications", status_code=201)
+async def submit_application(data: ApplicationIn):
+    c = _competition(data.competition_id)
+    today = config.today()
+    if c.status != CompetitionStatus.REGISTRATION_OPEN or (c.registration_deadline and c.registration_deadline < today):
+        raise HTTPException(422, "Приём заявок на это соревнование закрыт")
+    try:
+        athlete = await clients["sportsman"].get(f"/api/v1/persons/{data.athlete_fsp_id}")
+        links = await clients["sportsman"].get(f"/api/v1/athletes/{data.athlete_fsp_id}/links")
+    except ServiceError as exc:
+        raise HTTPException(exc.status if exc.status < 500 else 503, exc.detail)
+    if "athlete" not in athlete["roles"] or c.discipline not in athlete["disciplines"]:
+        raise HTTPException(422, "Спортсмен не заявлен в дисциплине соревнования")
+    if athlete["is_sanctioned"]:
+        raise HTTPException(422, "Спортсмен с действующей дисквалификацией не может быть заявлен")
+    lo, hi = AGE_GROUPS[c.age_group]
+    if not lo <= athlete["age"] <= hi:
+        raise HTTPException(422, f"Возраст спортсмена ({athlete['age']}) не соответствует группе «{c.age_group}»")
+    if data.submitted_by != data.athlete_fsp_id and not any(
+            link["trainer_fsp_id"] == data.submitted_by and link["status"] == LinkStatus.ACTIVE
+            and link["discipline"] == c.discipline for link in links):
+        raise HTTPException(403, "Подать заявку может сам спортсмен или его тренер с активной привязкой по дисциплине")
+    if any(a.competition_id == c.id and a.athlete_fsp_id == data.athlete_fsp_id and a.status != ApplicationStatus.REJECTED
+           for a in store.applications):
+        raise HTTPException(409, "Заявка на это соревнование уже подана")
+    app_ = Application(id=len(store.applications) + 1, competition_id=c.id, athlete_fsp_id=data.athlete_fsp_id,
+                       athlete_name=athlete["full_name"], submitted_by=data.submitted_by,
+                       status=ApplicationStatus.PENDING, created_at=datetime.now())
+    store.applications.append(app_)
+    store.log(data.submitted_by, "Подана заявка", f"{c.code} · {athlete['full_name']}")
+    return store.present_application(app_)
+
+
+@app.post("/api/v1/applications/{app_id}/decision")
+async def decide_application(app_id: int, data: DecisionIn):
+    a = next((x for x in store.applications if x.id == app_id), None)
+    if not a:
+        raise HTTPException(404, "Заявка не найдена")
+    if a.status != ApplicationStatus.PENDING or data.status == ApplicationStatus.PENDING:
+        raise HTTPException(422, "Решение по заявке уже принято")
+    a.status, a.decided_at, a.comment = data.status, datetime.now(), data.comment
+    if (proto := store.protocols.get(a.competition_id)) and not proto.published:
+        store.reparse(proto)
+    store.log(data.actor, "Модерация заявки", f"#{a.id} {a.athlete_name} → {data.status}")
+    return store.present_application(a)
+
+
+# ---------------------------------------------------------------- judges
+@app.get("/api/v1/judges/{fsp_id}/assignments")
+async def judge_assignments(fsp_id: str):
+    today = config.today()
+    upcoming, past = [], []
+    for c in sorted(store.competitions.values(), key=lambda x: x.start_date):
+        for j in c.judges:
+            if j.fsp_id == fsp_id:
+                item = {**store.present_competition(c, today), "position": j.position}
+                (past if c.end_date < today and c.status == CompetitionStatus.FINISHED else upcoming).append(item)
+    return {"upcoming": upcoming, "past": list(reversed(past))}
+
+
+_SINGLE_POSITIONS = {"Главный судья", "Главный секретарь"}
+
+
+@app.post("/api/v1/competitions/{cid}/judges", status_code=201)
+async def assign_judge(cid: int, data: JudgeAssignIn):
+    c = _competition(cid)
+    if c.status == CompetitionStatus.FINISHED:
+        raise HTTPException(422, "Соревнование завершено — состав судейской коллегии зафиксирован в протоколе")
+    if data.position not in JUDGE_POSITIONS:
+        raise HTTPException(422, "Неизвестная судейская должность")
+    if any(j.fsp_id == data.fsp_id for j in c.judges):
+        raise HTTPException(409, "Судья уже входит в коллегию этого соревнования")
+    if data.position in _SINGLE_POSITIONS and any(j.position == data.position for j in c.judges):
+        raise HTTPException(409, f"Должность «{data.position}» уже занята")
+    try:
+        judge = await clients["sportsman"].get(f"/api/v1/persons/{data.fsp_id}")
+    except ServiceError as exc:
+        raise HTTPException(exc.status if exc.status < 500 else 503, exc.detail) from exc
+    if "judge" not in judge["roles"]:
+        raise HTTPException(422, "У участника нет роли «Судья»")
+    cat = judge["judge_category"]
+    if not cat or cat["expires_at"] < c.end_date.isoformat():
+        raise HTTPException(422, "Судейская категория истекает до окончания соревнования — сначала подтвердите её")
+    c.judges.append(JudgeAssignment(fsp_id=data.fsp_id, full_name=judge["full_name"], position=data.position))
+    store.log(data.actor, "Назначен судья", f"{c.code}: {judge['full_name']} — {data.position}")
+    return store.present_competition(c)
+
+
+@app.delete("/api/v1/competitions/{cid}/judges/{fsp_id}")
+async def remove_judge(cid: int, fsp_id: str, actor: str):
+    c = _competition(cid)
+    if c.status == CompetitionStatus.FINISHED:
+        raise HTTPException(422, "Соревнование завершено — состав судейской коллегии зафиксирован в протоколе")
+    j = next((x for x in c.judges if x.fsp_id == fsp_id), None)
+    if not j:
+        raise HTTPException(404, "Судья не входит в коллегию")
+    c.judges.remove(j)
+    store.log(actor, "Снят судья", f"{c.code}: {j.full_name} — {j.position}")
+    return store.present_competition(c)
+
+
+# ---------------------------------------------------------------- dashboard KPIs
+@app.get("/api/v1/dashboard")
+async def dashboard():
+    today = config.today()
+    seasons = _seasons()
+    season = seasons[0] if seasons else today.year
+    comps = [store.present_competition(c, today) for c in store.competitions.values()]
+    season_results = store.published_results(season)
+    return {
+        "season": season,
+        "competitions_season": sum(c["season"] == season for c in comps),
+        "finished": sum(c["status"] == CompetitionStatus.FINISHED and c["season"] == season for c in comps),
+        "participants_unique": len({r["fsp_id"] for r in season_results if r["fsp_id"].split("-")[1] == REGION_CODE}),
+        "starts": sum(r["fsp_id"].split("-")[1] == REGION_CODE for r in season_results),
+        "live": [c for c in comps if c["status"] == CompetitionStatus.LIVE],
+        "upcoming": sorted([c for c in comps if c["days_to_start"] > 0], key=lambda c: c["start_date"])[:6],
+        "deadlines": sorted([c for c in comps if c["days_to_deadline"] is not None and 0 <= c["days_to_deadline"] <= 45],
+                            key=lambda c: c["days_to_deadline"]),
+        "applications_pending": [store.present_application(a) for a in store.applications if a.status == ApplicationStatus.PENDING],
+        "documents_issued": len(store.documents),
+        "governor_award_deadline": f"{today.year + 1 if today.month > 1 else today.year}-02-01",
+    }
+
+
+# ---------------------------------------------------------------- documents (participation certificate, case Д10)
+def _verification_code(number: str, fsp_id: str, cid: int) -> str:
+    msg = f"{number}|{fsp_id}|{cid}".encode()
+    return hmac.new(config.SECRET_KEY.encode(), msg, hashlib.sha256).hexdigest()[:12].upper()
+
+
+@app.post("/api/v1/documents/participation", status_code=201)
+async def generate_participation(data: DocumentIn):
+    c = _competition(data.competition_id)
+    proto = store.protocols.get(c.id)
+    if not proto or not proto.published:
+        raise HTTPException(422, "Справка формируется только по опубликованному протоколу")
+    entry = next((e for e in proto.entries if e["fsp_id"] == data.fsp_id), None)
+    if not entry:
+        raise HTTPException(404, "Участник отсутствует в протоколе соревнования")
+    person = {}
+    try:
+        person = await clients["sportsman"].get(f"/api/v1/persons/{data.fsp_id}")
+    except ServiceError:
+        pass
+    today = config.today()
+    store.doc_seq += 1
+    number = f"{REGION_CODE}-{today.year}-{store.doc_seq:05d}"
+    code = _verification_code(number, data.fsp_id, c.id)
+    doc = {
+        "number": number, "verification_code": code, "issued_at": datetime.now().isoformat(timespec="seconds"),
+        "issued_by": data.issued_by, "purpose": data.purpose,
+        "person": {"fsp_id": data.fsp_id, "full_name": entry["full_name"], "birth_date": person.get("birth_date"),
+                   "gender": person.get("gender"),
+                   "municipality": person.get("municipality"), "organization": person.get("organization"),
+                   "rank": (person.get("rank") or {}).get("title")},
+        "competition": store.present_competition(c, today),
+        "result": {"place": entry["place"], "status": entry["status"], "dsq_reason": entry["dsq_reason"],
+                   "solved": entry["solved"], "penalty": entry["penalty"], "score": entry["score"],
+                   "mode": proto.mode, "participants": len(proto.entries), "base_points": entry["base_points"]},
+        "verify_path": f"/verify/{number}?c={code}",
+    }
+    store.documents[number] = doc
+    store.log(data.issued_by, "Сформирована справка", f"№ {number} · {entry['full_name']} · {c.code}")
+    return doc
+
+
+@app.get("/api/v1/documents/{number}")
+async def get_document(number: str):
+    doc = store.documents.get(number)
+    if not doc:
+        raise HTTPException(404, "Документ не найден")
+    return doc
+
+
+@app.get("/api/v1/documents/{number}/verify")
+async def verify_document(number: str, code: str = ""):
+    doc = store.documents.get(number)
+    valid = bool(doc) and hmac.compare_digest(doc["verification_code"], code.upper())
+    return {"valid": valid, "number": number, "document": doc if valid else None}

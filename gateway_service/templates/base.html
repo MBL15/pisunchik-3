@@ -1,0 +1,489 @@
+{% import "macros.html" as m %}
+<!doctype html>
+<html lang="ru" class="bg-fsp-bg">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ФСП · Оренбургская область{% endblock %}</title>
+  <meta name="description" content="Единая цифровая платформа Федерации спортивного программирования Оренбургской области: реестр, календарь, протоколы, рейтинг, документы.">
+  <meta name="theme-color" content="#1B1C21">
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Consolas', 'monospace'],
+          },
+          colors: {
+            fsp: {
+              bg: '#1B1C21', panel: '#202128', card: '#2D2E37', line: '#3D3E42', line2: '#4E5268',
+              dim: '#5F5F66', dim2: '#838388', muted: '#9B9C9E', soft: '#C7C7C7', light: '#EDEDED',
+              blue: '#402FFF', violet: '#8C80FF', red: '#EC1D35',
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="stylesheet" href="/static/app.css">
+  {% block head %}{% endblock %}
+</head>
+<body class="min-h-screen bg-fsp-bg font-sans text-fsp-light antialiased selection:bg-fsp-blue selection:text-white">
+  <a href="#main" class="sr-only z-50 rounded-md bg-fsp-blue px-4 py-2 font-mono text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Перейти к содержимому</a>
+  <div class="pointer-events-none fixed inset-0 -z-10 bg-blueprint opacity-70" aria-hidden="true"></div>
+  <div class="cursor-grid no-print pointer-events-none fixed inset-0 -z-10" aria-hidden="true"></div>
+
+  {% set nav = [("/#navigator", "Навигатор"), ("/#disciplines", "Дисциплины"), ("/calendar", "Календарь"), ("/rating", "Рейтинг")] %}
+  {% set path = request.url.path %}
+  {# FSP-style floating light header island #}
+  <header class="no-print sticky top-0 z-40 px-2.5 pt-2.5">
+    <div class="relative mx-auto flex h-[68px] max-w-[1420px] items-center gap-4 rounded-xl bg-fsp-light/95 px-4 text-fsp-bg shadow-[0_8px_30px_rgba(0,0,0,0.35)] backdrop-blur-md sm:px-8">
+      <span class="scroll-progress pointer-events-none absolute inset-x-3 bottom-0 h-[2px] rounded-full bg-fsp-blue" data-progress aria-hidden="true"></span>
+      <a href="/" class="group flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue" aria-label="ФСП Оренбургская область — на главную">
+        {{ m.fsp_mark("h-10 w-10 transition-transform duration-300 group-hover:rotate-[30deg] motion-reduce:transition-none") }}
+        <span class="font-mono text-[26px] font-bold leading-none tracking-tight text-fsp-bg">ФСП</span>
+        <span class="hidden flex-col font-mono text-[12px] leading-[1.15] text-fsp-bg sm:flex">
+          <span>федерация спортивного</span>
+          <span>программирования · <span class="font-bold text-fsp-blue">56</span></span>
+        </span>
+      </a>
+
+      <nav class="ml-6 hidden items-center gap-1 lg:flex" aria-label="Основная навигация">
+        {% for href, label in nav %}
+        <a href="{{ href }}" class="relative rounded-md px-3 py-2 font-mono text-[13px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue {% if path == href %}text-fsp-blue{% else %}text-fsp-bg hover:text-fsp-blue{% endif %}"{% if path == href %} aria-current="page"{% endif %}>{{ label }}{% if path == href %}<span class="absolute inset-x-3 -bottom-0.5 h-0.5 rounded-full bg-fsp-blue"></span>{% endif %}</a>
+        {% endfor %}
+      </nav>
+
+      <div class="ml-auto flex items-center gap-2">
+        {% if user %}
+          {% if user.person.roles|length > 1 %}
+          <form method="post" action="/role" class="hidden items-center gap-0.5 rounded-lg bg-[#D9D9D9] p-1 md:flex" aria-label="Переключение роли без повторного входа">
+            <span class="flex items-center px-1.5 text-fsp-dim" title="Роли аккаунта">{{ m.icon("swap", "h-3.5 w-3.5") }}</span>
+            {% for r in user.person.roles %}
+            <button name="role" value="{{ r }}" type="submit"
+              class="rounded-md px-2.5 py-1.5 font-mono text-[12px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue cursor-pointer {% if r == user.role %}bg-fsp-blue text-white shadow-sm{% else %}text-fsp-bg hover:bg-white{% endif %}"
+              aria-pressed="{{ 'true' if r == user.role else 'false' }}">{{ D.ROLE_LABELS[r] }}</button>
+            {% endfor %}
+          </form>
+          {% else %}
+          <span class="hidden rounded-md bg-[#D9D9D9] px-2.5 py-1.5 font-mono text-[12px] font-medium text-fsp-bg md:inline">{{ user.role_label }}</span>
+          {% endif %}
+          <a href="/cabinet" class="inline-flex items-center gap-2 rounded-md bg-fsp-bg px-3 py-2 font-mono text-[12px] font-medium text-fsp-light transition-colors duration-150 hover:bg-fsp-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue" title="{{ user.person.full_name }}">
+            <span class="hidden text-fsp-muted xl:inline">{{ user.person.fsp_id }}</span><span>Кабинет</span>
+          </a>
+          <form method="post" action="/logout">
+            <button class="flex h-9 w-9 items-center justify-center rounded-md text-fsp-bg transition-colors duration-150 hover:bg-[#D9D9D9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue cursor-pointer" aria-label="Выйти">{{ m.icon("logout", "h-4 w-4") }}</button>
+          </form>
+        {% else %}
+          <a href="/login" class="hidden rounded-md px-3 py-2 font-mono text-[13px] text-fsp-bg transition-colors duration-150 hover:text-fsp-blue sm:inline">Войти</a>
+          <a href="/register" class="inline-flex items-center rounded-md bg-fsp-blue px-4 py-2 font-mono text-[13px] font-medium text-white transition-all duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[3px_3px_0px_0px_#1B1C21] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue focus-visible:ring-offset-2 motion-reduce:transition-none">Регистрация</a>
+        {% endif %}
+        <details class="relative lg:hidden">
+          <summary class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md text-xl text-fsp-bg hover:bg-[#D9D9D9]" aria-label="Меню">≡</summary>
+          <div class="absolute right-0 mt-3 w-60 rounded-xl border border-fsp-line bg-fsp-panel p-2 text-fsp-light shadow-[4px_4px_0px_0px_#402FFF]">
+            {% for href, label in nav %}
+            <a href="{{ href }}" class="block rounded-md px-3 py-2 font-mono text-sm text-fsp-soft hover:bg-fsp-card hover:text-fsp-light">{{ label }}</a>
+            {% endfor %}
+            {% if user and user.person.roles|length > 1 %}
+            <form method="post" action="/role" class="mt-2 border-t border-fsp-line pt-2">
+              <p class="px-3 pb-1 font-mono text-[10px] uppercase text-fsp-muted">Активная роль</p>
+              {% for r in user.person.roles %}
+              <button name="role" value="{{ r }}" class="block w-full rounded-md px-3 py-2 text-left font-mono text-sm {% if r == user.role %}bg-fsp-blue text-white{% else %}text-fsp-soft hover:bg-fsp-card{% endif %}">{{ D.ROLE_LABELS[r] }}</button>
+              {% endfor %}
+            </form>
+            {% endif %}
+            {% if not user %}<a href="/login" class="block rounded-md px-3 py-2 font-mono text-sm text-fsp-soft hover:bg-fsp-card">Войти</a>{% endif %}
+          </div>
+        </details>
+      </div>
+    </div>
+  </header>
+
+  {% if flash %}
+  <div class="no-print mx-auto mt-6 max-w-7xl px-4 sm:px-6 lg:px-8" role="status" aria-live="polite">
+    {% if flash.kind == "fsp_issued" %}
+    <div class="relative overflow-hidden rounded-xl bg-fsp-blue p-6 font-mono text-white shadow-[6px_6px_0px_0px_#EDEDED]" data-celebrate>
+      <div class="fsp-glow -right-10 -top-16 h-48 w-48 !opacity-50" aria-hidden="true"></div>
+      <p class="relative text-xs text-white/70">$ fsp-id issue --region=56</p>
+      <p class="relative mt-1 text-sm">// REGISTRATION... SUCCESS</p>
+      <p class="relative mt-4 text-xs uppercase tracking-widest text-white/70">Ваш региональный ФСП ID</p>
+      <p class="relative mt-1 text-3xl font-normal tracking-wider sm:text-4xl">{{ flash.fsp_id }}</p>
+      <p class="relative mt-3 flex flex-wrap gap-2 text-xs">{% for r in flash.roles %}<span class="rounded-md bg-white/15 px-2 py-0.5">{{ r }}</span>{% endfor %}<span class="text-white/70">· контрольная цифра Луна ✓</span></p>
+    </div>
+    {% elif flash.kind == "error" %}
+    <div class="rounded-xl border border-fsp-red/70 bg-fsp-red/10 px-4 py-3 font-mono text-sm text-rose-100"><span class="font-bold text-rose-300">[ERR]</span> {{ flash.text }}</div>
+    {% else %}
+    <div class="rounded-xl border border-emerald-500/60 bg-emerald-500/10 px-4 py-3 font-mono text-sm text-emerald-50"{% if flash.celebrate %} data-celebrate{% endif %}><span class="font-bold text-emerald-300">[OK]</span> {{ flash.text }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <main id="main" class="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  {# FSP-style dark footer island #}
+  <footer class="no-print px-2.5 pb-2.5">
+    <div class="relative mx-auto max-w-[1420px] overflow-hidden rounded-xl border border-fsp-line bg-fsp-panel bg-fsp-grid">
+      <div class="fsp-glow -bottom-32 right-10 h-56 w-72 !opacity-20" aria-hidden="true"></div>
+      <div class="relative mx-auto grid max-w-7xl gap-10 px-6 py-12 sm:px-8 md:grid-cols-4">
+        <div class="md:col-span-2">
+          <div class="flex items-center gap-3">
+            {{ m.fsp_mark("h-10 w-10") }}
+            <span class="font-mono text-2xl font-bold text-fsp-light">ФСП</span>
+            <span class="font-mono text-xs leading-tight text-fsp-muted">региональное отделение<br>Оренбургская область</span>
+          </div>
+          <p class="mt-4 max-w-md text-sm text-fsp-muted">{{ D.FEDERATION_NAME }}. Демонстрационный стенд: все персональные данные фиктивны.</p>
+        </div>
+        <div class="font-mono text-xs text-fsp-muted">
+          <p class="mb-3 text-fsp-light">Архитектура</p>
+          <p class="flex justify-between gap-4"><span>gateway_service</span><span class="text-fsp-violet">:8000</span></p>
+          <p class="flex justify-between gap-4"><span>sportsman_service</span><span class="text-fsp-violet">:8001</span></p>
+          <p class="flex justify-between gap-4"><span>competition_service</span><span class="text-fsp-violet">:8002</span></p>
+        </div>
+        <div class="text-sm text-fsp-muted">
+          <p class="mb-3 font-mono text-xs text-fsp-light">Документы</p>
+          <p>Правила вида спорта — приказ Минспорта России № 584 от 11.08.2023.</p>
+          <p class="mt-2">Антидопинг — <a class="text-fsp-violet underline-offset-2 hover:underline" href="https://rusada.ru" rel="noopener" target="_blank">rusada.ru</a></p>
+        </div>
+      </div>
+    </div>
+  </footer>
+  <script>
+    (() => {
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      // Expandable rows (rating breakdown etc.)
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-toggle]');
+        if (!btn) return;
+        const row = document.getElementById(btn.dataset.toggle);
+        const open = row.classList.toggle('hidden') === false;
+        btn.setAttribute('aria-expanded', String(open));
+        btn.querySelector('svg')?.classList.toggle('rotate-180', open);
+      });
+
+      // Copy-to-clipboard buttons (FSP ID in the cabinet head)
+      document.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-copy]');
+        if (!btn) return;
+        const label = btn.querySelector('[data-copy-label]');
+        try { await navigator.clipboard.writeText(btn.dataset.copy); } catch (_) { return; }
+        if (label) { label.textContent = 'скопировано ✓'; setTimeout(() => { label.textContent = 'копировать'; }, 1800); }
+      });
+
+      // Live protocol polling — pauses in background tabs, stops when the stream is drained.
+      document.querySelectorAll('[data-live-src]').forEach((el) => {
+        let timer;
+        const tick = async () => {
+          if (document.hidden) return;
+          try {
+            const r = await fetch(el.dataset.liveSrc, { headers: { 'X-Requested-With': 'fetch' } });
+            if (!r.ok) return;
+            el.innerHTML = await r.text();
+            if (el.querySelector('[data-live-done="1"]')) clearInterval(timer);
+          } catch (_) { /* gateway restarting during live-reload — retry next tick */ }
+        };
+        tick();
+        timer = setInterval(tick, 2500);
+      });
+
+      const root = document.documentElement;
+      const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+      // Typing header (kept for any remaining data-type users)
+      document.querySelectorAll('[data-type]').forEach((el) => {
+        const text = el.dataset.type;
+        if (reduce) { el.textContent = text; return; }
+        el.textContent = '';
+        let i = 0;
+        const step = () => { el.textContent = text.slice(0, ++i); if (i < text.length) setTimeout(step, 55 + Math.random() * 60); };
+        setTimeout(step, 600);
+      });
+
+      // Decode headline: glyphs cycle, then lock in left → right with a brand flash
+      document.querySelectorAll('[data-scramble]').forEach((el) => {
+        const text = el.dataset.scramble;
+        if (reduce) { el.textContent = text; return; }
+        const pool = '01<>/{}[]#$%&*+=АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЭЮЯ';
+        const rnd = () => pool[Math.floor(Math.random() * pool.length)];
+        el.textContent = '';
+        const cells = [...text].map((ch) => {
+          if (ch === ' ') { el.append(' '); return null; }
+          const s = document.createElement('span');
+          s.className = 'opacity-25'; s.textContent = rnd(); el.append(s);
+          return { s, ch };
+        }).filter(Boolean);
+        const t0 = performance.now() + 450, per = 60, spin = 420;
+        let last = 0, finished = false;
+        const finish = () => { if (finished) return; finished = true; el.textContent = text; el.classList.add('headline-glow'); };
+        setTimeout(finish, 3500);
+        const frame = (t) => {
+          if (finished) return;
+          const shuffle = t - last > 45; if (shuffle) last = t;
+          let pending = 0;
+          cells.forEach((c, i) => {
+            const startAt = t0 + i * per, lockAt = startAt + spin;
+            if (t >= lockAt + 260) { if (c.s.className) { c.s.className = ''; c.s.textContent = c.ch; } return; }
+            pending++;
+            if (t >= lockAt) { c.s.className = 'glyph-hot'; c.s.textContent = c.ch; }
+            else if (shuffle) { c.s.className = t >= startAt ? 'glyph-hot' : 'opacity-25'; c.s.textContent = rnd(); }
+          });
+          if (pending) requestAnimationFrame(frame);
+          else finish();
+        };
+        requestAnimationFrame(frame);
+      });
+
+      // Stagger: children of [data-stagger] reveal one after another
+      document.querySelectorAll('[data-stagger]').forEach((p) => {
+        [...p.children].forEach((c, i) => {
+          c.setAttribute('data-reveal', p.dataset.stagger || '');
+          c.style.setProperty('--d', `${Math.min(i, 8) * 80}ms`);
+        });
+      });
+
+      // Count-up for numeric stats
+      const countUp = (el) => {
+        const end = parseFloat(el.dataset.count);
+        if (Number.isNaN(end) || reduce) return;
+        const dur = 1400, t0 = performance.now();
+        const step = (t) => {
+          const p = Math.min(1, (t - t0) / dur);
+          el.textContent = Math.round(end * (1 - Math.pow(1 - p, 4))).toLocaleString('ru-RU');
+          if (p < 1) requestAnimationFrame(step);
+        };
+        el.textContent = '0';
+        requestAnimationFrame(step);
+        setTimeout(() => { el.textContent = end.toLocaleString('ru-RU'); }, dur + 600);
+      };
+
+      // Scroll reveal. data-reveal is dropped once shown so hover transforms on cards keep working.
+      const settle = (el) => {
+        el.classList.add('is-in');
+        const d = parseInt(el.style.getPropertyValue('--d'), 10) || 0;
+        setTimeout(() => el.removeAttribute('data-reveal'), d + 750);
+      };
+      const io = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (!e.isIntersecting) return;
+          io.unobserve(e.target);
+          if (e.target.hasAttribute('data-count')) countUp(e.target);
+          else settle(e.target);
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -6% 0px' }) : null;
+      document.querySelectorAll('[data-reveal], [data-count]').forEach((el) => {
+        if (io && !reduce) io.observe(el);
+        else if (el.hasAttribute('data-reveal')) settle(el);
+      });
+
+      // Header scroll progress
+      const progress = document.querySelector('[data-progress]');
+      let scrollQueued = false;
+      const onScroll = () => {
+        scrollQueued = false;
+        const max = root.scrollHeight - root.clientHeight;
+        progress?.style.setProperty('--progress', max > 0 ? (root.scrollTop / max).toFixed(4) : 0);
+      };
+      window.addEventListener('scroll', () => { if (!scrollQueued) { scrollQueued = true; requestAnimationFrame(onScroll); } }, { passive: true });
+      onScroll();
+
+      // Pointer effects: lit grid, card spotlights, parallax glows
+      if (finePointer) {
+        let pe = null, queued = false;
+        const apply = () => {
+          queued = false;
+          root.style.setProperty('--cx', `${pe.clientX}px`);
+          root.style.setProperty('--cy', `${pe.clientY}px`);
+          const card = pe.target.closest?.('.spotlight');
+          if (card) {
+            const r = card.getBoundingClientRect();
+            card.style.setProperty('--mx', `${pe.clientX - r.left}px`);
+            card.style.setProperty('--my', `${pe.clientY - r.top}px`);
+          }
+          if (!reduce) {
+            const host = pe.target.closest?.('[data-parallax-root]');
+            host?.querySelectorAll('[data-parallax]').forEach((el) => {
+              const r = host.getBoundingClientRect(), k = parseFloat(el.dataset.parallax) || 0.05;
+              el.style.translate = `${(pe.clientX - r.left - r.width / 2) * k}px ${(pe.clientY - r.top - r.height / 2) * k}px`;
+            });
+          }
+        };
+        document.addEventListener('pointermove', (e) => { pe = e; if (!queued) { queued = true; requestAnimationFrame(apply); } }, { passive: true });
+      }
+
+      // Node network (FSP "molecule" motif) — links to the cursor, pauses off-screen / in hidden tabs
+      document.querySelectorAll('canvas[data-network]').forEach((cv) => {
+        const ctx = cv.getContext('2d');
+        const host = cv.parentElement;
+        const palette = ['#402FFF', '#402FFF', '#402FFF', '#8C80FF', '#8C80FF', '#C7C7C7', '#EDEDED', '#EC1D35'];
+        const LINK = 118, MOUSE = 170;
+        let w = 0, h = 0, nodes = [], raf = 0, onScreen = true;
+        const mouse = { x: -1e4, y: -1e4 };
+        const seed = () => {
+          const n = Math.round(Math.min(64, Math.max(22, (w * h) / 8500)));
+          nodes = Array.from({ length: n }, () => ({
+            x: Math.random() * w, y: Math.random() * h,
+            vx: (Math.random() - 0.5) * 0.32, vy: (Math.random() - 0.5) * 0.32,
+            r: 1.4 + Math.random() * 2.4, c: palette[Math.floor(Math.random() * palette.length)], sq: Math.random() < 0.22,
+          }));
+        };
+        const resize = () => {
+          const r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+          const first = !w;
+          w = r.width; h = r.height;
+          cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          if (first || !nodes.length) seed();
+          draw(false);
+        };
+        const draw = (move) => {
+          ctx.clearRect(0, 0, w, h);
+          for (const p of nodes) {
+            if (move) {
+              const dx = mouse.x - p.x, dy = mouse.y - p.y, d = Math.hypot(dx, dy);
+              if (d < MOUSE && d > 1) { p.vx += (dx / d) * 0.012; p.vy += (dy / d) * 0.012; }
+              p.vx *= 0.992; p.vy *= 0.992;
+              const sp = Math.hypot(p.vx, p.vy);
+              if (sp < 0.12) { p.vx += (Math.random() - 0.5) * 0.04; p.vy += (Math.random() - 0.5) * 0.04; }
+              if (sp > 1.1) { p.vx *= 1.1 / sp; p.vy *= 1.1 / sp; }
+              p.x += p.vx; p.y += p.vy;
+              if (p.x < 0 || p.x > w) p.vx *= -1;
+              if (p.y < 0 || p.y > h) p.vy *= -1;
+              p.x = Math.max(0, Math.min(w, p.x)); p.y = Math.max(0, Math.min(h, p.y));
+            }
+          }
+          ctx.lineWidth = 1;
+          for (let i = 0; i < nodes.length; i++) {
+            const a = nodes[i];
+            for (let j = i + 1; j < nodes.length; j++) {
+              const b = nodes[j], d = Math.hypot(a.x - b.x, a.y - b.y);
+              if (d < LINK) {
+                ctx.strokeStyle = `rgba(140,128,255,${(1 - d / LINK) * 0.32})`;
+                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+              }
+            }
+            const dm = Math.hypot(a.x - mouse.x, a.y - mouse.y);
+            if (dm < MOUSE) {
+              ctx.strokeStyle = `rgba(237,237,237,${(1 - dm / MOUSE) * 0.55})`;
+              ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(mouse.x, mouse.y); ctx.stroke();
+            }
+          }
+          for (const p of nodes) {
+            ctx.fillStyle = p.c;
+            if (p.sq) { const s = p.r * 2.6; ctx.beginPath(); ctx.roundRect(p.x - s / 2, p.y - s / 2, s, s, s * 0.28); ctx.fill(); }
+            else { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); }
+          }
+        };
+        const loop = () => { draw(true); raf = requestAnimationFrame(loop); };
+        const sync = () => {
+          const run = !reduce && onScreen && !document.hidden;
+          if (run && !raf) raf = requestAnimationFrame(loop);
+          if (!run && raf) { cancelAnimationFrame(raf); raf = 0; }
+        };
+        host.addEventListener('pointermove', (e) => { const r = cv.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; }, { passive: true });
+        host.addEventListener('pointerleave', () => { mouse.x = mouse.y = -1e4; });
+        new ResizeObserver(resize).observe(cv);
+        if ('IntersectionObserver' in window) new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; sync(); }).observe(cv);
+        document.addEventListener('visibilitychange', sync);
+        resize(); sync();
+      });
+
+      // Cabinet nav scroll-spy: the brand pill slides to the section currently in view
+      document.querySelectorAll('[data-spy]').forEach((nav) => {
+        const ind = nav.querySelector('[data-nav-ind]');
+        const links = [...nav.querySelectorAll('a[href^="#"]')];
+        const sections = links.map((a) => document.getElementById(a.hash.slice(1))).filter(Boolean);
+        if (!ind || !sections.length) return;
+        let current = null;
+        const activate = (a) => {
+          if (!a) return;
+          if (a !== current) {
+            current?.removeAttribute('aria-current');
+            a.setAttribute('aria-current', 'true');
+            current = a;
+            if (nav.scrollWidth > nav.clientWidth) nav.scrollTo({ left: a.parentElement.offsetLeft - 24, behavior: reduce ? 'auto' : 'smooth' });
+          }
+          const host = ind.parentElement, box = host.getBoundingClientRect(), r = a.getBoundingClientRect();
+          ind.style.width = `${r.width}px`;
+          ind.style.transform = `translateX(${r.left - box.left - host.clientLeft}px)`;
+          ind.style.opacity = '1';
+        };
+        const pick = () => {
+          const line = 150;
+          let best = sections[0];
+          for (const s of sections) if (s.getBoundingClientRect().top - line <= 0) best = s;
+          if (root.scrollTop + root.clientHeight >= root.scrollHeight - 4) best = sections[sections.length - 1];
+          activate(links.find((a) => a.hash === `#${best.id}`));
+        };
+        let queued = false;
+        window.addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; pick(); }); } }, { passive: true });
+        window.addEventListener('resize', pick);
+        pick();
+      });
+
+      // Success burst: brand-coloured confetti from the flash message (skipped for reduced motion)
+      const burst = document.querySelector('[data-celebrate]');
+      if (burst && !reduce) setTimeout(() => {
+        const cv = document.createElement('canvas');
+        cv.setAttribute('aria-hidden', 'true');
+        cv.className = 'pointer-events-none fixed inset-0 z-[60] h-full w-full';
+        document.body.append(cv);
+        const ctx = cv.getContext('2d'), dpr = Math.min(2, window.devicePixelRatio || 1);
+        const W = innerWidth, H = innerHeight;
+        cv.width = W * dpr; cv.height = H * dpr; ctx.scale(dpr, dpr);
+        const origin = document.querySelector('.just-added') || burst;
+        const r = origin.getBoundingClientRect();
+        const ox = r.left + Math.min(r.width, 420) / 2, oy = Math.min(H - 40, Math.max(90, r.top + r.height / 2));
+        const colors = ['#402FFF', '#8C80FF', '#EDEDED', '#EC1D35', '#402FFF', '#34D399'];
+        const bits = Array.from({ length: 110 }, () => {
+          const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.1, v = 7 + Math.random() * 9;
+          return { x: ox, y: oy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, s: 4 + Math.random() * 6, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4,
+                   c: colors[Math.floor(Math.random() * colors.length)], sq: Math.random() < 0.6 };
+        });
+        const t0 = performance.now(), life = 2200;
+        const frame = (t) => {
+          const k = (t - t0) / life;
+          ctx.clearRect(0, 0, W, H);
+          if (k >= 1) { cv.remove(); return; }
+          ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+          for (const b of bits) {
+            b.vy += 0.32; b.vx *= 0.985; b.vy *= 0.985; b.x += b.vx; b.y += b.vy; b.rot += b.vr;
+            ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.rot); ctx.fillStyle = b.c;
+            if (b.sq) { ctx.beginPath(); ctx.roundRect(-b.s / 2, -b.s / 2, b.s, b.s * 0.62, 1.5); ctx.fill(); }
+            else { ctx.beginPath(); ctx.arc(0, 0, b.s / 2.6, 0, Math.PI * 2); ctx.fill(); }
+            ctx.restore();
+          }
+          requestAnimationFrame(frame);
+        };
+        setTimeout(() => cv.isConnected && cv.remove(), life + 1500);
+        requestAnimationFrame(frame);
+      }, 150);
+
+      // Dependent select: data-options-for="<select id>" with JSON map in data-options
+      document.querySelectorAll('[data-options-source]').forEach((src) => {
+        const target = document.getElementById(src.dataset.optionsSource);
+        const map = JSON.parse(src.dataset.options || '{}');
+        const fill = () => {
+          target.innerHTML = '';
+          (map[src.value] || []).forEach((o) => {
+            const opt = document.createElement('option');
+            opt.value = o.fsp_id;
+            opt.textContent = `${o.status === 'DSQ' ? 'DSQ' : String(o.place).padStart(2, '0')} · ${o.name} · ${o.fsp_id}`;
+            target.appendChild(opt);
+          });
+        };
+        src.addEventListener('change', fill);
+        fill();
+      });
+    })();
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,230 @@
+{# ---------- shared class tokens (exported) · FSP Russia design language ---------- #}
+{% set BTN = "inline-flex items-center justify-center gap-2 rounded-md bg-fsp-blue px-5 py-3 font-mono text-sm font-medium text-white transition-all duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_0px_#EDEDED] active:translate-x-0 active:translate-y-0 active:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-light focus-visible:ring-offset-2 focus-visible:ring-offset-fsp-bg cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0" %}
+{% set BTN_GHOST = "inline-flex items-center justify-center gap-2 rounded-md border border-fsp-line2 bg-transparent px-5 py-3 font-mono text-sm font-medium text-fsp-light transition-all duration-150 hover:border-fsp-blue hover:bg-fsp-blue/10 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_0px_#402FFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet focus-visible:ring-offset-2 focus-visible:ring-offset-fsp-bg cursor-pointer motion-reduce:transition-none motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0" %}
+{% set BTN_LIGHT = "inline-flex items-center justify-center gap-2 rounded-md bg-fsp-light px-5 py-3 font-mono text-sm font-medium text-fsp-bg transition-all duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_0px_#402FFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet cursor-pointer motion-reduce:transition-none" %}
+{% set BTN_SM = "inline-flex items-center gap-1.5 rounded-md border border-fsp-line2 bg-fsp-panel px-2.5 py-1.5 font-mono text-xs font-medium text-fsp-light transition-colors duration-150 hover:border-fsp-blue hover:text-fsp-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet cursor-pointer" %}
+{% set BTN_OK = "inline-flex items-center gap-1.5 rounded-md border border-emerald-500/60 bg-emerald-500/10 px-2.5 py-1.5 font-mono text-xs font-medium text-emerald-300 transition-colors duration-150 hover:bg-emerald-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 cursor-pointer" %}
+{% set BTN_NO = "inline-flex items-center gap-1.5 rounded-md border border-fsp-red/60 bg-fsp-red/10 px-2.5 py-1.5 font-mono text-xs font-medium text-rose-300 transition-colors duration-150 hover:bg-fsp-red hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 cursor-pointer" %}
+{% set CARD = "rounded-xl border border-fsp-line bg-fsp-panel" %}
+{% set INPUT = "w-full rounded-md border border-fsp-line2 bg-fsp-bg px-3 py-2.5 text-sm text-fsp-light placeholder:text-fsp-dim2 transition-colors duration-150 focus:border-fsp-blue focus:outline-none focus:ring-2 focus:ring-fsp-blue/50" %}
+{% set LABEL = "mb-1.5 block font-mono text-xs uppercase tracking-wider text-fsp-muted" %}
+{% set TH = "px-3 py-3 text-left font-mono text-[11px] font-medium uppercase tracking-wider text-fsp-muted" %}
+
+{# ---------- icons (Lucide-style 24px stroke icons, decorative by default) ---------- #}
+{% macro icon(name, cls="h-5 w-5") -%}
+<svg class="{{ cls }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{%- if name == "code" -%}<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+{%- elif name == "package" -%}<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+{%- elif name == "shield" -%}<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>
+{%- elif name == "cpu" -%}<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>
+{%- elif name == "bot" -%}<rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/>
+{%- elif name == "drone" -%}<circle cx="5" cy="5" r="3"/><circle cx="19" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><path d="M7.5 7.5 10 10M16.5 7.5 14 10M7.5 16.5 10 14M16.5 16.5 14 14"/><rect x="10" y="10" width="4" height="4" rx="1"/>
+{%- elif name == "arrow" -%}<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+{%- elif name == "alert" -%}<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>
+{%- elif name == "check" -%}<path d="M20 6 9 17l-5-5"/>
+{%- elif name == "x" -%}<path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+{%- elif name == "terminal" -%}<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+{%- elif name == "file" -%}<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h8M8 17h5"/>
+{%- elif name == "users" -%}<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+{%- elif name == "trophy" -%}<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+{%- elif name == "calendar" -%}<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+{%- elif name == "logout" -%}<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+{%- elif name == "qr" -%}<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/>
+{%- elif name == "pulse" -%}<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+{%- elif name == "link" -%}<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+{%- elif name == "map" -%}<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+{%- elif name == "chevron" -%}<path d="m6 9 6 6 6-6"/>
+{%- elif name == "printer" -%}<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+{%- elif name == "swap" -%}<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}
+
+{# ---------- badges ---------- #}
+{% macro expiry_badge(state, days, expires=None) -%}
+{%- if state == "expired" -%}
+<span class="inline-flex items-center gap-1 whitespace-nowrap border border-rose-500/70 bg-rose-500/10 px-2 py-0.5 font-mono text-[11px] font-bold uppercase text-rose-300 rounded-md">{{ icon("alert", "h-3 w-3") }}истёк · {{ -days }} дн. назад</span>
+{%- elif state == "critical" -%}
+<span class="inline-flex items-center gap-1 whitespace-nowrap border border-amber-400/70 bg-amber-400/10 px-2 py-0.5 font-mono text-[11px] font-bold uppercase text-amber-300 rounded-md">{{ icon("alert", "h-3 w-3") }}≤30 дн · осталось {{ days }}</span>
+{%- elif state == "warning" -%}
+<span class="inline-flex items-center gap-1 whitespace-nowrap border border-fsp-blue/70 bg-fsp-blue/15 px-2 py-0.5 font-mono text-[11px] font-bold uppercase text-fsp-violet rounded-md">≤90 дн · осталось {{ days }}</span>
+{%- elif state == "ok" -%}
+<span class="inline-flex items-center gap-1 whitespace-nowrap border border-emerald-500/50 bg-emerald-500/5 px-2 py-0.5 font-mono text-[11px] font-semibold text-emerald-300 rounded-md">действует{% if expires %} до {{ expires|ru_date }}{% endif %}</span>
+{%- else -%}
+<span class="inline-flex items-center whitespace-nowrap border border-fsp-line2 px-2 py-0.5 font-mono text-[11px] text-fsp-muted rounded-md">бессрочно</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro rank_pill(rank) -%}
+{%- if rank -%}
+<span class="inline-flex items-center whitespace-nowrap border border-fsp-dim bg-fsp-card px-1.5 py-0.5 font-mono text-[11px] font-bold text-fsp-light rounded-md" title="{{ rank.title }}">{{ rank.short }}</span>
+{%- else -%}
+<span class="inline-flex items-center whitespace-nowrap border border-dashed border-fsp-line2 px-1.5 py-0.5 font-mono text-[11px] text-fsp-muted rounded-md">б/р</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro place(p, status="OK") -%}
+{%- if status == "DSQ" -%}<span class="font-mono text-xs font-bold text-rose-400">DSQ</span>
+{%- elif p == 1 -%}<span class="font-mono font-black text-amber-300">01</span>
+{%- elif p == 2 -%}<span class="font-mono font-black text-fsp-light">02</span>
+{%- elif p == 3 -%}<span class="font-mono font-black text-orange-400">03</span>
+{%- elif p -%}<span class="font-mono text-fsp-muted">{{ "%02d"|format(p) }}</span>
+{%- else -%}<span class="font-mono text-fsp-dim2">—</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro comp_status(c) -%}
+{%- if c.status == "LIVE" -%}
+<span class="inline-flex items-center gap-1.5 rounded-md bg-fsp-red px-2 py-0.5 font-mono text-[11px] font-bold uppercase text-white"><span class="relative flex h-2 w-2"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75 motion-reduce:animate-none"></span><span class="relative inline-flex h-2 w-2 rounded-full bg-white"></span></span>live</span>
+{%- elif c.status == "REGISTRATION_OPEN" -%}
+<span class="inline-flex border border-fsp-blue bg-fsp-blue/15 px-2 py-0.5 font-mono text-[11px] font-bold uppercase text-fsp-violet rounded-md">{{ c.status_label }}</span>
+{%- elif c.status == "FINISHED" -%}
+<span class="inline-flex border border-fsp-line2 px-2 py-0.5 font-mono text-[11px] uppercase text-fsp-muted rounded-md">{{ c.status_label }}</span>
+{%- else -%}
+<span class="inline-flex border border-fsp-dim px-2 py-0.5 font-mono text-[11px] uppercase text-fsp-soft rounded-md">{{ c.status_label }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro tag(text, tone="slate") -%}
+{%- set tones = {"slate": "border-fsp-line2 text-fsp-soft", "blue": "border-fsp-blue/60 text-fsp-violet", "emerald": "border-emerald-500/60 text-emerald-300", "amber": "border-amber-400/60 text-amber-300"} -%}
+<span class="inline-flex items-center whitespace-nowrap border {{ tones[tone] }} px-1.5 py-0.5 font-mono text-[11px] rounded-md">{{ text }}</span>
+{%- endmacro %}
+
+{% macro section_head(cmd, title, subtitle=None, id=None) -%}
+<div class="mb-10 flex flex-col gap-3" data-reveal{% if id %} id="{{ id }}"{% endif %}>
+  <p class="font-mono text-xs uppercase tracking-[0.2em] text-fsp-violet">$ {{ cmd }}</p>
+  <h2 class="max-w-3xl text-balance font-mono text-3xl font-normal leading-[1.15] tracking-tight text-fsp-light sm:text-[42px]">{{ title }}</h2>
+  {% if subtitle %}<p class="max-w-2xl text-pretty text-fsp-muted">{{ subtitle }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro kpi(label, value, hint=None, tone="blue") -%}
+{%- set tones = {"blue": ("hover:border-fsp-blue", "text-fsp-light"), "emerald": ("hover:border-emerald-500", "text-emerald-300"),
+                 "amber": ("hover:border-amber-400", "text-amber-300"), "rose": ("hover:border-fsp-red", "text-rose-300")} -%}
+{%- set t = tones.get(tone, tones["blue"]) -%}
+<div class="spotlight group overflow-hidden rounded-xl border border-fsp-line bg-fsp-panel p-5 transition-colors duration-150 {{ t[0] }}">
+  <span class="absolute right-4 top-4 h-2 w-2 rounded-[2px] bg-fsp-blue transition-transform duration-200 group-hover:rotate-45" aria-hidden="true"></span>
+  <p class="relative font-mono text-[11px] uppercase tracking-wider text-fsp-muted">{{ label }}</p>
+  <p class="relative mt-2 font-mono text-[34px] font-normal leading-none tabular-nums {{ t[1] }}"{% if value is integer %} data-count="{{ value }}"{% endif %}>{{ value }}</p>
+  {% if hint %}<p class="relative mt-2 text-xs text-fsp-muted">{{ hint }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{# ---------- discipline icons in the FSP Russia duotone language (brand fills + light strokes) ---------- #}
+{% macro disc_icon(code, cls="h-12 w-12") -%}
+<svg class="{{ cls }}" viewBox="0 0 52 52" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{%- if code == "ALG" -%}
+<rect x="20" y="20" width="12" height="12" rx="3" fill="#402FFF"/><path d="M15 16 5 26l10 10M37 16l10 10-10 10" stroke="#EDEDED"/><rect x="23.2" y="5.2" width="5.6" height="5.6" transform="rotate(45 26 8)" stroke="#402FFF"/><path d="M26 13v4M26 35v8" stroke="#EDEDED" stroke-dasharray="2 2"/>
+{%- elif code == "PRD" -%}
+<rect x="6" y="8" width="40" height="27" rx="4" stroke="#EDEDED"/><path d="M6 15h40" stroke="#EDEDED"/><rect x="11" y="20" width="11" height="10" rx="2.5" fill="#402FFF"/><path d="M27 22h13M27 28h8" stroke="#EDEDED"/><circle cx="16" cy="43" r="3" fill="#402FFF"/><circle cx="26" cy="43" r="3" fill="#402FFF"/><circle cx="36" cy="43" r="3" fill="#402FFF"/>
+{%- elif code == "SEC" -%}
+<path d="M26 5l16 6v11c0 11-7 19-16 24-9-5-16-13-16-24V11z" stroke="#EDEDED"/><rect x="19" y="18" width="14" height="14" rx="3.5" fill="#402FFF"/><path d="m22.5 25 2.5 2.5 4.5-5" stroke="#fff"/><circle cx="42" cy="38" r="3" fill="#402FFF"/>
+{%- elif code == "AI" -%}
+<rect x="13" y="13" width="26" height="26" rx="5" stroke="#EDEDED"/><rect x="20" y="20" width="12" height="12" rx="3" fill="#402FFF"/><path d="M20 5v8M32 5v8M20 39v8M32 39v8M5 20h8M5 32h8M39 20h8" stroke="#EDEDED"/><path d="M39 32h8" stroke="#402FFF"/>
+{%- elif code == "ROB" -%}
+<rect x="8" y="18" width="36" height="23" rx="8" stroke="#EDEDED"/><path d="M26 18v-6M4 26v7M48 26v7" stroke="#EDEDED"/><circle cx="26" cy="9" r="3" fill="#402FFF"/><rect x="16" y="25" width="7" height="7" rx="2" fill="#402FFF"/><rect x="29" y="25" width="7" height="7" rx="2" fill="#402FFF"/>
+{%- elif code == "UAV" -%}
+<circle cx="11" cy="11" r="6" stroke="#EDEDED"/><circle cx="41" cy="11" r="6" stroke="#EDEDED"/><circle cx="11" cy="41" r="6" stroke="#EDEDED"/><circle cx="41" cy="41" r="6" stroke="#EDEDED"/><path d="m15.5 15.5 5 5M36.5 15.5l-5 5M15.5 36.5l5-5M36.5 36.5l-5-5" stroke="#EDEDED"/><rect x="19" y="19" width="14" height="14" rx="3.5" fill="#402FFF"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}
+
+{# ---------- brand mark: molecule-style node graph (FSP visual motif), regional variant ---------- #}
+{% macro fsp_mark(cls="h-9 w-9") -%}
+<svg class="{{ cls }}" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+  <path d="M20 8 9 15v12l11 7 11-7V15z" stroke="#9B9C9E" stroke-width="1.6"/>
+  <path d="M20 8v13l11 6M20 21 9 27" stroke="#9B9C9E" stroke-width="1.6"/>
+  <circle cx="20" cy="8" r="4" fill="#EC1D35"/><circle cx="31" cy="15" r="3.4" fill="#EC1D35"/>
+  <circle cx="9" cy="15" r="3.4" fill="#C7C7C7"/><circle cx="20" cy="21" r="3.6" fill="#402FFF"/>
+  <circle cx="31" cy="27" r="3.4" fill="#402FFF"/><circle cx="9" cy="27" r="3.4" fill="#C7C7C7"/><circle cx="20" cy="34" r="3.4" fill="#402FFF"/>
+</svg>
+{%- endmacro %}
+
+{# ---------- cabinet: sticky in-page navigation · items = [(anchor, label, count|None)] ---------- #}
+{% macro cabinet_nav(items) -%}
+<nav class="no-print sticky top-[84px] z-30 -mx-1 mt-4 overflow-x-auto px-1 py-2" aria-label="Разделы кабинета" data-spy>
+  <div class="relative w-max rounded-xl border border-fsp-line bg-fsp-bg/85 p-1.5 shadow-[0_12px_32px_-16px_rgba(0,0,0,0.8)] backdrop-blur-md">
+  <span class="nav-ind pointer-events-none absolute bottom-1.5 left-0 top-1.5 w-0 rounded-lg bg-fsp-blue opacity-0 shadow-[0_0_22px_rgba(64,47,255,0.55)]" data-nav-ind aria-hidden="true"></span>
+  <ul class="relative flex gap-1.5">
+    {% for href, label, count in items %}
+    <li class="relative"><a href="#{{ href }}" class="group flex items-center gap-2 rounded-lg px-3 py-2 font-mono text-xs text-fsp-soft transition-colors duration-200 hover:text-fsp-light aria-[current=true]:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet">
+      {{ label }}{% if count %}<span class="rounded-md bg-fsp-blue px-1.5 py-0.5 text-[10px] font-bold text-white transition-colors duration-200 group-aria-[current=true]:bg-white group-aria-[current=true]:text-fsp-blue">{{ count }}</span>{% endif %}
+    </a></li>
+    {% endfor %}
+  </ul>
+  </div>
+</nav>
+{%- endmacro %}
+
+{% macro step_head(n, title, id, hint=None) -%}
+<div class="mb-5 flex flex-wrap items-end justify-between gap-3" data-reveal>
+  <div class="min-w-0">
+    <p class="flex items-center gap-3 font-mono text-xs text-fsp-violet" aria-hidden="true">
+      <span class="rounded-md bg-fsp-light px-2 py-0.5 text-fsp-blue shadow-[3px_3px_0px_0px_#402FFF]">{{ n }}</span>
+      <span class="rail-draw h-px w-28 bg-gradient-to-r from-fsp-blue via-fsp-violet to-transparent"></span>
+    </p>
+    <h2 id="{{ id }}" class="mt-3 font-mono text-2xl font-normal text-fsp-light sm:text-3xl">{{ title }}</h2>
+  </div>
+  {% if hint %}<p class="max-w-md text-sm text-fsp-muted">{{ hint }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Countdown ring for a rank / judge category: fill = share of the last year still left #}
+{% macro countdown_ring(item, label) -%}
+{%- set tones = {"expired": "#F43F5E", "critical": "#FBBF24", "warning": "#8C80FF", "ok": "#34D399"} -%}
+{%- set color = tones.get(item.state, "#8C80FF") -%}
+{%- set share = 0 if item.days_left < 0 else [100, (item.days_left * 100 / 365)|round(1)]|min -%}
+<div class="cd-ring relative h-14 w-14 shrink-0" data-reveal="scale" style="--p: {{ share }}">
+  <svg viewBox="0 0 56 56" class="h-full w-full -rotate-90" aria-hidden="true">
+    <circle cx="28" cy="28" r="24" fill="none" stroke="#3D3E42" stroke-width="4"/>
+    <circle class="ring-fg" cx="28" cy="28" r="24" fill="none" stroke="{{ color }}" stroke-width="4" stroke-linecap="round" pathLength="100" style="filter: drop-shadow(0 0 6px {{ color }}99)"/>
+  </svg>
+  <span class="absolute inset-0 flex flex-col items-center justify-center font-mono leading-none">
+    <span class="text-sm font-bold tabular-nums" style="color: {{ color }}">{{ item.days_left if item.days_left >= 0 else "0" }}</span>
+    <span class="mt-0.5 text-[8px] uppercase text-fsp-muted">дн.</span>
+  </span>
+  <span class="sr-only">{{ label }}: {% if item.days_left < 0 %}срок истёк{% else %}осталось {{ item.days_left }} дн.{% endif %}</span>
+</div>
+{%- endmacro %}
+
+{# Rank request: one select picks the athlete's result (value "fsp_id|competition_id"), the second — the rank. #}
+{% macro rank_request_fields(uid, fid, options, default_code) -%}
+<div class="grid gap-2 sm:grid-cols-[1fr_9rem]">
+  <div class="min-w-0">
+    <label for="rb-{{ uid }}" class="{{ LABEL }}">Основание — результат из протокола</label>
+    <select id="rb-{{ uid }}" name="basis" required class="{{ INPUT }} !py-2 text-xs">
+      {% for r in options %}<option value="{{ fid }}|{{ r.competition_id }}">{{ r.place }} место из {{ r.protocol_size }} · {{ r.title }} · {{ r.date|ru_date }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="rc-{{ uid }}" class="{{ LABEL }}">Разряд</label>
+    <select id="rc-{{ uid }}" name="code" class="{{ INPUT }} !py-2 text-xs">
+      {% for r in D.SPORT_RANKS %}<option value="{{ r.code }}" {% if r.code == default_code %}selected{% endif %}>{{ r.short }}</option>{% endfor %}
+    </select>
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro qual_status(q) -%}
+<span class="shrink-0 rounded-md px-2 py-0.5 font-mono text-[11px] font-bold uppercase {% if q.status == 'APPROVED' %}bg-emerald-500/15 text-emerald-300{% elif q.status == 'REJECTED' %}bg-fsp-red/15 text-rose-300{% else %}bg-amber-400/15 text-amber-300{% endif %}">{{ q.status_label }}</span>
+{%- endmacro %}
+
+{# A submitted rank / category request with its basis and the federation's decision. #}
+{% macro qual_item(q, show_person=False) -%}
+<li class="flex flex-wrap items-start justify-between gap-3 px-4 py-3 text-sm">
+  <div class="min-w-0 flex-1">
+    <p class="text-fsp-light">{% if show_person %}{{ q.person.short_name }} · {% endif %}{{ q.purpose_label|capitalize }}: {{ q.code_title }}</p>
+    <p class="mt-0.5 font-mono text-[11px] text-fsp-muted">№{{ q.id }} · {{ q.created_at[:10]|ru_date }} · {{ q.basis.text }}</p>
+    {% if q.status == "APPROVED" and q.order_no %}<p class="mt-0.5 font-mono text-[11px] text-emerald-300">{{ q.order_no }}</p>{% endif %}
+    {% if q.comment %}<p class="mt-0.5 text-xs {% if q.status == 'REJECTED' %}text-rose-200/90{% else %}text-fsp-soft{% endif %}">Федерация: {{ q.comment }}</p>{% endif %}
+  </div>
+  {{ qual_status(q) }}
+</li>
+{%- endmacro %}
+
+{% macro degraded_notice(items) -%}
+{%- if items -%}
+<div class="no-print mb-6 border border-amber-400/60 bg-amber-400/5 p-3 font-mono text-xs text-amber-200 rounded-md" role="status">
+  {% for d in items %}<p>[WARN] {{ d }} — часть данных временно недоступна, интерфейс работает в деградированном режиме.</p>{% endfor %}
+</div>
+{%- endif -%}
+{%- endmacro %}

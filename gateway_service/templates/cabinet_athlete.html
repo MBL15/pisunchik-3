@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Кабинет спортсмена · ФСП Оренбург{% endblock %}
+{% block content %}
+{% include "_cabinet_head.html" %}
+{% set p = user.person %}
+{% set sanctions = p.sanctions|selectattr("active")|list %}
+{% set pending = links|selectattr("status", "equalto", "PENDING")|list %}
+{% set rank_alert = p.rank and p.rank.state in ("expired", "critical", "warning") %}
+{% set show_apply = can_apply and not p.is_sanctioned and not rank_alert %}
+{% set todo_count = sanctions|length + pending|length + (1 if rank_alert else 0) + (1 if show_apply else 0) %}
+{% set results = perf.results if perf and perf.available else [] %}
+{% set trainers = links|selectattr("status", "in", ["ACTIVE", "SUSPENDED"])|list %}
+{% set active_apps = in_progress|rejectattr("status", "equalto", "REJECTED")|list %}
+{% set my_trainers = links|selectattr("status", "equalto", "ACTIVE")|list %}
+{% set rank_pending = quals|selectattr("status", "equalto", "PENDING")|first %}
+{% set can_request_rank = rank_options and not my_trainers and not rank_pending %}
+{% set next_rank = (D.SPORT_RANKS[[D.RANK_ORDER[p.rank.code] + 1, D.SPORT_RANKS|length - 1]|min].code) if p.rank else "3Ю" %}
+
+{{ m.cabinet_nav([("todo", "Что сделать", todo_count), ("starts", "Мои старты", in_progress|length + can_apply|length), ("history", "Результаты", results|length), ("profile", "Разряд и документы", None)]) }}
+<div class="mt-4">{{ m.degraded_notice(degraded) }}</div>
+
+{# ================= 01 · WHAT TO DO NOW — every alert and request in one prioritised list ================= #}
+<section id="todo" class="mt-6 scroll-mt-36" aria-labelledby="todo-title">
+  {{ m.step_head("01", "Что сделать сейчас", "todo-title") }}
+  {% if todo_count %}
+  <ol class="grid gap-3" data-stagger="left">
+    {% for s in sanctions %}
+    <li class="flex flex-wrap items-start gap-4 rounded-xl border border-fsp-red/70 bg-fsp-red/10 p-4 shadow-[0_0_36px_-12px_rgba(236,29,53,0.6)]" role="alert">
+      <span class="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-fsp-red text-white"><span class="absolute inset-0 animate-ping rounded-lg bg-fsp-red/60 motion-reduce:animate-none" aria-hidden="true"></span><span class="relative">{{ m.icon("alert", "h-4 w-4") }}</span></span>
+      <div class="min-w-0 flex-1">
+        <p class="font-mono text-sm text-white">Действующая {{ s.label|lower }} до {{ s.date_to|ru_date }}</p>
+        <p class="mt-1 text-sm text-rose-100/90">{{ s.reason }}. Подача заявок заблокирована, вы исключены из рейтинга сезона. Вопросы — в федерацию.</p>
+      </div>
+    </li>
+    {% endfor %}
+
+    {% for l in pending %}
+    <li class="relative flex flex-wrap items-center gap-4 rounded-xl border-2 border-fsp-blue bg-fsp-panel p-4 shadow-[4px_4px_0px_0px_#402FFF]">
+      <span class="beam" aria-hidden="true"></span>
+      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-fsp-blue text-white">{{ m.icon("link", "h-4 w-4") }}</span>
+      <div class="min-w-0 flex-1">
+        <p class="font-mono text-sm text-white">Тренер {{ l.trainer_name }} отправил запрос на привязку</p>
+        <p class="mt-1 text-sm text-fsp-muted">{{ l.discipline_label }} · {{ l.trainer_fsp_id }}. После подтверждения тренер сможет подавать за вас заявки и видеть результаты.</p>
+      </div>
+      <form method="post" action="/cabinet/links/{{ l.id }}/status" class="flex gap-2">
+        <button name="status" value="ACTIVE" class="{{ m.BTN }} !px-4 !py-2">{{ m.icon("check", "h-4 w-4") }}Подтвердить</button>
+        <button name="status" value="ENDED" class="{{ m.BTN_NO }} !px-3 !py-2">Отклонить</button>
+      </form>
+    </li>
+    {% endfor %}
+
+    {% if rank_alert %}
+    <li class="flex flex-wrap items-center gap-4 rounded-xl border border-amber-400/60 bg-amber-400/5 p-4" role="status">
+      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-400 text-fsp-bg">{{ m.icon("trophy", "h-4 w-4") }}</span>
+      <div class="min-w-0 flex-1">
+        <p class="font-mono text-sm text-white">{{ p.rank.title }} {% if p.rank.state == "expired" %}истёк{% else %}истекает {{ p.rank.expires_at|ru_date }}{% endif %}</p>
+        {% if rank_pending %}
+        <p class="mt-1 text-sm text-amber-100/80">Заявка №{{ rank_pending.id }} на {{ rank_pending.purpose_label }} «{{ rank_pending.code_title }}» на рассмотрении в федерации. Основание: {{ rank_pending.basis.text }}.</p>
+        {% elif my_trainers %}
+        <p class="mt-1 text-sm text-amber-100/80">Заявку на подтверждение подаёт ваш тренер — {{ my_trainers[0].trainer_name }}.
+          {% if rank_options %}Результат для основания уже есть: {{ rank_options[0].place }} место, «{{ rank_options[0].title }}».{% else %}Нужен результат на соревновании сезона.{% endif %}</p>
+        {% elif rank_options %}
+        <p class="mt-1 text-sm text-amber-100/80">Тренера нет — подайте заявку сами: выберите результат-основание, федерация рассмотрит и продлит разряд.</p>
+        {% elif active_apps %}
+        <p class="mt-1 text-sm text-amber-100/80">Вы уже подали заявку на «{{ active_apps[0].competition_title }}» — выступление на нём подтвердит разряд.</p>
+        {% else %}
+        <p class="mt-1 text-sm text-amber-100/80">Подтвердите его результатом на соревновании сезона.{% if can_apply %} Подходящих стартов с открытой регистрацией: {{ can_apply|length }}.{% endif %}</p>
+        {% endif %}
+      </div>
+      {% if rank_pending %}<a href="#rank" class="{{ m.BTN_GHOST }} !px-4 !py-2">Статус {{ m.icon("arrow", "h-4 w-4") }}</a>
+      {% elif can_request_rank %}
+      <form method="post" action="/cabinet/qualification" class="grid w-full gap-3 border-t border-amber-400/30 pt-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        {{ m.rank_request_fields("todo", p.fsp_id, rank_options, p.rank.code) }}
+        <button class="{{ m.BTN }} !py-2">{{ m.icon("trophy", "h-4 w-4") }}Подать на подтверждение</button>
+      </form>
+      {% elif active_apps %}<a href="#starts" class="{{ m.BTN_GHOST }} !px-4 !py-2">К заявке {{ m.icon("arrow", "h-4 w-4") }}</a>
+      {% elif not my_trainers or not rank_options %}<a href="{{ '#starts' if can_apply else '/calendar' }}" class="{{ m.BTN_LIGHT }} !px-4 !py-2">Выбрать старт {{ m.icon("arrow", "h-4 w-4") }}</a>{% endif %}
+    </li>
+    {% endif %}
+
+    {% if show_apply %}
+    <li class="flex flex-wrap items-center gap-4 rounded-xl border border-fsp-line bg-fsp-panel p-4">
+      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-fsp-card text-fsp-violet">{{ m.icon("calendar", "h-4 w-4") }}</span>
+      <div class="min-w-0 flex-1">
+        <p class="font-mono text-sm text-white">Открыт приём заявок: {{ can_apply|length }} {{ plural(can_apply|length, "старт", "старта", "стартов") }} в ваших дисциплинах</p>
+        <p class="mt-1 text-sm text-fsp-muted">Ближайший — {{ can_apply[0].title }}, {{ can_apply[0].start_date|ru_date }}.</p>
+      </div>
+      <a href="#starts" class="{{ m.BTN_GHOST }} !px-4 !py-2">К заявкам {{ m.icon("arrow", "h-4 w-4") }}</a>
+    </li>
+    {% endif %}
+  </ol>
+  {% else %}
+  <p class="flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm text-emerald-100">
+    {{ m.icon("check", "h-5 w-5 shrink-0 text-emerald-300") }}Всё в порядке — срочных действий нет. Новые старты появятся в <a href="/calendar" class="text-emerald-300 underline-offset-2 hover:underline">календаре</a>.
+  </p>
+  {% endif %}
+</section>
+
+{# ================= 02 · MY STARTS — application journey + one-click apply ================= #}
+{% set steps = ["Заявка", "Допуск", "Старт", "Результат"] %}
+<section id="starts" class="mt-14 scroll-mt-36" aria-labelledby="starts-title">
+  {{ m.step_head("02", "Мои старты", "starts-title", "Подайте заявку в один клик — федерация проверит допуск, а результат сам появится в истории со справкой.") }}
+
+  {% if in_progress %}
+  <ul class="grid gap-3 md:grid-cols-2" aria-label="Заявки в работе" data-stagger>
+    {% for a in in_progress %}
+    {% set rejected = a.status == "REJECTED" %}
+    <li class="spotlight rounded-xl border border-fsp-line bg-fsp-panel p-4 transition-colors duration-150 hover:border-fsp-blue/70{% if flash and flash.app_id == a.id %} just-added{% endif %}">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="font-mono text-[11px] text-fsp-muted">{{ a.start_date|ru_date }} · {{ a.competition_code }}</p>
+          <p class="mt-1 text-sm font-medium text-white">{{ a.competition_title }}</p>
+        </div>
+        <span class="shrink-0 rounded-md px-2 py-0.5 font-mono text-[11px] font-bold uppercase {% if rejected %}bg-fsp-red/15 text-rose-300{% elif a.status == 'APPROVED' %}bg-emerald-500/15 text-emerald-300{% else %}bg-amber-400/15 text-amber-300{% endif %}">{{ a.status_label }}</span>
+      </div>
+      <ol class="mt-4 grid grid-cols-4 gap-1.5" aria-label="Этап: {{ steps[a.stage - 1] }}">
+        {% for s in steps %}
+        {% set done = loop.index <= a.stage and not (rejected and loop.index > 1) %}
+        {% set failed = rejected and loop.index == 2 %}
+        <li>
+          <span class="block h-1.5 overflow-hidden rounded-full bg-fsp-card{% if done and loop.index == a.stage and not rejected %} step-live{% endif %}">
+            {% if failed or done %}<span class="block h-full rounded-full {% if failed %}bg-fsp-red{% else %}bg-gradient-to-r from-fsp-blue to-fsp-violet shadow-[0_0_10px_rgba(140,128,255,0.7)]{% endif %}" data-bar style="--d: {{ 250 + loop.index0 * 260 }}ms"></span>{% endif %}
+          </span>
+          <span class="mt-1.5 block font-mono text-[10px] {% if failed %}text-rose-300{% elif done %}text-fsp-light{% else %}text-fsp-dim2{% endif %}">{{ s }}</span>
+        </li>
+        {% endfor %}
+      </ol>
+      {% if rejected %}<p class="mt-3 text-xs text-rose-200/90">{{ a.comment or "Заявка отклонена федерацией." }}{% if a.competition_id in can_apply|map(attribute="id")|list %} Можно подать повторно ниже.{% endif %}</p>
+      {% elif a.status == "PENDING" %}<p class="mt-3 text-xs text-fsp-muted">Федерация проверяет возраст, дисциплину и документы.</p>
+      {% elif a.stage == 2 %}<p class="mt-3 text-xs text-emerald-200/90">Вы допущены — старт {{ a.start_date|ru_date }}.</p>
+      {% else %}<p class="mt-3 text-xs text-fsp-muted">Соревнование идёт или завершено — ждём публикации протокола.</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <h3 class="mb-3 {% if in_progress %}mt-8{% endif %} flex items-center gap-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">
+    <span class="h-2 w-2 rounded-[2px] bg-fsp-blue"></span>Можно подать заявку<span class="h-px flex-1 bg-fsp-line"></span>
+  </h3>
+  <ul class="grid gap-3" data-stagger>
+    {% for c in can_apply %}
+    <li class="spotlight flex flex-wrap items-center justify-between gap-4 rounded-xl border border-fsp-line bg-fsp-panel p-4 transition-colors duration-150 hover:border-fsp-blue">
+      <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap gap-2">{{ m.tag(c.discipline_label, "blue") }}{{ m.tag(c.format_label) }}</div>
+        <p class="mt-2 font-medium text-white">{{ c.title }}</p>
+        <p class="mt-0.5 font-mono text-[11px] text-fsp-muted">{{ c.start_date|ru_date }} · {{ c.venue }} · <a href="/competitions/{{ c.id }}/regulation" class="text-fsp-soft hover:text-fsp-violet hover:underline">положение</a></p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        {% if c.days_to_deadline is not none and c.days_to_deadline >= 0 %}<span class="font-mono text-[11px] {% if c.days_to_deadline <= 14 %}text-amber-300{% else %}text-fsp-muted{% endif %}">приём ещё {{ c.days_to_deadline|days_word }}</span>{% endif %}
+        <form method="post" action="/cabinet/applications"><input type="hidden" name="competition_id" value="{{ c.id }}">
+          <button class="{{ m.BTN }} !px-4 !py-2" {% if p.is_sanctioned %}disabled title="Подача заявок заблокирована санкцией"{% endif %}>Подать заявку</button></form>
+      </div>
+    </li>
+    {% else %}
+    <li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">{% if active_apps %}Заявки на все открытые старты в ваших дисциплинах уже поданы.{% else %}Сейчас нет открытых стартов в ваших дисциплинах.{% endif %} Новые даты приёма заявок — в <a href="/calendar" class="text-fsp-violet hover:underline">календаре</a>.</li>
+    {% endfor %}
+  </ul>
+
+  {% if not_eligible %}
+  <details class="group mt-3 rounded-xl border border-fsp-line">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-mono text-xs text-fsp-muted hover:text-fsp-light">
+      <span>Не подходят по возрасту · {{ not_eligible|length }}</span>{{ m.icon("chevron", "h-4 w-4 transition-transform duration-200 group-open:rotate-180") }}
+    </summary>
+    <ul class="divide-y divide-fsp-line border-t border-fsp-line">
+      {% for c in not_eligible %}
+      <li class="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm"><span class="text-fsp-soft">{{ c.title }}</span><span class="font-mono text-[11px] text-fsp-dim2">{{ c.age_group }}</span></li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</section>
+
+{# ================= 03 · RESULTS ================= #}
+<section id="history" class="mt-14 scroll-mt-36" aria-labelledby="hist-title">
+  {{ m.step_head("03", "История выступлений", "hist-title") }}
+  {% if perf and perf.available %}
+  <div class="relative mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-white/20 text-white shadow-[0_18px_48px_-20px_rgba(64,47,255,0.8)] sm:grid-cols-4" data-reveal="scale">
+    <span class="beam beam-light" aria-hidden="true"></span>
+    <span class="pointer-events-none absolute inset-y-0 left-0 z-[1] w-1/4 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent motion-safe:animate-[shine_6s_ease-in-out_1.2s_infinite]" aria-hidden="true"></span>
+    {% for label, value in [("стартов", perf.starts), ("призовых мест", perf.podiums), ("побед", perf.golds), ("баллов сезона", perf.season_points)] %}
+    <div class="bg-fsp-blue px-5 py-4">
+      <p class="font-mono text-3xl font-light tabular-nums"{% if value is integer %} data-count="{{ value }}"{% endif %}>{{ value }}</p>
+      <p class="mt-1 font-mono text-[11px] text-white/75">{{ label }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="mb-5 flex items-center gap-2 font-mono text-xs {% if perf.podiums >= 2 %}text-emerald-300{% else %}text-fsp-muted{% endif %}">
+    {{ m.icon("trophy", "h-3.5 w-3.5") }}
+    {% if perf.podiums >= 2 %}Коэффициент стабильности ×1.2 применяется к вашему рейтингу{% else %}Ещё {{ 2 - perf.podiums }} {{ plural(2 - perf.podiums, "призовое место", "призовых места", "призовых мест") }} — и рейтинг умножится на ×1.2{% endif %}
+  </p>
+  {% endif %}
+  {% set max_pts = (results|map(attribute="base_points")|select|list or [1])|max %}
+  <div class="overflow-x-auto rounded-xl border border-fsp-line bg-fsp-panel" data-reveal>
+    <table class="w-full min-w-[560px] border-collapse text-sm">
+      <thead class="border-b border-fsp-line bg-fsp-bg/70"><tr>
+        <th scope="col" class="{{ m.TH }}">Соревнование</th>
+        <th scope="col" class="{{ m.TH }} text-center">Место</th>
+        <th scope="col" class="{{ m.TH }} text-right">Баллы</th>
+        <th scope="col" class="{{ m.TH }} text-right"><span class="sr-only">Справка</span></th>
+      </tr></thead>
+      <tbody>
+        {% for r in results %}
+        <tr class="border-b border-fsp-line/70 last:border-0 hover:bg-fsp-card/50">
+          <td class="px-3 py-3">
+            <a href="/protocols/{{ r.competition_id }}" class="text-fsp-light hover:text-fsp-violet hover:underline" title="Открыть протокол">{{ r.title }}</a>
+            <p class="mt-0.5 font-mono text-[11px] text-fsp-muted">{{ r.date|ru_date }} · {{ r.discipline }} · {{ r.level_label }} · {% if r.mode == "icpc" %}{{ r.solved }} реш.{% else %}{{ "%.2f"|format(r.score) }}{% endif %}</p>
+          </td>
+          <td class="whitespace-nowrap px-3 py-3 text-center">{{ m.place(r.place, r.status) }}<span class="font-mono text-[10px] text-fsp-dim2"> / {{ r.protocol_size }}</span></td>
+          <td class="px-3 py-3 text-right font-mono font-bold tabular-nums {% if r.base_points %}text-emerald-300{% else %}text-fsp-dim2{% endif %}">
+            {{ r.base_points }}
+            <span class="ml-auto mt-1.5 block h-1 w-20 overflow-hidden rounded-full bg-fsp-card" aria-hidden="true">{% if r.base_points %}<span class="block h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300" data-bar style="width: {{ (r.base_points * 100 / max_pts)|round }}%; --d: {{ 200 + loop.index0 * 120 }}ms"></span>{% endif %}</span>
+          </td>
+          <td class="px-3 py-3 text-right">
+            <form method="post" action="/documents/participation"><input type="hidden" name="competition_id" value="{{ r.competition_id }}"><input type="hidden" name="purpose" value="для портфолио">
+              <button class="{{ m.BTN_SM }} whitespace-nowrap" aria-label="Справка об участии: {{ r.title }}">{{ m.icon("qr", "h-3.5 w-3.5") }}Справка</button></form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="px-3 py-8 text-center text-sm text-fsp-muted">Выступлений пока нет — результаты появятся здесь сами после первого старта.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{# ================= 04 · PROFILE: trainers, guardian, anti-doping ================= #}
+<section id="profile" class="mt-14 scroll-mt-36" aria-labelledby="profile-title">
+  {{ m.step_head("04", "Разряд, тренеры и документы", "profile-title") }}
+  <div id="rank" class="{{ m.CARD }} mb-4 scroll-mt-36" data-reveal>
+    <div class="flex flex-wrap items-start justify-between gap-4 p-5">
+      <div class="min-w-0">
+        <p class="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fsp-muted">{{ m.icon("trophy", "h-4 w-4") }}Спортивный разряд</p>
+        {% if p.rank %}
+        <p class="mt-3 text-lg text-white">{{ p.rank.title }}</p>
+        <dl class="mt-2 grid gap-1 font-mono text-[11px] text-fsp-muted">
+          <div><dt class="inline text-fsp-dim2">присвоен:</dt> <dd class="inline">{{ p.rank.assigned_at|ru_date }} · {{ p.rank.order_no }}</dd></div>
+          <div><dt class="inline text-fsp-dim2">за что:</dt> <dd class="inline text-fsp-soft">{{ p.rank.basis or "—" }}</dd></div>
+          <div><dt class="inline text-fsp-dim2">действует:</dt> <dd class="inline">{{ "до " ~ (p.rank.expires_at|ru_date) if p.rank.expires_at else "бессрочно" }}</dd></div>
+        </dl>
+        {% else %}
+        <p class="mt-3 text-sm text-fsp-soft">Разряда пока нет. Призовое место на официальном соревновании — основание для заявки на присвоение.</p>
+        {% endif %}
+      </div>
+      {% if p.rank %}<div class="flex flex-col items-end gap-1">{{ m.rank_pill(p.rank) }}{% if p.rank.expires_at %}{{ m.expiry_badge(p.rank.state, p.rank.days_left) }}{% endif %}</div>{% endif %}
+    </div>
+    {% if can_request_rank and not rank_alert %}
+    <details class="group border-t border-fsp-line">
+      <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 font-mono text-xs text-fsp-light hover:text-fsp-violet">
+        <span>{{ m.icon("trophy", "mr-1 inline h-3.5 w-3.5 text-fsp-violet") }}Подать заявку на {{ "новый разряд" if p.rank else "присвоение разряда" }}</span>{{ m.icon("chevron", "h-4 w-4 transition-transform duration-200 group-open:rotate-180") }}
+      </summary>
+      <form method="post" action="/cabinet/qualification" class="grid gap-3 px-5 pb-5 sm:grid-cols-[1fr_auto] sm:items-end">
+        {{ m.rank_request_fields("profile", p.fsp_id, rank_options, next_rank) }}
+        <button class="{{ m.BTN }} !py-2">Отправить в федерацию</button>
+      </form>
+    </details>
+    {% elif my_trainers and not rank_pending %}
+    <p class="border-t border-fsp-line px-5 py-3 text-xs text-fsp-muted">Заявки на разряд подаёт тренер ({{ my_trainers|map(attribute="trainer_name")|join(", ") }}) — статус появится здесь.</p>
+    {% endif %}
+    {% if quals %}
+    <ul class="divide-y divide-fsp-line border-t border-fsp-line" aria-label="Заявки на разряд">{% for q in quals[:4] %}{{ m.qual_item(q) }}{% endfor %}</ul>
+    {% endif %}
+  </div>
+  <div class="grid gap-4 md:grid-cols-3" data-stagger>
+    <div class="{{ m.CARD }} spotlight p-5">
+      <p class="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fsp-muted">{{ m.icon("users", "h-4 w-4") }}Мои тренеры</p>
+      <ul class="mt-3 grid gap-2.5">
+        {% for l in trainers %}
+        <li class="text-sm"><span class="text-fsp-light">{{ l.trainer_name }}</span><span class="block font-mono text-[11px] {% if l.status == 'ACTIVE' %}text-emerald-300{% else %}text-fsp-muted{% endif %}">{{ l.discipline_label }} · {{ l.status_label }}</span></li>
+        {% else %}
+        <li class="text-sm text-fsp-muted">Пока не привязаны — заявки можно подавать самостоятельно. Чтобы тренер вас нашёл, передайте ему ФСП ID из профиля.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% if p.is_minor and p.guardian %}
+    <div class="{{ m.CARD }} spotlight p-5 text-sm">
+      <p class="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fsp-muted">{{ m.icon("shield", "h-4 w-4") }}законный представитель</p>
+      <p class="mt-3 text-fsp-light">{{ p.guardian.full_name }}</p>
+      <p class="font-mono text-[11px] text-emerald-300">согласие на обработку ПДн · {{ p.guardian.consent_at|ru_date }}</p>
+    </div>
+    {% endif %}
+    <div class="{{ m.CARD }} spotlight p-5">
+      <p class="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fsp-muted">{{ m.icon("file", "h-4 w-4") }}Антидопинг</p>
+      <p class="mt-3 text-sm text-fsp-soft">Пройдите онлайн-курс РУСАДА и сохраните сертификат — его спросят на очных стартах.</p>
+      <a href="https://rusada.ru" target="_blank" rel="noopener" class="{{ m.BTN_SM }} mt-3">rusada.ru {{ m.icon("arrow", "h-3 w-3") }}</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

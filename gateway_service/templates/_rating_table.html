@@ -1,0 +1,107 @@
+{# Expects: rating (from competition_service /api/v1/rating), limit (int|None) #}
+{% import "macros.html" as m %}
+{% set rows = rating.rows[:limit] if limit else rating.rows %}
+{% set s = rating.settings %}
+<div class="overflow-x-auto border border-fsp-line bg-fsp-panel rounded-xl">
+  <table class="w-full min-w-[820px] border-collapse text-sm">
+    <caption class="sr-only">Рейтинг сезона {{ rating.season }} — {{ rating.discipline_title }}</caption>
+    <thead class="border-b border-fsp-line bg-fsp-bg/70">
+      <tr>
+        <th scope="col" class="{{ m.TH }} w-12">#</th>
+        <th scope="col" class="{{ m.TH }}">Спортсмен</th>
+        <th scope="col" class="{{ m.TH }}">Разряд</th>
+        <th scope="col" class="{{ m.TH }} text-center">Старты</th>
+        <th scope="col" class="{{ m.TH }}">Призовые</th>
+        <th scope="col" class="{{ m.TH }} text-right">База</th>
+        <th scope="col" class="{{ m.TH }}">Коэфф. стабильности</th>
+        <th scope="col" class="{{ m.TH }} text-right">Итог</th>
+        <th scope="col" class="{{ m.TH }} w-10"><span class="sr-only">Детализация</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr class="border-b border-fsp-line/70 transition-colors duration-150 hover:bg-fsp-card/60">
+        <td class="px-3 py-3">{{ m.place(r.position) }}</td>
+        <td class="px-3 py-3">
+          <p class="font-medium text-white">{{ r.full_name }}</p>
+          <p class="font-mono text-[11px] text-fsp-muted">{{ r.fsp_id }} · {{ r.municipality }}</p>
+        </td>
+        <td class="px-3 py-3"><span class="inline-flex whitespace-nowrap border {% if r.rank_short == 'б/р' %}border-dashed border-fsp-line2 text-fsp-muted{% else %}border-fsp-dim bg-fsp-card text-fsp-light{% endif %} px-1.5 py-0.5 font-mono text-[11px] font-bold rounded-md">{{ r.rank_short }}</span></td>
+        <td class="px-3 py-3 text-center font-mono tabular-nums text-fsp-soft">{{ r.starts }}</td>
+        <td class="px-3 py-3">
+          <span class="flex items-center gap-1" aria-label="Призовых мест: {{ r.podiums }} из {{ r.starts }}">
+            {% for b in r.breakdown %}
+              {% if b.status == "DSQ" %}<span class="font-mono text-xs font-bold text-rose-400" title="{{ b.title }}: дисквалификация">×</span>
+              {% elif b.podium %}<span class="h-2.5 w-2.5 bg-emerald-400" title="{{ b.title }}: {{ b.place }} место"></span>
+              {% else %}<span class="h-2.5 w-2.5 border border-fsp-dim rounded-full" title="{{ b.title }}: {{ b.place }} место"></span>{% endif %}
+            {% endfor %}
+            <span class="ml-1 font-mono text-[11px] text-fsp-muted">{{ r.podiums }}/{{ s.min_podiums }}</span>
+          </span>
+        </td>
+        <td class="px-3 py-3 text-right font-mono tabular-nums text-fsp-soft">{{ r.base_total }}</td>
+        <td class="px-3 py-3">
+          {% if r.coefficient_applied %}
+          <span class="inline-flex items-center gap-1.5 border border-emerald-400 bg-emerald-400/10 px-2 py-0.5 font-mono text-xs font-bold text-emerald-300 rounded-md" title="{{ r.coefficient_reason }}">×{{ s.coefficient }} <span class="font-semibold text-emerald-400/80">+{{ "%.1f"|format(r.bonus) }}</span></span>
+          {% else %}
+          <span class="inline-flex items-center border border-fsp-line2 px-2 py-0.5 font-mono text-xs text-fsp-muted rounded-md" title="{{ r.coefficient_reason }}">×1.0</span>
+          {% endif %}
+        </td>
+        <td class="px-3 py-3 text-right font-mono text-lg font-black tabular-nums text-fsp-violet">{{ "%.1f"|format(r.final) }}</td>
+        <td class="px-3 py-3">
+          <button type="button" data-toggle="bd-{{ rating.discipline }}-{{ loop.index }}" aria-expanded="false" aria-controls="bd-{{ rating.discipline }}-{{ loop.index }}"
+            class="flex h-8 w-8 items-center justify-center border border-fsp-line2 text-fsp-muted transition-colors duration-150 hover:border-fsp-blue hover:text-fsp-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet cursor-pointer rounded-md"
+            aria-label="Показать расчёт: {{ r.full_name }}">{{ m.icon("chevron", "h-4 w-4 transition-transform duration-150") }}</button>
+        </td>
+      </tr>
+      <tr id="bd-{{ rating.discipline }}-{{ loop.index }}" class="hidden border-b border-fsp-line bg-fsp-bg/80">
+        <td colspan="9" class="px-3 py-4 sm:px-6">
+          <div class="grid gap-2">
+            {% for b in r.breakdown %}
+            <div class="grid grid-cols-[88px_1fr_auto_64px] items-center gap-3 border-l-2 {% if b.podium %}border-emerald-400{% elif b.status == 'DSQ' %}border-rose-500{% else %}border-fsp-line2{% endif %} bg-fsp-panel px-3 py-2 text-xs">
+              <span class="font-mono text-fsp-muted">{{ b.date|ru_date }}</span>
+              <span class="min-w-0">
+                <span class="block truncate text-fsp-light">{{ b.title }}</span>
+                <span class="font-mono text-[11px] text-fsp-muted">{{ b.competition_code }} · {{ b.level_label }}{% if b.dsq_reason %} · <span class="text-rose-300">DSQ: {{ b.dsq_reason }}</span>{% endif %}</span>
+              </span>
+              <span>{{ m.place(b.place, b.status) }}</span>
+              <span class="text-right font-mono font-bold tabular-nums {% if b.points %}text-emerald-300{% else %}text-fsp-dim2{% endif %}">{% if b.points %}+{{ b.points }}{% else %}0{% endif %}</span>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border border-dashed border-fsp-line2 bg-fsp-bg px-3 py-2 font-mono text-xs rounded-md">
+            <span class="text-fsp-muted">rating =</span>
+            <span class="text-fsp-light">Σ({% for b in r.breakdown %}{{ b.points }}{% if not loop.last %} + {% endif %}{% endfor %}) = {{ r.base_total }}</span>
+            <span class="{% if r.coefficient_applied %}text-emerald-300{% else %}text-fsp-muted{% endif %}">× {{ r.coefficient }}</span>
+            <span class="text-fsp-muted">=</span>
+            <span class="font-black text-fsp-violet">{{ "%.1f"|format(r.final) }}</span>
+            <span class="w-full text-[11px] text-fsp-muted">// {{ r.coefficient_reason }}</span>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="px-3 py-10 text-center font-mono text-sm text-fsp-muted">// нет опубликованных протоколов по заданным фильтрам</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if rating.excluded and not limit %}
+<div class="mt-4 border border-rose-500/50 bg-rose-500/5 p-4 rounded-xl">
+  <p class="font-mono text-xs font-bold uppercase tracking-wider text-rose-300">{{ m.icon("alert", "mr-1 inline h-3.5 w-3.5") }}Исключены из рейтинга — действующая дисквалификация / отстранение</p>
+  <ul class="mt-3 grid gap-2">
+    {% for r in rating.excluded %}
+    <li class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+      <span class="font-medium text-fsp-light">{{ r.full_name }}</span>
+      <span class="font-mono text-[11px] text-fsp-muted">{{ r.fsp_id }}</span>
+      <span class="font-mono text-xs text-fsp-dim2 line-through" title="Баллы, которые были бы начислены">{{ "%.1f"|format(r.final) }}</span>
+      <span class="text-xs text-rose-200">{{ r.excluded_reason }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% elif rating.excluded %}
+<p class="mt-3 font-mono text-xs text-rose-300">// исключено из рейтинга (санкции): {{ rating.excluded|length }} — подробности на странице рейтинга</p>
+{% endif %}
+{% if not rating.sanctions_checked %}
+<p class="mt-3 font-mono text-xs text-amber-300">[WARN] реестр санкций недоступен — исключения не применены</p>
+{% endif %}

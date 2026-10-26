@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Регистрация · ФСП Оренбург{% endblock %}
+{% block content %}
+{% set v = values or {} %}
+{% set v_roles = v.roles or ["athlete"] %}
+{% set v_disc = v.disciplines or [] %}
+<div class="mx-auto max-w-4xl pt-10">
+  {{ m.section_head("fsp register --multi-role", "Регистрация в платформе", "Один аккаунт может совмещать несколько ролей: например, спортсмен и тренер или тренер и судья. Региональный ФСП ID выдаётся сразу после регистрации.") }}
+
+  {% if errors %}
+  <div class="mb-6 border border-rose-500/70 bg-rose-500/10 px-4 py-3 font-mono text-sm text-rose-200 rounded-md" role="alert" id="form-errors" tabindex="-1">
+    <span class="font-bold text-rose-400">[ERR] валидация:</span> {{ errors }}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/register" class="grid gap-8" novalidate>
+    <fieldset class="border border-fsp-line bg-fsp-panel p-6 rounded-xl">
+      <legend class="rounded-md bg-fsp-light px-2.5 py-0.5 font-mono text-xs text-fsp-blue">01 · роли аккаунта</legend>
+      <p class="mb-4 text-sm text-fsp-muted">Отметьте все подходящие. Роль «Федерация» назначается региональным отделением.</p>
+      <div class="grid gap-3 sm:grid-cols-3">
+        {% for code, title, hint in [("athlete", "Спортсмен", "участвую в соревнованиях"), ("trainer", "Тренер", "готовлю спортсменов"), ("judge", "Судья", "работаю в судейской коллегии")] %}
+        <label class="group relative flex cursor-pointer flex-col border-2 border-fsp-line2 bg-fsp-bg p-4 transition-all duration-150 hover:border-fsp-blue has-[:checked]:-translate-x-0.5 has-[:checked]:-translate-y-0.5 has-[:checked]:border-fsp-blue has-[:checked]:shadow-[4px_4px_0px_0px_#402FFF] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-fsp-violet motion-reduce:transition-none rounded-xl">
+          <input type="checkbox" name="roles" value="{{ code }}" class="peer sr-only" {% if code in v_roles %}checked{% endif %}>
+          <span class="absolute right-3 top-3 flex h-5 w-5 items-center justify-center border border-fsp-dim font-mono text-xs text-transparent peer-checked:border-fsp-blue peer-checked:bg-fsp-blue peer-checked:text-white rounded-md">✓</span>
+          <span class="font-semibold text-white">{{ title }}</span>
+          <span class="mt-1 font-mono text-[11px] text-fsp-muted">{{ hint }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="border border-fsp-line bg-fsp-panel p-6 rounded-xl">
+      <legend class="rounded-md bg-fsp-light px-2.5 py-0.5 font-mono text-xs text-fsp-blue">02 · персональные данные</legend>
+      <div class="grid gap-4 sm:grid-cols-3">
+        <div><label for="last_name" class="{{ m.LABEL }}">Фамилия *</label><input id="last_name" name="last_name" required autocomplete="family-name" value="{{ v.last_name }}" class="{{ m.INPUT }}"></div>
+        <div><label for="first_name" class="{{ m.LABEL }}">Имя *</label><input id="first_name" name="first_name" required autocomplete="given-name" value="{{ v.first_name }}" class="{{ m.INPUT }}"></div>
+        <div><label for="middle_name" class="{{ m.LABEL }}">Отчество</label><input id="middle_name" name="middle_name" autocomplete="additional-name" value="{{ v.middle_name }}" class="{{ m.INPUT }}"></div>
+        <div>
+          <span class="{{ m.LABEL }}">Пол *</span>
+          <div class="flex gap-2">
+            {% for g in ["М", "Ж"] %}
+            <label class="flex flex-1 cursor-pointer items-center justify-center border border-fsp-line2 bg-fsp-bg py-2.5 font-mono text-sm text-fsp-soft transition-colors has-[:checked]:border-fsp-blue has-[:checked]:bg-fsp-blue has-[:checked]:text-white has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-fsp-violet rounded-md">
+              <input type="radio" name="gender" value="{{ g }}" class="sr-only" {% if v.gender == g or (not v.gender and g == "М") %}checked{% endif %}>{{ g }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div><label for="birth_date" class="{{ m.LABEL }}">Дата рождения *</label><input id="birth_date" name="birth_date" type="date" required value="{{ v.birth_date }}" max="{{ today.isoformat() }}" class="{{ m.INPUT }} font-mono [color-scheme:dark]"></div>
+        <div>
+          <label for="municipality" class="{{ m.LABEL }}">Муниципалитет *</label>
+          <select id="municipality" name="municipality" class="{{ m.INPUT }}">{% for x in D.MUNICIPALITIES %}<option {% if v.municipality == x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+        </div>
+        <div class="sm:col-span-3">
+          <label for="organization" class="{{ m.LABEL }}">Организация *</label>
+          <select id="organization" name="organization" class="{{ m.INPUT }}">{% for x in D.ORGANIZATIONS %}<option {% if v.organization == x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+        </div>
+      </div>
+
+      <div id="guardian" class="mt-5 hidden border border-amber-400/50 bg-amber-400/5 p-4 rounded-xl">
+        <p class="font-mono text-xs font-bold uppercase text-amber-300">{{ m.icon("alert", "mr-1 inline h-3.5 w-3.5") }}Несовершеннолетний участник</p>
+        <p class="mt-1 text-sm text-fsp-soft">Требуется согласие законного представителя на обработку персональных данных.</p>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+          <div><label for="guardian_name" class="{{ m.LABEL }}">ФИО законного представителя</label><input id="guardian_name" name="guardian_name" value="{{ v.guardian_name }}" class="{{ m.INPUT }}"></div>
+          <label class="flex items-start gap-3 self-end pb-2 text-sm text-fsp-soft"><input type="checkbox" name="guardian_consent" class="mt-0.5 h-4 w-4 accent-fsp-blue" {% if v.guardian_consent %}checked{% endif %}>Законный представитель даёт согласие на обработку ПДн</label>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="border border-fsp-line bg-fsp-panel p-6 rounded-xl">
+      <legend class="rounded-md bg-fsp-light px-2.5 py-0.5 font-mono text-xs text-fsp-blue">03 · дисциплины</legend>
+      <p class="mb-4 text-sm text-fsp-muted">Обязательно для спортсмена и тренера.</p>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {% for d in D.DISCIPLINES %}
+        <label class="flex cursor-pointer items-center gap-3 border border-fsp-line2 bg-fsp-bg p-3 transition-all duration-150 hover:border-fsp-blue has-[:checked]:border-fsp-blue has-[:checked]:bg-fsp-blue/15 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-fsp-violet rounded-md">
+          <input type="checkbox" name="disciplines" value="{{ d.code }}" class="peer sr-only" {% if d.code in v_disc %}checked{% endif %}>
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center border border-fsp-line2 text-fsp-violet peer-checked:border-fsp-blue peer-checked:bg-fsp-blue peer-checked:text-white rounded-md">{{ m.icon(d.icon, "h-4 w-4") }}</span>
+          <span class="min-w-0"><span class="block text-sm font-medium text-white">{{ d.short }}</span><span class="font-mono text-[11px] text-fsp-muted">{{ d.code }}</span></span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="border border-fsp-line bg-fsp-panel p-6 rounded-xl">
+      <legend class="rounded-md bg-fsp-light px-2.5 py-0.5 font-mono text-xs text-fsp-blue">04 · доступ</legend>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div><label for="email" class="{{ m.LABEL }}">Электронная почта *</label><input id="email" name="email" type="email" required autocomplete="email" value="{{ v.email }}" class="{{ m.INPUT }}"></div>
+        <div><label for="password" class="{{ m.LABEL }}">Пароль * <span class="normal-case text-fsp-dim2">(от 8 символов)</span></label><input id="password" name="password" type="password" required minlength="8" autocomplete="new-password" class="{{ m.INPUT }}"></div>
+      </div>
+      <label class="mt-5 flex items-start gap-3 text-sm text-fsp-soft">
+        <input type="checkbox" name="consent_pd" required class="mt-0.5 h-4 w-4 shrink-0 accent-fsp-blue" {% if v.consent_pd %}checked{% endif %}>
+        <span>Даю согласие на обработку персональных данных в соответствии с Федеральным законом № 152-ФЗ «О персональных данных». Согласие сохраняется в реестре с отметкой времени.</span>
+      </label>
+    </fieldset>
+
+    <div class="flex flex-wrap items-center gap-4">
+      <button class="{{ m.BTN }}">Создать аккаунт и получить ФСП ID {{ m.icon("arrow", "h-4 w-4") }}</button>
+      <span class="font-mono text-xs text-fsp-muted">уже есть аккаунт? <a href="/login" class="text-fsp-violet hover:underline">войти</a></span>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  (() => {
+    const bd = document.getElementById('birth_date');
+    const box = document.getElementById('guardian');
+    const today = new Date('{{ today.isoformat() }}');
+    const update = () => {
+      if (!bd.value) { box.classList.add('hidden'); return; }
+      const b = new Date(bd.value);
+      let age = today.getFullYear() - b.getFullYear();
+      if (today < new Date(today.getFullYear(), b.getMonth(), b.getDate())) age--;
+      box.classList.toggle('hidden', !(age < 18));
+    };
+    bd.addEventListener('change', update);
+    update();
+    document.getElementById('form-errors')?.focus();
+  })();
+</script>
+{% endblock %}

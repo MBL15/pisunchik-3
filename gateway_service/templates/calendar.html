@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Календарь соревнований · ФСП Оренбург{% endblock %}
+{% block content %}
+{% macro comp_row(c) %}
+<li class="spotlight grid gap-4 border border-fsp-line bg-fsp-panel p-4 transition-all duration-150 hover:border-fsp-blue hover:shadow-[4px_4px_0px_0px_#402FFF] sm:grid-cols-[150px_1fr_auto] rounded-xl">
+  <div class="font-mono text-xs">
+    <p class="text-sm font-bold text-white">{{ c.start_date|ru_date }}</p>
+    {% if c.end_date != c.start_date %}<p class="text-fsp-muted">— {{ c.end_date|ru_date }}</p>{% endif %}
+    <p class="mt-1 text-fsp-dim2">{{ c.code }}</p>
+  </div>
+  <div class="min-w-0">
+    <div class="flex flex-wrap items-center gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{{ m.tag(c.level_status) }}{{ m.tag(c.type) }}{{ m.tag(c.format_label, "amber" if c.format == "HYBRID" else "slate") }}</div>
+    <p class="mt-2 font-medium text-white">{{ c.title }}</p>
+    <p class="mt-1 text-xs text-fsp-muted">{{ c.venue }} · {{ c.age_group }}{% if c.format_note %} · <span class="text-amber-200">{{ c.format_note }}</span>{% endif %}</p>
+    <p class="mt-1 font-mono text-[11px] text-fsp-muted">{{ c.plan_label }} {{ c.plan_number }}</p>
+  </div>
+  <div class="flex flex-col items-start gap-1 font-mono text-[11px] text-fsp-muted sm:items-end">
+    {% if c.status == "LIVE" %}<a href="#live-{{ c.id }}" class="text-emerald-300 hover:underline">смотреть протокол →</a>
+    {% elif c.protocol_published %}<a href="/protocols/{{ c.id }}" class="text-fsp-violet hover:underline">протокол →</a>
+    {% elif c.awaiting_results %}<span class="text-amber-300">ожидает протокола</span>{% endif %}
+    <a href="/competitions/{{ c.id }}/regulation" class="inline-flex items-center gap-1 text-fsp-soft hover:text-fsp-violet hover:underline">{{ m.icon("file", "h-3 w-3") }}положение</a>
+    {% if c.days_to_deadline is not none and c.days_to_deadline >= 0 %}<span class="{% if c.days_to_deadline <= 14 %}text-amber-300{% else %}text-fsp-violet{% endif %}">заявки: ещё {{ c.days_to_deadline|days_word }}</span>{% endif %}
+    {% if c.applications_total %}<span>заявок: {{ c.applications_approved }}/{{ c.applications_total }}</span>{% endif %}
+    {% if c.participants %}<span>участников: {{ c.participants }}</span>{% endif %}
+  </div>
+</li>
+{% endmacro %}
+<div class="pt-10">
+  {{ m.section_head("cal --season", "Календарь соревнований", "Очные, онлайн и смешанные соревнования региона. У каждого старта указан календарный план (ЕКП Минспорта России или план Оренбургской области) и номер в нём.") }}
+  {{ m.degraded_notice(degraded) }}
+  <form method="get" class="mb-8 grid gap-3 border border-fsp-line bg-fsp-panel p-4 sm:grid-cols-4 rounded-xl">
+    <div>
+      <label for="f-d" class="{{ m.LABEL }}">Дисциплина</label>
+      <select id="f-d" name="discipline" class="{{ m.INPUT }}"><option value="">Все</option>{% for d in D.DISCIPLINES %}<option value="{{ d.code }}" {% if filters.discipline == d.code %}selected{% endif %}>{{ d.short }}</option>{% endfor %}</select>
+    </div>
+    <div>
+      <label for="f-p" class="{{ m.LABEL }}">Календарный план</label>
+      <select id="f-p" name="plan" class="{{ m.INPUT }}"><option value="">Все</option>{% for k, v in D.CALENDAR_PLAN_LABELS.items() %}<option value="{{ k }}" {% if filters.plan == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+    </div>
+    <div>
+      <label for="f-f" class="{{ m.LABEL }}">Формат</label>
+      <select id="f-f" name="format" class="{{ m.INPUT }}"><option value="">Все</option>{% for k, v in D.FORMAT_LABELS.items() %}<option value="{{ k }}" {% if filters.format == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+    </div>
+    <div class="flex items-end"><button class="{{ m.BTN }} w-full">Фильтр</button></div>
+  </form>
+
+  <h2 class="mb-3 font-mono text-xs font-bold uppercase tracking-wider text-fsp-violet">// предстоящие и идущие · {{ upcoming|length }}</h2>
+  <ul class="grid gap-3" data-stagger>{% for c in upcoming %}{{ comp_row(c) }}{% else %}<li class="font-mono text-sm text-fsp-muted">// нет</li>{% endfor %}</ul>
+
+  {% for c in upcoming if c.status == "LIVE" %}
+  <section id="live-{{ c.id }}" class="mt-10 scroll-mt-20">
+    <h2 class="mb-3 font-mono text-xs font-bold uppercase tracking-wider text-fsp-violet">// живой протокол · {{ c.code }}</h2>
+    <div data-live-src="/partials/live/{{ c.id }}"><div class="h-64 animate-pulse border border-fsp-line bg-fsp-panel motion-reduce:animate-none rounded-md"></div></div>
+  </section>
+  {% endfor %}
+
+  <h2 class="mb-3 mt-12 font-mono text-xs font-bold uppercase tracking-wider text-fsp-muted">// завершённые · {{ past|length }}</h2>
+  <ul class="grid gap-3">{% for c in past %}{{ comp_row(c) }}{% else %}<li class="font-mono text-sm text-fsp-muted">// нет</li>{% endfor %}</ul>
+</div>
+{% endblock %}

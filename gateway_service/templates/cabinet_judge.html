@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Кабинет судьи · ФСП Оренбург{% endblock %}
+{% block content %}
+{% macro assignment(c, past=False) %}
+<li class="spotlight grid gap-3 rounded-xl border border-fsp-line bg-fsp-panel p-4 transition-colors duration-150 hover:border-fsp-blue/70 sm:grid-cols-[140px_1fr_auto] {% if past %}opacity-80 hover:opacity-100{% endif %}">
+  <div class="font-mono text-xs"><p class="font-bold text-white">{{ c.start_date|ru_date }}</p><p class="text-fsp-dim2">{{ c.code }}</p></div>
+  <div class="min-w-0">
+    <div class="flex flex-wrap gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{{ m.tag(c.format_label) }}</div>
+    <p class="mt-2 font-medium text-white">{{ c.title }}</p>
+    <p class="font-mono text-[11px] text-fsp-muted">{{ c.venue }}</p>
+  </div>
+  <span class="self-start border border-emerald-500/60 bg-emerald-500/10 px-2 py-1 font-mono text-[11px] font-bold uppercase text-emerald-300 rounded-md">{{ c.position }}</span>
+</li>
+{% endmacro %}
+{% include "_cabinet_head.html" %}
+{% set jc = user.person.judge_category %}
+{% set cats = D.JUDGE_CATEGORIES %}
+{% set cat_idx = (cats|map(attribute="code")|list).index(jc.code) if jc else -1 %}
+{% set next_cat = cats[[cat_idx + 1, cats|length - 1]|min].code %}
+{{ m.cabinet_nav([("upcoming", "Назначения", assignments.upcoming|length), ("past", "Мои соревнования", assignments.past|length), ("category", "Категория", 1 if pending_qual else None)]) }}
+<div class="mt-4">{{ m.degraded_notice(degraded) }}</div>
+{% if jc and jc.state in ("expired", "critical", "warning") %}
+<div class="mt-6 flex flex-wrap items-center gap-4 rounded-xl border border-amber-400/60 bg-amber-400/5 p-4 shadow-[0_0_36px_-14px_rgba(251,191,36,0.55)]" role="status" data-reveal="left">
+  <span class="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-400 text-fsp-bg"><span class="absolute inset-0 animate-ping rounded-lg bg-amber-400/50 motion-reduce:animate-none" aria-hidden="true"></span><span class="relative">{{ m.icon("alert", "h-4 w-4") }}</span></span>
+  <div class="min-w-0 flex-1">
+    <p class="font-mono text-sm text-white">Судейская категория {{ jc.code }} {% if jc.state == "expired" %}истекла{% else %}истекает {{ jc.expires_at|ru_date }}{% endif %}</p>
+    {% if pending_qual %}
+    <p class="mt-1 text-sm text-amber-100/80">Заявка №{{ pending_qual.id }} на {{ pending_qual.purpose_label }} «{{ pending_qual.code_title }}» на рассмотрении в федерации.</p>
+    {% else %}
+    <p class="mt-1 text-sm text-amber-100/80">{{ jc.title }}. Без действующей категории федерация не сможет назначить вас в коллегию — подтвердите её в один клик: практика подставится из ваших назначений.</p>
+    {% endif %}
+  </div>
+  {% if pending_qual %}<a href="#category" class="{{ m.BTN_GHOST }} !px-4 !py-2">Статус {{ m.icon("arrow", "h-4 w-4") }}</a>
+  {% else %}
+  <form method="post" action="/cabinet/qualification"><input type="hidden" name="code" value="{{ jc.code }}">
+    <button class="{{ m.BTN_LIGHT }} !px-4 !py-2">{{ m.icon("check", "h-4 w-4") }}Подтвердить категорию {{ jc.code }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+<section id="upcoming" class="mt-10 scroll-mt-36" aria-labelledby="upcoming-title">
+  {{ m.step_head("01", "Назначения", "upcoming-title") }}
+  <ul class="grid gap-3" data-stagger>{% for c in assignments.upcoming %}{{ assignment(c) }}{% else %}<li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Новых назначений нет — федерация уведомит, когда вас назначат на соревнование.</li>{% endfor %}</ul>
+</section>
+<section id="past" class="mt-14 scroll-mt-36" aria-labelledby="past-title">
+  {{ m.step_head("02", "Мои соревнования", "past-title") }}
+  <ul class="grid gap-3" data-stagger>{% for c in assignments.past %}{{ assignment(c, True) }}{% else %}<li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Истории судейства пока нет.</li>{% endfor %}</ul>
+</section>
+<section id="category" class="mt-14 scroll-mt-36" aria-labelledby="cat-title">
+  {{ m.step_head("03", "Судейская категория", "cat-title", "Заявка на присвоение или подтверждение уходит в федерацию; судейская практика берётся из ваших назначений в системе.") }}
+  <div class="grid gap-4 lg:grid-cols-2" data-stagger>
+    <div class="{{ m.CARD }} p-5">
+      <p class="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fsp-muted">{{ m.icon("shield", "h-4 w-4") }}Текущая категория</p>
+      {% if jc %}
+      <p class="mt-3 text-lg text-white">{{ jc.title }}</p>
+      <p class="mt-1 font-mono text-[11px] text-fsp-muted">{{ jc.order_no or "приказ не указан" }} · действует до {{ jc.expires_at|ru_date }}</p>
+      <div class="mt-3">{{ m.expiry_badge(jc.state, jc.days_left) }}</div>
+      {% else %}
+      <p class="mt-3 text-sm text-fsp-soft">Категория не присвоена — подайте заявку на «{{ cats[0].title }}».</p>
+      {% endif %}
+      <p class="mt-4 font-mono text-[11px] text-fsp-dim2">Судейская практика: {{ assignments.past|length }} {{ plural(assignments.past|length, "соревнование", "соревнования", "соревнований") }}</p>
+    </div>
+    {% if pending_qual %}
+    <div class="rounded-xl border border-amber-400/50 bg-amber-400/5 p-5 text-sm text-amber-100/90">
+      {{ m.icon("check", "mr-1 inline h-4 w-4 text-amber-300") }}Заявка №{{ pending_qual.id }} на {{ pending_qual.purpose_label }} «{{ pending_qual.code_title }}» ждёт решения федерации. Новую можно подать после решения.
+    </div>
+    {% else %}
+    <form method="post" action="/cabinet/qualification" class="{{ m.CARD }} grid content-start gap-4 p-5">
+      <div>
+        <label for="j-code" class="{{ m.LABEL }}">Категория</label>
+        <select id="j-code" name="code" class="{{ m.INPUT }}">
+          {% for c in cats %}<option value="{{ c.code }}" {% if c.code == (jc.code if jc and jc.state in ("expired", "critical", "warning") else next_cat) %}selected{% endif %}>{{ c.title }}{% if jc and c.code == jc.code %} — подтверждение{% endif %}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="j-note" class="{{ m.LABEL }}">Практика и основание <span class="normal-case tracking-normal text-fsp-dim2">(необязательно)</span></label>
+        <textarea id="j-note" name="note" rows="2" maxlength="300" placeholder="Если пусто — подставим соревнования из ваших назначений" class="{{ m.INPUT }}"></textarea>
+      </div>
+      <div><button class="{{ m.BTN }}">Отправить в федерацию</button></div>
+    </form>
+    {% endif %}
+  </div>
+  {% if quals %}
+  <ul class="mt-4 divide-y divide-fsp-line rounded-xl border border-fsp-line bg-fsp-panel" aria-label="Мои заявки на категорию">{% for q in quals %}{{ m.qual_item(q) }}{% endfor %}</ul>
+  {% endif %}
+</section>
+{% endblock %}

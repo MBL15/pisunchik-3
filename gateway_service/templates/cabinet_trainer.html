@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Кабинет тренера · ФСП Оренбург{% endblock %}
+{% block content %}
+{% include "_cabinet_head.html" %}
+{% set pending = links|selectattr("status", "equalto", "PENDING")|list %}
+{% set alerts_open = alerts|rejectattr("handled")|list %}
+{% set with_results = active|selectattr("rank_options")|list %}
+{{ m.cabinet_nav([("todo", "Что сделать", alerts_open|length), ("actions", "Заявки и привязка", None), ("athletes", "Мои спортсмены", active|length), ("apps", "Поданные заявки", apps|length + quals|length)]) }}
+<div class="mt-4">{{ m.degraded_notice(degraded) }}</div>
+
+{# ================= 01 · WHAT TO DO — rank expiry with one-step application ================= #}
+<section id="todo" class="mt-6 scroll-mt-36" aria-labelledby="alerts-title">
+  {{ m.step_head("01", "Сроки действия разрядов подопечных", "alerts-title", "Есть результат в сезоне — подайте заявку на подтверждение прямо из карточки; нет — заявите спортсмена на старт.") }}
+  {% if alerts %}
+  <ul class="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-stagger>
+    {% for l in alerts %}{% set a = l.athlete %}
+    {% set taken = l.active_apps|map(attribute="competition_id")|list %}
+    {% set comps_for = open_comps|selectattr("discipline", "equalto", l.discipline)|rejectattr("id", "in", taken)|list %}
+    {% set tone = {"expired": "from-rose-500 to-rose-400", "critical": "from-amber-500 to-amber-300"}.get(a.rank.state, "from-fsp-blue to-fsp-violet") %}
+    <li class="spotlight flex flex-col rounded-xl border border-l-4 border-fsp-line p-4 {% if a.rank.state == 'expired' %}border-l-rose-500 bg-rose-500/5{% elif a.rank.state == 'critical' %}border-l-amber-400 bg-amber-400/5{% else %}border-l-fsp-blue bg-fsp-blue/10{% endif %}">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="font-medium text-white">{{ a.full_name }}</p>
+          <p class="font-mono text-[11px] text-fsp-muted">{{ a.fsp_id }} · {{ l.discipline_label }}</p>
+        </div>
+        {{ m.rank_pill(a.rank) }}
+      </div>
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+        {{ m.expiry_badge(a.rank.state, a.rank.days_left) }}
+        <span class="font-mono text-[11px] text-fsp-muted">до {{ a.rank.expires_at|ru_date }}</span>
+      </div>
+      <span class="mt-3 block h-1 overflow-hidden rounded-full bg-fsp-card" aria-hidden="true">
+        <span class="block h-full rounded-full bg-gradient-to-r {{ tone }}" data-bar style="width: {{ 100 if a.rank.days_left < 0 else [100, a.rank.days_left * 100 / 90]|min|round }}%; --d: 300ms"></span>
+      </span>
+      {% set rq = l.rank_request %}
+      {% if rq and rq.status == "PENDING" %}
+      <div class="mt-4 flex items-start gap-2 border-t border-fsp-line pt-3 text-xs text-fsp-soft">
+        {{ m.icon("check", "mt-0.5 h-4 w-4 shrink-0 text-amber-300") }}
+        <p>Заявка №{{ rq.id }} на {{ rq.purpose_label }} разряда в федерации · <span class="font-mono font-bold uppercase text-amber-300">{{ rq.status_label }}</span><span class="block text-fsp-muted">{{ rq.basis.text }}</span></p>
+      </div>
+      {% elif l.rank_options and not a.is_sanctioned %}
+      <form method="post" action="/cabinet/qualification" class="mt-4 grid gap-2 border-t border-fsp-line pt-3">
+        {{ m.rank_request_fields("a" ~ l.id, a.fsp_id, l.rank_options, a.rank.code) }}
+        <button class="{{ m.BTN }} !py-2">{{ m.icon("trophy", "h-4 w-4") }}Подать на подтверждение разряда</button>
+      </form>
+      {% elif l.active_apps %}{% set ap = l.active_apps|first %}
+      <div class="mt-4 flex items-start gap-2 border-t border-fsp-line pt-3 text-xs text-fsp-soft">
+        {{ m.icon("check", "mt-0.5 h-4 w-4 shrink-0 text-emerald-300") }}
+        <p>Заявка уже подана: «{{ ap.competition_title }}», {{ ap.start_date|ru_date }} · <span class="font-mono font-bold uppercase {% if ap.status == 'APPROVED' %}text-emerald-300{% else %}text-amber-300{% endif %}">{{ ap.status_label }}</span></p>
+      </div>
+      {% elif comps_for and not a.is_sanctioned %}
+      <p class="mt-4 border-t border-fsp-line pt-3 text-xs text-fsp-muted">Результата для подтверждения в сезоне нет — заявите на старт:</p>
+      <form method="post" action="/cabinet/applications" class="mt-2 grid gap-2">
+        <input type="hidden" name="athlete_fsp_id" value="{{ a.fsp_id }}">
+        <label for="q-{{ l.id }}" class="sr-only">Соревнование для {{ a.full_name }}</label>
+        <select id="q-{{ l.id }}" name="competition_id" class="{{ m.INPUT }} !py-2 text-xs">
+          {% for c in comps_for %}<option value="{{ c.id }}">{{ c.start_date|ru_date }} · {{ c.title }}</option>{% endfor %}
+        </select>
+        <button class="{{ m.BTN_GHOST }} !py-2">Заявить на старт</button>
+      </form>
+      {% else %}
+      <p class="mt-3 text-xs text-fsp-muted">{% if a.is_sanctioned %}Подача заявок заблокирована санкцией.{% else %}Открытых стартов по дисциплине нет — следите за <a href="/calendar" class="text-fsp-violet hover:underline">календарём</a>.{% endif %}</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm text-emerald-100">{{ m.icon("check", "h-5 w-5 shrink-0 text-emerald-300") }}У всех подопечных разряды действуют более 90 дней — срочных действий нет.</p>
+  {% endif %}
+  {% if pending %}
+  <p class="mt-3 font-mono text-xs text-amber-300">Ожидают подтверждения спортсменом: {{ pending|map(attribute="athlete.full_name")|join(", ") }}</p>
+  {% endif %}
+</section>
+
+{# ================= 02 · ACTIONS ================= #}
+<section id="actions" class="mt-14 scroll-mt-36" aria-labelledby="actions-title">
+  {{ m.step_head("02", "Заявки и привязка", "actions-title") }}
+  <div class="grid gap-6 lg:grid-cols-2 xl:grid-cols-3" data-stagger>
+    <form method="post" action="/cabinet/applications" class="spotlight grid content-start gap-4 rounded-xl border border-fsp-line bg-fsp-panel p-6">
+      <div>
+        <h3 class="font-mono text-lg font-normal text-fsp-light">Заявка за спортсмена</h3>
+        <p class="mt-1 text-sm text-fsp-muted">Возраст, дисциплину, санкции и привязку платформа проверит сама.</p>
+      </div>
+      <div>
+        <label for="app-athlete" class="{{ m.LABEL }}">Спортсмен</label>
+        <select id="app-athlete" name="athlete_fsp_id" class="{{ m.INPUT }}">
+          {% for l in active %}<option value="{{ l.athlete_fsp_id }}">{{ l.athlete.full_name }} · {{ l.discipline }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="app-comp" class="{{ m.LABEL }}">Соревнование</label>
+        <select id="app-comp" name="competition_id" class="{{ m.INPUT }}">
+          {% for c in open_comps %}<option value="{{ c.id }}">{{ c.discipline }} · {{ c.start_date|ru_date }} · {{ c.title }} (до {{ c.registration_deadline|ru_date }})</option>{% else %}<option value="">нет открытых соревнований</option>{% endfor %}
+        </select>
+      </div>
+      <div><button class="{{ m.BTN }}" {% if not open_comps or not active %}disabled{% endif %}>Подать заявку</button></div>
+    </form>
+
+    <form method="post" action="/cabinet/qualification" class="spotlight grid content-start gap-4 rounded-xl border border-fsp-line bg-fsp-panel p-6">
+      <div>
+        <h3 class="font-mono text-lg font-normal text-fsp-light">Заявка на разряд</h3>
+        <p class="mt-1 text-sm text-fsp-muted">Присвоение или подтверждение по результату из опубликованного протокола — федерация рассмотрит и внесёт разряд в профиль.</p>
+      </div>
+      <div>
+        <label for="rank-basis" class="{{ m.LABEL }}">Спортсмен и результат</label>
+        <select id="rank-basis" name="basis" required class="{{ m.INPUT }} text-xs">
+          {% for l in with_results %}
+          <optgroup label="{{ l.athlete.full_name }} · {{ l.discipline_label }} · {{ l.athlete.rank.short if l.athlete.rank else 'б/р' }}">
+            {% for r in l.rank_options %}<option value="{{ l.athlete_fsp_id }}|{{ r.competition_id }}">{{ r.place }} место из {{ r.protocol_size }} · {{ r.title }} · {{ r.date|ru_date }}</option>{% endfor %}
+          </optgroup>
+          {% else %}<option value="">у подопечных пока нет результатов</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="rank-code" class="{{ m.LABEL }}">Разряд</label>
+        <select id="rank-code" name="code" class="{{ m.INPUT }}">{% for r in D.SPORT_RANKS %}<option value="{{ r.code }}" {% if r.code == "3" %}selected{% endif %}>{{ r.title }}</option>{% endfor %}</select>
+      </div>
+      <div><button class="{{ m.BTN }}" {% if not with_results %}disabled{% endif %}>{{ m.icon("trophy", "h-4 w-4") }}Отправить в федерацию</button></div>
+    </form>
+
+    <form method="post" action="/cabinet/links" class="spotlight grid content-start gap-4 rounded-xl border border-fsp-line bg-fsp-panel p-6">
+      <div>
+        <h3 class="font-mono text-lg font-normal text-fsp-light">Привязать спортсмена</h3>
+        <p class="mt-1 text-sm text-fsp-muted">Попросите у спортсмена ФСП ID из его кабинета — он подтвердит связь у себя.</p>
+      </div>
+      <div><label for="athlete_fsp_id" class="{{ m.LABEL }}">ФСП ID спортсмена</label><input id="athlete_fsp_id" name="athlete_fsp_id" required placeholder="FSP-56-26-00026-2" autocomplete="off" class="{{ m.INPUT }} font-mono uppercase"></div>
+      <div><label for="link-disc" class="{{ m.LABEL }}">Дисциплина</label><select id="link-disc" name="discipline" class="{{ m.INPUT }}">{% for d in user.person.disciplines %}<option value="{{ d }}">{{ D.DISCIPLINE_BY_CODE[d].short }}</option>{% endfor %}</select></div>
+      <div><button class="{{ m.BTN_GHOST }}">{{ m.icon("link", "h-4 w-4") }}Отправить запрос</button></div>
+    </form>
+  </div>
+</section>
+
+{# ================= 03 · MY ATHLETES ================= #}
+<section id="athletes" class="mt-14 scroll-mt-36" aria-labelledby="athletes-title">
+  {{ m.step_head("03", "Мои спортсмены", "athletes-title") }}
+  <div class="overflow-x-auto rounded-xl border border-fsp-line bg-fsp-panel" data-reveal>
+    <table class="w-full min-w-[860px] border-collapse text-sm">
+      <thead class="border-b border-fsp-line bg-fsp-bg/70">
+        <tr>
+          <th scope="col" class="{{ m.TH }}">Спортсмен</th>
+          <th scope="col" class="{{ m.TH }}">Связь</th>
+          <th scope="col" class="{{ m.TH }}">Разряд · срок</th>
+          <th scope="col" class="{{ m.TH }} text-center">Старты / призовые</th>
+          <th scope="col" class="{{ m.TH }} text-right">Баллы</th>
+          <th scope="col" class="{{ m.TH }} text-right"><span class="sr-only">Действия</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in links %}{% set a = l.athlete %}{% set pf = l.performance %}
+        <tr class="border-b border-fsp-line/70 transition-colors last:border-0 hover:bg-fsp-card/50 {% if l.status == 'ENDED' %}opacity-50{% endif %}">
+          <td class="px-3 py-3">
+            <p class="font-medium text-white">{{ a.full_name }}{% if a.is_sanctioned %} <span class="ml-1 rounded-md border border-rose-500 px-1 font-mono text-[10px] font-bold text-rose-300">САНКЦИЯ</span>{% endif %}</p>
+            <p class="font-mono text-[11px] text-fsp-muted">{{ a.fsp_id }} · {{ l.discipline }} · {{ a.age }} {{ plural(a.age, "год", "года", "лет") }}{% if a.is_minor %} · н/л{% endif %}</p>
+          </td>
+          <td class="px-3 py-3">
+            <span class="font-mono text-[11px] font-bold uppercase {% if l.status == 'ACTIVE' %}text-emerald-300{% elif l.status == 'PENDING' %}text-amber-300{% elif l.status == 'SUSPENDED' %}text-fsp-soft{% else %}text-fsp-dim2{% endif %}">● {{ l.status_label }}</span>
+          </td>
+          <td class="px-3 py-3"><div class="flex flex-col items-start gap-1">{{ m.rank_pill(a.rank) }}{% if a.rank %}{{ m.expiry_badge(a.rank.state, a.rank.days_left, a.rank.expires_at) }}{% endif %}</div></td>
+          {% if pf and pf.available %}
+          <td class="px-3 py-3 text-center font-mono tabular-nums text-fsp-soft">{{ pf.starts }} / <span class="{% if pf.podiums >= 2 %}font-bold text-emerald-300{% endif %}">{{ pf.podiums }}{% if pf.podiums >= 2 %}<span class="ml-1 text-[10px]">×1.2</span>{% endif %}</span></td>
+          <td class="px-3 py-3 text-right font-mono font-bold tabular-nums text-fsp-violet">{{ pf.season_points }}</td>
+          {% else %}
+          <td colspan="2" class="px-3 py-3 text-center font-mono text-[11px] text-amber-300">история недоступна</td>
+          {% endif %}
+          <td class="px-3 py-3">
+            <form method="post" action="/cabinet/links/{{ l.id }}/status" class="flex justify-end gap-1.5">
+              {% if l.status == "ACTIVE" %}
+                <button name="status" value="SUSPENDED" class="{{ m.BTN_SM }}">Пауза</button>
+                <button name="status" value="ENDED" class="{{ m.BTN_NO }}">Завершить</button>
+              {% elif l.status == "SUSPENDED" %}
+                <button name="status" value="ACTIVE" class="{{ m.BTN_OK }}">Возобновить</button>
+                <button name="status" value="ENDED" class="{{ m.BTN_NO }}">Завершить</button>
+              {% elif l.status == "PENDING" %}
+                <button name="status" value="ENDED" class="{{ m.BTN_SM }}">Отозвать</button>
+              {% endif %}
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="px-3 py-8 text-center text-sm text-fsp-muted">Подопечных пока нет — отправьте запрос на привязку в разделе выше.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{# ================= 04 · SUBMITTED APPLICATIONS ================= #}
+<section id="apps" class="mt-14 scroll-mt-36" aria-labelledby="apps-title">
+  {{ m.step_head("04", "Поданные заявки", "apps-title") }}
+  <ul class="divide-y divide-fsp-line rounded-xl border border-fsp-line bg-fsp-panel" data-stagger>
+    {% for a in apps %}
+    <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm first:rounded-t-xl last:rounded-b-xl{% if flash and flash.app_id == a.id %} just-added{% endif %}">
+      <span class="min-w-0"><span class="block text-white">{{ a.athlete_name }}</span><span class="font-mono text-[11px] text-fsp-muted">{{ a.start_date|ru_date }} · {{ a.competition_title }}</span></span>
+      <span class="rounded-md px-2 py-0.5 font-mono text-[11px] font-bold uppercase {% if a.status == 'APPROVED' %}bg-emerald-500/15 text-emerald-300{% elif a.status == 'REJECTED' %}bg-fsp-red/15 text-rose-300{% else %}bg-amber-400/15 text-amber-300{% endif %}">{{ a.status_label }}</span>
+    </li>
+    {% else %}<li class="px-5 py-6 text-sm text-fsp-muted">Заявок на соревнования пока нет — подайте первую в разделе <a href="#actions" class="text-fsp-violet hover:underline">«Заявки и привязка»</a>.</li>{% endfor %}
+  </ul>
+  <h3 id="ranks" class="mb-3 mt-8 flex scroll-mt-36 items-center gap-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">
+    <span class="h-2 w-2 rounded-[2px] bg-fsp-violet"></span>Заявки на разряд<span class="h-px flex-1 bg-fsp-line"></span>
+  </h3>
+  <ul class="divide-y divide-fsp-line rounded-xl border border-fsp-line bg-fsp-panel" data-stagger>
+    {% for q in quals %}{{ m.qual_item(q, True) }}
+    {% else %}<li class="px-5 py-6 text-sm text-fsp-muted">Заявок на разряд пока нет — подайте из карточки подопечного или в разделе <a href="#actions" class="text-fsp-violet hover:underline">«Заявки и привязка»</a>.</li>{% endfor %}
+  </ul>
+</section>
+{% endblock %}

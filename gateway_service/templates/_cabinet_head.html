@@ -1,0 +1,59 @@
+{% import "macros.html" as m %}
+{% set p = user.person %}
+<section class="relative mt-8 overflow-hidden rounded-xl border border-fsp-line bg-fsp-panel" aria-label="Профиль" data-parallax-root>
+  <canvas class="pointer-events-none absolute inset-0 h-full w-full opacity-45" data-network aria-hidden="true"></canvas>
+  <div class="fsp-glow -right-16 -top-24 h-56 w-72 !opacity-25" data-parallax="0.04" aria-hidden="true"></div>
+  <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-fsp-panel via-fsp-panel/85 to-fsp-panel/30" aria-hidden="true"></div>
+  <span class="beam" aria-hidden="true"></span>
+
+  <div class="relative flex flex-wrap items-center justify-between gap-5 p-5 sm:p-6">
+    <div class="flex min-w-0 items-center gap-4">
+      <div class="relative shrink-0 rounded-[14px] p-[2px]" aria-hidden="true">
+        <span class="beam !p-[2px]"></span>
+        <div class="flex h-14 w-14 items-center justify-center rounded-xl bg-fsp-blue font-mono text-lg font-normal text-white shadow-[0_0_28px_rgba(64,47,255,0.55)] sm:h-16 sm:w-16 sm:text-xl">{{ p.last_name[0] }}{{ p.first_name[0] }}</div>
+      </div>
+      <div class="min-w-0">
+        <p class="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-fsp-violet">
+          <span class="relative flex h-2 w-2" aria-hidden="true"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:animate-none"></span><span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-400"></span></span>
+          // кабинет: {{ user.role_label }}
+        </p>
+        <h1 class="mt-1 font-mono text-2xl font-normal text-fsp-light sm:text-3xl" aria-label="{{ p.full_name }}" data-scramble="{{ p.full_name }}">{{ p.full_name }}</h1>
+        <p class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 font-mono text-xs text-fsp-muted">
+          <button type="button" data-copy="{{ p.fsp_id }}" class="group inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-fsp-line2 bg-fsp-bg px-2 py-1 text-fsp-light transition-colors duration-150 hover:border-fsp-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet" title="Скопировать ФСП ID">
+            <span>{{ p.fsp_id }}</span>
+            <span class="text-[10px] text-fsp-violet" data-copy-label aria-live="polite">копировать</span>
+          </button>
+          <span>{{ p.municipality }}</span>
+          {% for d in p.disciplines %}{{ m.tag(D.DISCIPLINE_BY_CODE[d].short, "blue") }}{% endfor %}
+        </p>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-3 font-mono text-xs">
+      {% if "athlete" in p.roles %}
+      <div class="flex items-center gap-3">
+        {% if p.rank and p.rank.days_left is not none %}{{ m.countdown_ring(p.rank, "Срок разряда") }}{% endif %}
+        <div class="grid gap-1.5">
+          <span class="flex items-center gap-2"><span class="text-fsp-muted">разряд</span>{{ m.rank_pill(p.rank) }}</span>
+          {% if p.rank %}{{ m.expiry_badge(p.rank.state, p.rank.days_left, p.rank.expires_at) }}{% endif %}
+        </div>
+      </div>
+      {% endif %}
+      {% if p.judge_category %}
+      <div class="flex items-center gap-3">
+        {% if p.judge_category.days_left is not none %}{{ m.countdown_ring(p.judge_category, "Срок судейской категории") }}{% endif %}
+        <div class="grid gap-1.5">
+          <span class="flex items-center gap-2"><span class="text-fsp-muted">суд. категория</span><span class="rounded-md border border-fsp-dim bg-fsp-card px-1.5 py-0.5 font-bold text-fsp-light" title="{{ p.judge_category.title }}">{{ p.judge_category.code }}</span></span>
+          {{ m.expiry_badge(p.judge_category.state, p.judge_category.days_left, p.judge_category.expires_at) }}
+        </div>
+      </div>
+      {% endif %}
+      {% if p.roles|length > 1 %}
+      <form method="post" action="/role" class="flex w-full flex-wrap items-center gap-1.5 md:hidden" aria-label="Переключение роли">
+        <span class="text-fsp-muted">роль:</span>
+        {% for r in p.roles %}<button name="role" value="{{ r }}" class="rounded-md border px-2.5 py-1.5 text-[11px] font-bold uppercase {% if r == user.role %}border-fsp-blue bg-fsp-blue text-white{% else %}border-fsp-line2 text-fsp-soft{% endif %}" aria-pressed="{{ 'true' if r == user.role else 'false' }}">{{ D.ROLE_LABELS[r] }}</button>{% endfor %}
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</section>

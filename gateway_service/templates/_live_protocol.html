@@ -1,0 +1,67 @@
+{# Expects: p (protocol from competition_service), compact (bool). Re-rendered by polling. #}
+{% import "macros.html" as m %}
+{% set ns = namespace(recent=[]) %}
+{% for line in p.raw_tail[-2:] %}{% set parts = line.split() %}{% if parts|length > 2 %}{% set ns.recent = ns.recent + [parts[2]] %}{% endif %}{% endfor %}
+{% set entries = p.entries[:8] if compact else p.entries %}
+<div data-live-done="{{ 1 if p.published else 0 }}" class="grid gap-4 lg:grid-cols-5">
+  <div class="lg:col-span-3">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 border border-b-0 border-fsp-line bg-fsp-bg/80 px-4 py-2 font-mono text-[11px] text-fsp-muted rounded-md">
+      <span>T+<span class="font-bold text-emerald-300">{{ p.last_time }}</span></span>
+      <span>событий: <span class="text-fsp-light">{{ p.events }}</span></span>
+      <span>участников: <span class="text-fsp-light">{{ p.entries|length }}</span></span>
+      {% if p.live_remaining %}<span class="text-fsp-violet">в очереди: {{ p.live_remaining }}</span>{% elif not p.published %}<span class="text-amber-300">поток завершён · ожидает публикации</span>{% else %}<span class="text-emerald-300">опубликован</span>{% endif %}
+    </div>
+    <div class="overflow-x-auto border border-fsp-line bg-fsp-panel rounded-xl">
+      <table class="w-full border-collapse text-sm">
+        <caption class="sr-only">Живой протокол: {{ p.competition.title }}</caption>
+        <thead class="border-b border-fsp-line bg-fsp-bg/60">
+          <tr>
+            <th scope="col" class="{{ m.TH }} w-12">#</th>
+            <th scope="col" class="{{ m.TH }}">Участник</th>
+            {% if p.mode == "icpc" %}
+            <th scope="col" class="{{ m.TH }} text-center">Реш.</th>
+            <th scope="col" class="{{ m.TH }} text-right">Штраф</th>
+            {% if not compact %}{% for t in p.tasks %}<th scope="col" class="{{ m.TH }} hidden w-12 text-center md:table-cell">{{ t }}</th>{% endfor %}{% endif %}
+            {% else %}
+            <th scope="col" class="{{ m.TH }} text-right">Баллы</th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in entries %}
+          <tr class="border-b border-fsp-line/70 {% if e.fsp_id in ns.recent %}flash-row{% endif %} {% if e.status == 'DSQ' %}opacity-60{% endif %}">
+            <td class="px-3 py-2">{{ m.place(e.place, e.status) }}</td>
+            <td class="px-3 py-2">
+              <p class="truncate text-fsp-light">{{ e.full_name }}</p>
+              <p class="font-mono text-[11px] text-fsp-muted">{{ e.fsp_id }}{% if e.dsq_reason %} · <span class="text-rose-300">{{ e.dsq_reason }}</span>{% endif %}</p>
+            </td>
+            {% if p.mode == "icpc" %}
+            <td class="px-3 py-2 text-center font-mono font-bold tabular-nums text-white">{{ e.solved }}</td>
+            <td class="px-3 py-2 text-right font-mono tabular-nums text-fsp-muted">{{ e.penalty }}</td>
+            {% if not compact %}{% for t in p.tasks %}{% set c = e.tasks.get(t) %}
+            <td class="hidden px-1 py-2 text-center font-mono text-[11px] md:table-cell">
+              {% if c and c.solved %}<span class="block bg-emerald-500/15 py-0.5 font-bold text-emerald-300" title="Решена в {{ c.time }}">+{{ c.wrong or "" }}<span class="block text-[9px] font-normal text-emerald-400/70">{{ c.time }}</span></span>
+              {% elif c %}<span class="block bg-rose-500/10 py-0.5 font-bold text-rose-300">−{{ c.wrong }}</span>
+              {% else %}<span class="text-fsp-dim">·</span>{% endif %}
+            </td>{% endfor %}{% endif %}
+            {% else %}
+            <td class="px-3 py-2 text-right font-mono font-bold tabular-nums text-white">{{ "%.2f"|format(e.score) }}</td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="relative overflow-hidden border border-fsp-line bg-black/60 lg:col-span-2 scanlines rounded-xl">
+    <div class="flex items-center gap-1.5 border-b border-fsp-line px-3 py-2">
+      <span class="h-2.5 w-2.5 rounded-full bg-rose-500/80"></span><span class="h-2.5 w-2.5 rounded-full bg-amber-400/80"></span><span class="h-2.5 w-2.5 rounded-full bg-emerald-400/80"></span>
+      <span class="ml-2 font-mono text-[11px] text-fsp-muted">tail -f {{ p.competition.code }}.log</span>
+    </div>
+    <pre class="max-h-[420px] overflow-hidden whitespace-pre-wrap break-all p-3 font-mono text-[11px] leading-5 text-fsp-soft" aria-label="Последние события лога">{% for line in p.raw_tail %}{% set parts = line.split() %}
+{%- if line.startswith("#") %}<span class="text-fsp-dim2">{{ line }}</span>
+{%- elif parts|length >= 3 %}<span class="text-fsp-dim2">{{ parts[0] }}</span> <span class="{% if parts[1] == 'DSQ' %}text-rose-400 font-bold{% elif parts[1] == 'SCORE' %}text-fsp-violet{% elif parts[1] == 'JOIN' %}text-fsp-muted{% else %}text-fsp-soft{% endif %}">{{ parts[1] }}</span> <span class="text-fsp-violet">{{ parts[2] }}</span> {% for tok in parts[3:] %}<span class="{% if tok == 'OK' %}font-bold text-emerald-400{% elif tok in ['WA','TL','RE','ML'] %}text-rose-400{% else %}text-fsp-light{% endif %}">{{ tok }}</span> {% endfor %}
+{%- else %}{{ line }}{% endif %}
+{% endfor %}<span class="caret text-emerald-400">$</span></pre>
+  </div>
+</div>

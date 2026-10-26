@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Справка № {{ doc.number }} · ФСП Оренбург{% endblock %}
+{% block content %}
+{% set c = doc.competition %}{% set r = doc.result %}{% set pr = doc.person %}
+{% set f = pr.gender == "Ж" %}
+<div class="no-print mt-8 flex flex-wrap items-center justify-between gap-4">
+  <div class="font-mono text-xs">
+    <p class="text-fsp-muted">$ doc generate --type=participation --number={{ doc.number }}</p>
+    <p class="mt-1 font-bold text-emerald-400">// DOCUMENT_RENDER... SUCCESS · подпись HMAC-SHA256 · код {{ doc.verification_code }}</p>
+  </div>
+  <div class="flex flex-wrap gap-3">
+    <a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← В кабинет</a>
+    <a href="{{ doc.verify_path }}" target="_blank" class="{{ m.BTN_GHOST }} !py-2 !text-xs">{{ m.icon("check", "h-3.5 w-3.5") }}Проверить</a>
+    <button type="button" onclick="window.print()" class="{{ m.BTN }} !py-2 !text-xs">{{ m.icon("printer", "h-3.5 w-3.5") }}Печать / PDF</button>
+  </div>
+</div>
+
+<article class="print-sheet relative mx-auto mt-8 max-w-[820px] overflow-hidden bg-white text-[#1B1C21] shadow-[10px_10px_0px_0px_#402FFF] ring-1 ring-[#C7C7C7]" aria-label="Справка об участии">
+  <div class="h-2 bg-gradient-to-r from-fsp-blue via-fsp-blue to-fsp-red"></div>
+  <div class="px-8 pb-10 pt-8 sm:px-12">
+    <header class="flex flex-wrap items-start justify-between gap-6 border-b-2 border-slate-900 pb-6">
+      <div class="flex items-start gap-4">
+        <div class="flex shrink-0 items-center gap-1.5">
+          {{ m.fsp_mark("h-11 w-11") }}
+          <span class="font-mono text-2xl font-bold leading-none text-[#1B1C21]">ФСП<sup class="ml-0.5 text-xs text-fsp-blue">56</sup></span>
+        </div>
+        <div class="max-w-md">
+          <p class="text-[11px] font-semibold uppercase leading-snug tracking-wide text-[#3D3E42]">Общероссийская общественная организация «Федерация спортивного программирования»</p>
+          <p class="mt-1 text-sm font-bold leading-snug">{{ D.FEDERATION_NAME }}</p>
+          <p class="mt-1 text-[11px] text-[#5F5F66]">460000, г. Оренбург · fsp56.ru (демо)</p>
+        </div>
+      </div>
+      <div class="text-right font-mono text-xs text-[#4E5268]">
+        <p>исх. № <span class="font-bold text-[#1B1C21]">{{ doc.number }}</span></p>
+        <p>от {{ doc.issued_at|ru_date }}</p>
+      </div>
+    </header>
+
+    <h1 class="mt-8 text-center text-2xl font-black uppercase tracking-[0.3em]">Справка</h1>
+    <p class="mt-1 text-center text-sm text-[#4E5268]">об участии в официальном спортивном соревновании</p>
+
+    <div class="mt-8 space-y-4 text-[15px] leading-relaxed">
+      <p>
+        Настоящая справка выдана <b>{{ pr.full_name }}</b>{% if pr.birth_date %}, {{ pr.birth_date|ru_date }} г. р.{% endif %}
+        (региональный ФСП ID <span class="font-mono text-sm font-bold">{{ pr.fsp_id }}</span>{% if pr.municipality %}, {{ pr.municipality }}{% endif %}),
+        в том, что {{ "она" if f else "он" }} {{ "приняла" if f else "принял" }} участие в соревновании
+        «<b>{{ c.title }}</b>» по виду спорта «спортивное программирование», дисциплина «{{ c.discipline_title|lower }}».
+      </p>
+      <p>
+        Соревнование проведено {% if c.end_date != c.start_date %}с {{ c.start_date|ru_date(true) }} по {{ c.end_date|ru_date(true) }}{% else %}{{ c.start_date|ru_date(true) }}{% endif %}
+        ({{ c.venue }}), формат — {{ c.format_label|lower }}{% if c.format_note %} ({{ c.format_note|lower }}){% endif %}.
+        Статус соревнования — {{ c.level_status }}; включено в {{ c.plan_label }}, {{ c.plan_number }}.
+      </p>
+    </div>
+
+    <table class="mt-6 w-full border-collapse text-sm">
+      <tbody>
+        {% for label, value in [
+          ("Код соревнования", c.code),
+          ("Тип / возрастная группа", c.type ~ " · " ~ c.age_group),
+          ("Итоговое место", ("дисквалификация: " ~ r.dsq_reason) if r.status == "DSQ" else (r.place ~ " из " ~ r.participants)),
+          ("Показатель", (r.solved ~ " решённых задач, штраф " ~ r.penalty ~ " мин") if r.mode == "icpc" else ("%.2f"|format(r.score) ~ " балла жюри")),
+          ("Рейтинговые баллы сезона", r.base_points),
+          ("Спортивный разряд на дату выдачи", pr.rank or "без разряда"),
+          ("Назначение", doc.purpose),
+        ] %}
+        <tr class="border-b border-[#D9D9D9]">
+          <th scope="row" class="w-[42%] py-2 pr-4 text-left align-top text-xs font-semibold uppercase tracking-wide text-[#5F5F66]">{{ label }}</th>
+          <td class="py-2 font-medium {% if loop.index in (1, 3, 4, 5) %}font-mono{% endif %}">{{ value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <p class="mt-4 text-xs text-[#5F5F66]">Основание: протокол соревнования {{ c.code }}, сформированный и опубликованный в Единой цифровой платформе ФСП Оренбургской области.</p>
+
+    <footer class="mt-10 grid items-end gap-8 sm:grid-cols-[1fr_auto]">
+      <div class="relative">
+        <p class="text-sm">Председатель регионального отделения</p>
+        <div class="mt-8 flex items-end gap-4">
+          <span class="h-px w-40 bg-[#1B1C21]"></span>
+          <span class="text-sm font-semibold">О. С. Малахова</span>
+        </div>
+        <svg class="pointer-events-none absolute -top-6 left-40 h-32 w-32 -rotate-12 opacity-80" viewBox="0 0 120 120" aria-hidden="true">
+          <defs><path id="stamp-circle" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0"/></defs>
+          <circle cx="60" cy="60" r="56" fill="none" stroke="#402FFF" stroke-width="2.5"/>
+          <circle cx="60" cy="60" r="38" fill="none" stroke="#402FFF" stroke-width="1.2"/>
+          <text font-family="Inter, sans-serif" font-size="8.6" font-weight="700" fill="#402FFF" letter-spacing="1.2"><textPath href="#stamp-circle">РЕГИОНАЛЬНОЕ ОТДЕЛЕНИЕ ФСП • ОРЕНБУРГСКАЯ ОБЛАСТЬ •</textPath></text>
+          <text x="60" y="57" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="800" fill="#402FFF">ФСП·56</text>
+          <text x="60" y="71" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="7.5" font-weight="700" fill="#402FFF">ДЕМО</text>
+        </svg>
+        <p class="mt-6 text-[11px] text-[#5F5F66]">Документ сформирован автоматически {{ doc.issued_at.replace("T", " ") }} · составитель {{ doc.issued_by }}</p>
+      </div>
+      <div class="flex items-end gap-4">
+        <div class="text-right font-mono text-[10px] leading-snug text-[#4E5268]">
+          <p class="font-bold uppercase text-[#1B1C21]">Проверка подлинности</p>
+          <p>код: <span class="font-bold text-[#1B1C21]">{{ doc.verification_code }}</span></p>
+          <p class="max-w-[180px] break-all">{{ verify_url }}</p>
+        </div>
+        <div class="w-28 shrink-0 border-2 border-slate-900 bg-white p-1 [&_svg]:h-auto [&_svg]:w-full" role="img" aria-label="QR-код проверки подлинности справки">{{ qr|safe }}</div>
+      </div>
+    </footer>
+  </div>
+  <div class="border-t border-dashed border-[#C7C7C7] bg-[#EDEDED] px-8 py-2 text-center font-mono text-[10px] text-[#5F5F66] sm:px-12">Демонстрационный документ · персональные данные фиктивны · HMAC-SHA256</div>
+</article>
+{% endblock %}

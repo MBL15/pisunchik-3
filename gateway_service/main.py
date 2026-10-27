@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from gateway_service import exports, notify, reports
+from gateway_service import exports, notify, reports, tours
 from gateway_service.qr import qr_svg
 from gateway_service.session import (
     FLASH_COOKIE, clear_session, pop_flash, read_session, set_flash, write_session,
@@ -99,7 +99,8 @@ def ru_mon(value: Any) -> str:
 
 
 templates.env.filters.update(ru_date=ru_date, ru_mon=ru_mon, days_word=days_word,
-                             tojson_ru=lambda v: json.dumps(v, ensure_ascii=False))
+                             tojson_ru=lambda v: json.dumps(v, ensure_ascii=False),
+                             tojson_script=lambda v: json.dumps(v, ensure_ascii=False).replace("<", "\\u003c"))
 templates.env.globals.update(D=domain, plural=plural, DEMO_PASSWORD=DEMO_PASSWORD)
 
 
@@ -167,7 +168,11 @@ async def require(request: Request, *roles: str) -> dict:
 
 def render(request: Request, name: str, **context) -> HTMLResponse:
     flash = pop_flash(request)
-    resp = templates.TemplateResponse(request, name, {"flash": flash, "today": config.today(), **context})
+    user = context.get("user")
+    tour = tours.for_page(name, user, can_pick=context.get("can_pick"))
+    tour_user = user["person"]["fsp_id"] if user else "guest"
+    resp = templates.TemplateResponse(request, name, {"flash": flash, "today": config.today(), "tour": tour,
+                                                      "tour_user": tour_user, **context})
     if flash:
         resp.delete_cookie(FLASH_COOKIE)
     return resp

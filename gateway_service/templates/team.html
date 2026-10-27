@@ -63,7 +63,7 @@
                 <button name="role" value="{{ 'RESERVE' if mem.role == 'MAIN' else 'MAIN' }}" class="{{ m.BTN_SM }}">{{ "В резерв" if mem.role == "MAIN" else "В основной" }}</button>
               </form>
               <form method="post" action="/cabinet/admin/teams/{{ t.id }}/members/{{ mem.fsp_id }}/remove">
-                <button class="flex h-8 w-8 items-center justify-center rounded-md border border-fsp-line2 text-fsp-muted hover:border-fsp-red hover:text-rose-300" aria-label="Исключить из сборной: {{ mem.full_name }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
+                <button data-confirm="Исключить {{ mem.full_name }} из сборной?" data-confirm-label="Исключить" class="flex h-9 w-9 items-center justify-center rounded-md border border-fsp-line2 text-fsp-muted hover:border-fsp-red hover:text-rose-300" aria-label="Исключить из сборной: {{ mem.full_name }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
               </form>
             </div>
           </td>
@@ -95,12 +95,12 @@
       <div><label for="t-order" class="{{ m.LABEL }}">Номер приказа</label><input id="t-order" name="order_no" required pattern=".*\d.*" title="Укажите номер приказа" placeholder="№ 412-р" class="{{ m.INPUT }} font-mono"></div>
       <div><label for="t-odate" class="{{ m.LABEL }}">Дата приказа</label><input id="t-odate" name="order_date" type="date" required value="{{ today.isoformat() }}" class="{{ m.INPUT }} font-mono [color-scheme:dark]"></div>
       <p class="text-xs text-fsp-muted sm:col-span-2">После утверждения состав и реквизиты закрываются для изменений; в проекте приказа появятся номер и дата.</p>
-      <div class="sm:col-span-2"><button class="{{ m.BTN }}">{{ m.icon("check", "h-4 w-4") }}Утвердить состав</button></div>
+      <div class="sm:col-span-2"><button data-confirm="Утвердить состав приказом? После этого изменить состав будет нельзя." data-confirm-label="Утвердить" class="{{ m.BTN }}">{{ m.icon("check", "h-4 w-4") }}Утвердить состав</button></div>
     </form>
   </div>
 
   <form method="post" action="/cabinet/admin/teams/{{ t.id }}/delete" class="mt-6">
-    <button class="{{ m.BTN_NO }}" onclick="return confirm('Удалить черновик сборной?')">{{ m.icon("x", "h-3.5 w-3.5") }}Удалить черновик</button>
+    <button class="{{ m.BTN_NO }}" data-confirm="Удалить черновик сборной «{{ t.title }}»? Это нельзя отменить." data-confirm-label="Удалить">{{ m.icon("x", "h-3.5 w-3.5") }}Удалить черновик</button>
   </form>
   {% endif %}
 </div>

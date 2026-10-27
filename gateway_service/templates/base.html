@@ -108,7 +108,7 @@
   {% if flash %}
   <div class="no-print mx-auto mt-6 max-w-7xl px-4 sm:px-6 lg:px-8" role="status" aria-live="polite">
     {% if flash.kind == "fsp_issued" %}
-    <div class="relative overflow-hidden rounded-xl bg-fsp-blue p-6 font-mono text-white shadow-[6px_6px_0px_0px_#EDEDED]" data-celebrate>
+    <div class="relative overflow-hidden rounded-xl bg-fsp-blue p-6 font-mono text-white shadow-[6px_6px_0px_0px_#EDEDED]" data-celebrate data-flash>
       <div class="fsp-glow -right-10 -top-16 h-48 w-48 !opacity-50" aria-hidden="true"></div>
       <p class="relative text-xs text-white/70">$ fsp-id issue --region=56</p>
       <p class="relative mt-1 text-sm">// REGISTRATION... SUCCESS</p>
@@ -117,9 +117,9 @@
       <p class="relative mt-3 flex flex-wrap gap-2 text-xs">{% for r in flash.roles %}<span class="rounded-md bg-white/15 px-2 py-0.5">{{ r }}</span>{% endfor %}<span class="text-white/70">· контрольная цифра Луна ✓</span></p>
     </div>
     {% elif flash.kind == "error" %}
-    <div class="rounded-xl border border-fsp-red/70 bg-fsp-red/10 px-4 py-3 font-mono text-sm text-rose-100"><span class="font-bold text-rose-300">[ERR]</span> {{ flash.text }}</div>
+    <div class="flex items-start gap-3 rounded-xl border border-fsp-red/70 bg-fsp-red/10 px-4 py-3 font-mono text-sm text-rose-100" data-flash role="alert"><p class="min-w-0 flex-1"><span class="font-bold text-rose-300">[ERR]</span> {{ flash.text }}</p><button type="button" data-dismiss class="-my-1 -mr-2 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-rose-200 hover:bg-fsp-red/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300" aria-label="Закрыть сообщение">{{ m.icon("x", "h-4 w-4") }}</button></div>
     {% else %}
-    <div class="rounded-xl border border-emerald-500/60 bg-emerald-500/10 px-4 py-3 font-mono text-sm text-emerald-50"{% if flash.celebrate %} data-celebrate{% endif %}><span class="font-bold text-emerald-300">[OK]</span> {{ flash.text }}</div>
+    <div class="flex items-start gap-3 rounded-xl border border-emerald-500/60 bg-emerald-500/10 px-4 py-3 font-mono text-sm text-emerald-50" data-flash{% if flash.celebrate %} data-celebrate{% endif %}><p class="min-w-0 flex-1"><span class="font-bold text-emerald-300">[OK]</span> {{ flash.text }}</p><button type="button" data-dismiss class="-my-1 -mr-2 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-emerald-200 hover:bg-emerald-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300" aria-label="Закрыть сообщение">{{ m.icon("x", "h-4 w-4") }}</button></div>
     {% endif %}
   </div>
   {% endif %}
@@ -484,6 +484,9 @@
       });
     })();
   </script>
+  {% if tour %}<script id="tour-data" type="application/json">{{ {"tour": tour, "user": tour_user}|tojson_script|safe }}</script>
+  <script src="/static/tour.js" defer></script>{% endif %}
+  <script src="/static/ux.js" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

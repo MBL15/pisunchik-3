@@ -48,6 +48,15 @@
     {{ m.kpi("протоколов", rating.competitions|length, "опубликовано в сезоне " ~ rating.season, "amber") }}
   </div>
 
+  {% if can_pick and rating.rows %}
+  <div data-pick-bar class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-fsp-line bg-fsp-panel px-4 py-3 transition-colors">
+    <span class="font-mono text-xs text-fsp-muted">Сборная · выбрано: <b class="text-fsp-light" data-pick-count aria-live="polite">0</b></span>
+    <button type="button" data-pick-top="5" class="{{ m.BTN_SM }}">Первые 5</button>
+    <button type="button" data-pick-top="10" class="{{ m.BTN_SM }}">Первые 10</button>
+    <button type="button" data-pick-clear class="{{ m.BTN_SM }}">Сбросить</button>
+    <a href="#team-form" class="ml-auto font-mono text-xs text-fsp-violet hover:underline">к форме сборной ↓</a>
+  </div>
+  {% endif %}
   {% with limit=None, pick=can_pick %}{% include "_rating_table.html" %}{% endwith %}
 
   {% if can_pick and rating.rows %}
@@ -69,7 +78,7 @@
       <input id="team-purpose" name="purpose" maxlength="300" placeholder="участия во всероссийских соревнованиях" class="{{ m.INPUT }}">
     </div>
     <div class="flex flex-wrap items-center gap-3 sm:col-span-2">
-      <button class="{{ m.BTN }}">{{ m.icon("users", "h-4 w-4") }}Сформировать сборную из отмеченных</button>
+      <button data-pick-submit class="{{ m.BTN }}">{{ m.icon("users", "h-4 w-4") }}Сформировать сборную из отмеченных</button>
       <a href="/teams" class="{{ m.BTN_GHOST }}">Все сборные</a>
     </div>
   </form>

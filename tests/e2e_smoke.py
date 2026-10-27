@@ -279,5 +279,28 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
     check(c.get(f"/athletes/{ABRAMOV_ID}/report.xlsx").status_code == 200, "trainer exports the report of an active ward")
     check(c.get(f"/athletes/{ZHUKOV}/report.xlsx").status_code == 403, "trainer cannot export a stranger's report")
 
+print("== 7. usability: optional interactive tour, confirmations, quick actions, team picker")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    landing = page(c, "/")
+    check('id="tour-data"' in landing and "Знакомство с платформой" in landing and 'header a[href=\\"/register\\"]' in landing,
+          "landing carries a tour for guests (registration + login steps)")
+    check("Как зарегистрироваться" in page(c, "/register") and 'id="tour-data"' in page(c, "/calendar"), "register and calendar have tours")
+    for asset in ("tour.js", "ux.js"):
+        r = c.get(f"/static/{asset}")
+        check(r.status_code == 200 and "javascript" in r.headers["content-type"], f"/static/{asset} served")
+    check('data-pick-bar' not in page(c, "/rating"), "public rating has no team picker")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "admin@fsp56.ru")
+    cab = c.get("/cabinet").text
+    check('data-tour="quick-actions"' in cab and "Внести результаты" in cab and "Кабинет федерации" in cab, "admin cabinet: quick actions + tour")
+    check(cab.count("data-confirm=") >= 4, f"irreversible admin actions ask for confirmation ({cab.count('data-confirm=')} places)")
+    check('data-dismiss' not in cab or 'aria-label="Закрыть сообщение"' in cab, "flash messages are dismissible")
+    rating = c.get("/rating?discipline=ALG").text
+    check("data-pick-bar" in rating and 'data-pick-top="5"' in rating and "data-pick-submit" in rating, "rating: quick selection bar for the team")
+    check("rating-admin" in rating or "Набор в сборную" in rating, "rating tour for the federation mentions team building")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    html = login(c, "athlete@fsp56.ru")
+    check("Кабинет спортсмена" in html and "[data-tour-start]" in html, "athlete cabinet tour ends with the help-button step")
+
 print("\nRESULT:", "ALL PASSED" if ok else "FAILURES")
 sys.exit(0 if ok else 1)

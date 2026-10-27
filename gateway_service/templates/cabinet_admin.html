@@ -20,6 +20,19 @@
   {{ m.kpi("справок", dash.documents_issued if dash else "—", "выдано с QR-кодом", "blue") }}
 </section>
 
+{# ---------------- QUICK ACTIONS ---------------- #}
+<section class="mt-6" aria-label="Быстрые действия" data-tour="quick-actions">
+  <div class="flex flex-wrap items-center gap-2">
+    <span class="mr-1 font-mono text-[11px] uppercase tracking-wider text-fsp-muted">Быстро:</span>
+    <a href="#inbox" class="{{ m.BTN_SM }}">{{ m.icon("check", "h-3.5 w-3.5") }}Решения{% if inbox_count %}<span class="rounded bg-amber-400/20 px-1.5 text-amber-300">{{ inbox_count }}</span>{% endif %}</a>
+    <a href="#results-entry" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Внести результаты{% if sheets %}<span class="rounded bg-amber-400/20 px-1.5 text-amber-300">{{ sheets|length }}</span>{% endif %}</a>
+    <a href="#registration" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Приём заявок</a>
+    <a href="/rating" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Сборная из рейтинга</a>
+    <a href="/reports/headcount" class="{{ m.BTN_SM }}">{{ m.icon("pulse", "h-3.5 w-3.5") }}Отчёт о численности</a>
+    <a href="#create" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Новое соревнование</a>
+  </div>
+</section>
+
 {# ---------------- ATTENTION ---------------- #}
 {% macro inbox_group(title, n) %}<li class="sticky top-0 z-[1] flex items-center gap-2 bg-fsp-panel/95 px-5 py-2 font-mono text-[11px] uppercase tracking-wider text-fsp-muted backdrop-blur">{{ title }}<span class="rounded bg-fsp-card px-1.5 text-fsp-light">{{ n }}</span></li>{% endmacro %}
 <section id="inbox" class="mt-10 grid scroll-mt-36 gap-6 lg:grid-cols-2" aria-label="Требует внимания">
@@ -73,7 +86,7 @@
             <label for="cm-{{ q.id }}" class="sr-only">Комментарий к решению</label>
             <input id="cm-{{ q.id }}" name="comment" placeholder="комментарий (при отказе — причина)" class="{{ m.INPUT }} !py-1.5 min-w-[10rem] flex-1 text-xs">
             <button name="status" value="APPROVED" class="{{ m.BTN_OK }}">{{ m.icon("check", "h-3.5 w-3.5") }}Присвоить</button>
-            <button name="status" value="REJECTED" formnovalidate class="{{ m.BTN_NO }}">{{ m.icon("x", "h-3.5 w-3.5") }}Отклонить</button>
+            <button name="status" value="REJECTED" formnovalidate data-confirm="Отклонить заявку на разряд или категорию? Решение нельзя изменить." data-confirm-label="Отклонить" class="{{ m.BTN_NO }}">{{ m.icon("x", "h-3.5 w-3.5") }}Отклонить</button>
           </div>
         </form>
       </li>
@@ -91,7 +104,7 @@
         </div>
         <form method="post" action="/cabinet/admin/applications/{{ a.id }}" class="flex gap-2">
           <button name="status" value="APPROVED" class="{{ m.BTN_OK }}">{{ m.icon("check", "h-3.5 w-3.5") }}Одобрить</button>
-          <button name="status" value="REJECTED" class="{{ m.BTN_NO }}">{{ m.icon("x", "h-3.5 w-3.5") }}Отклонить</button>
+          <button name="status" value="REJECTED" data-confirm="Отклонить заявку? Решение нельзя изменить, спортсмен получит отказ." data-confirm-label="Отклонить" class="{{ m.BTN_NO }}">{{ m.icon("x", "h-3.5 w-3.5") }}Отклонить</button>
         </form>
       </li>
       {% endfor %}
@@ -339,7 +352,7 @@
         <li class="flex items-center gap-2 rounded-md border border-fsp-line2 bg-fsp-bg py-1 pl-2.5 pr-1 text-xs">
           <span class="text-fsp-light">{{ j.full_name }}</span><span class="font-mono text-[10px] uppercase text-emerald-300">{{ j.position }}</span>
           <form method="post" action="/cabinet/admin/competitions/{{ c.id }}/judges/{{ j.fsp_id }}/remove">
-            <button class="flex h-6 w-6 items-center justify-center rounded text-fsp-muted hover:bg-fsp-red/20 hover:text-rose-300" aria-label="Снять: {{ j.full_name }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
+            <button data-confirm="Снять судью {{ j.full_name }} с соревнования?" data-confirm-label="Снять" class="flex h-6 w-6 items-center justify-center rounded text-fsp-muted hover:bg-fsp-red/20 hover:text-rose-300" aria-label="Снять: {{ j.full_name }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
           </form>
         </li>
         {% else %}<li class="text-xs text-fsp-muted">Коллегия не назначена.</li>{% endfor %}
@@ -390,7 +403,7 @@
         </div>
         {% if is_open %}
         <button name="action" value="open" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Продлить</button>
-        <button name="action" value="close" formnovalidate class="{{ m.BTN_NO }}">{{ m.icon("x", "h-3.5 w-3.5") }}Закрыть приём</button>
+        <button name="action" value="close" formnovalidate data-confirm="Закрыть приём заявок на «{{ c.title }}»? Новые заявки приниматься не будут, пока вы не откроете приём снова." data-confirm-label="Закрыть приём" class="{{ m.BTN_NO }}">{{ m.icon("x", "h-3.5 w-3.5") }}Закрыть приём</button>
         {% else %}
         <button name="action" value="open" class="{{ m.BTN_OK }}">{{ m.icon("check", "h-3.5 w-3.5") }}Открыть приём</button>
         {% endif %}
@@ -530,7 +543,7 @@
         {% if not t.used %}
         <form method="post" action="/cabinet/admin/competition-types/remove">
           <input type="hidden" name="title" value="{{ t.title }}">
-          <button class="flex h-6 w-6 items-center justify-center rounded text-fsp-muted hover:bg-fsp-red/20 hover:text-rose-300" aria-label="Удалить тип: {{ t.title }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
+          <button data-confirm="Удалить тип «{{ t.title }}» из справочника?" data-confirm-label="Удалить" class="flex h-6 w-6 items-center justify-center rounded text-fsp-muted hover:bg-fsp-red/20 hover:text-rose-300" aria-label="Удалить тип: {{ t.title }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
         </form>
         {% endif %}
       </li>

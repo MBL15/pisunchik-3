@@ -201,3 +201,59 @@ body { overflow-x: clip; }
   .js [data-reveal], .js [data-bar], .js .rail-draw { opacity: 1 !important; transform: none !important; clip-path: none !important; }
   *, *::before, *::after { transition-duration: 0.01ms !important; }
 }
+
+/* ---------- Интерактивный тур, диалог подтверждения, состояние отправки ---------- */
+.tour-launcher { position: fixed; right: 16px; bottom: 16px; z-index: 55; display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px 0 8px; border: 0; border-radius: 12px; background: #402FFF; color: #fff; font: 500 13px/1 "JetBrains Mono", monospace; box-shadow: 4px 4px 0 #EDEDED; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+.tour-launcher:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #EDEDED; }
+.tour-launcher:focus-visible { outline: 2px solid #EDEDED; outline-offset: 3px; }
+.tour-launcher-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: #EDEDED; color: #402FFF; font-size: 16px; font-weight: 700; }
+@media (max-width: 639px) { .tour-launcher { padding: 0 8px; } .tour-launcher-text { display: none; } }
+
+.tour-layer { position: fixed; inset: 0; z-index: 70; }
+.tour-shield { position: absolute; inset: 0; }
+.tour-hole { position: absolute; border-radius: 12px; outline: 2px solid #8C80FF; box-shadow: 0 0 0 100vmax rgba(10, 11, 15, .78); pointer-events: none; transition: left .25s ease, top .25s ease, width .25s ease, height .25s ease; }
+.tour-hole::after { content: ""; position: absolute; inset: -6px; border-radius: 16px; border: 2px solid rgba(140, 128, 255, .55); animation: tour-pulse 1.8s ease-out infinite; }
+@keyframes tour-pulse { from { transform: scale(.98); opacity: 1; } to { transform: scale(1.04); opacity: 0; } }
+
+.tour-pop { position: absolute; max-width: calc(100vw - 24px); padding: 16px; border: 2px solid #402FFF; border-radius: 12px; background: #202128; color: #EDEDED; box-shadow: 6px 6px 0 #402FFF; outline: none; }
+.tour-pop.tour-sheet { left: 8px; right: 8px; bottom: 8px; top: auto; width: auto; }
+.tour-meta { display: flex; justify-content: space-between; gap: 8px; color: #8C80FF; font: 500 11px "JetBrains Mono", monospace; letter-spacing: .06em; text-transform: uppercase; }
+.tour-tourname { max-width: 55%; overflow: hidden; color: #9B9C9E; text-overflow: ellipsis; white-space: nowrap; }
+.tour-bar { height: 3px; margin: 10px 0 12px; overflow: hidden; border-radius: 99px; background: #3D3E42; }
+.tour-bar span { display: block; height: 100%; background: #402FFF; }
+.tour-title { margin: 0 0 6px; font: 500 17px/1.25 "JetBrains Mono", monospace; }
+.tour-text { margin: 0; color: #C7C7C7; font-size: 14px; line-height: 1.5; }
+.tour-next-link { display: inline-block; margin-top: 12px; color: #8C80FF; font: 500 13px "JetBrains Mono", monospace; text-decoration: underline; text-underline-offset: 3px; }
+.tour-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.tour-keys { margin: 10px 0 0; color: #9B9C9E; font: 400 11px "JetBrains Mono", monospace; }
+@media (max-width: 639px), (pointer: coarse) { .tour-keys { display: none; } }
+.tour-btn { min-height: 40px; padding: 0 14px; border: 1px solid #4E5268; border-radius: 8px; background: transparent; color: #EDEDED; font: 500 12px "JetBrains Mono", monospace; cursor: pointer; transition: background .15s, border-color .15s; }
+.tour-btn:hover:not(:disabled) { border-color: #402FFF; background: rgba(64, 47, 255, .12); }
+.tour-btn:disabled { opacity: .4; cursor: not-allowed; }
+.tour-btn:focus-visible { outline: 2px solid #8C80FF; outline-offset: 2px; }
+.tour-btn-main { margin-left: auto; border-color: #402FFF; background: #402FFF; color: #fff; }
+.tour-btn-main:hover:not(:disabled) { background: #5446ff; }
+.tour-btn-quiet { padding: 0 6px; border-color: transparent; color: #9B9C9E; }
+.tour-btn-danger { border-color: #EC1D35; background: #EC1D35; color: #fff; }
+.tour-btn-danger:hover:not(:disabled) { background: #d4162d; }
+
+.tour-offer { position: fixed; right: 16px; bottom: 80px; z-index: 56; width: min(380px, calc(100vw - 32px)); padding: 16px; border: 2px solid #402FFF; border-radius: 12px; background: #202128; color: #EDEDED; box-shadow: 6px 6px 0 #402FFF; animation: tour-rise .3s ease-out; }
+.tour-offer-title { margin: 0; font: 500 15px "JetBrains Mono", monospace; }
+.tour-offer-text { margin: 6px 0 0; color: #C7C7C7; font-size: 13px; line-height: 1.5; }
+@keyframes tour-rise { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+.tour-toast { position: fixed; bottom: 80px; left: 50%; z-index: 80; max-width: calc(100vw - 32px); padding: 10px 16px; border: 1px solid #4E5268; border-radius: 10px; background: #2D2E37; color: #EDEDED; font: 400 13px "JetBrains Mono", monospace; transform: translateX(-50%); }
+
+.ux-dialog { width: min(420px, calc(100vw - 32px)); padding: 20px; border: 2px solid #402FFF; border-radius: 12px; background: #202128; color: #EDEDED; box-shadow: 6px 6px 0 #402FFF; }
+.ux-dialog::backdrop { background: rgba(10, 11, 15, .72); }
+.ux-dialog-text { margin: 0; font-size: 15px; line-height: 1.5; }
+.ux-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+.is-pending { cursor: progress; opacity: .75; }
+.is-pending::after { content: ""; width: 14px; height: 14px; margin-left: 8px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: ux-spin .7s linear infinite; }
+@keyframes ux-spin { to { transform: rotate(360deg); } }
+[data-pick-bar].is-active { border-color: #402FFF; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-hole, .tour-launcher, .tour-btn { transition: none; }
+  .tour-hole::after, .tour-offer, .is-pending::after { animation: none; }
+}

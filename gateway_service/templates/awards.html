@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Премии Губернатора · ФСП Оренбург{% endblock %}
+{% block content %}
+{% set pet = a.petition %}
+<div class="pt-10">
+  {{ m.section_head("awards select --year=" ~ year, "Премии Губернатора", "Платформа сама отбирает спортсменов с призовыми местами в опубликованных протоколах года, считает сумму по справочнику и готовит ходатайство по Указу № 93-ук.") }}
+  {% if not a.sanctions_checked %}<p class="mb-4 rounded-xl border border-amber-400/50 bg-amber-400/10 p-3 text-sm text-amber-200">[WARN] реестр недоступен: санкции спортсменов не проверены.</p>{% endif %}
+  <div class="no-print mb-6 flex flex-wrap items-center gap-3">
+    <a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
+    <form method="get" class="flex items-center gap-2"><label for="aw-y" class="font-mono text-xs text-fsp-muted">Год результатов</label>
+      <select id="aw-y" name="year" class="{{ m.INPUT }} !w-auto" onchange="this.form.submit()">{% for y in (a.years or [year]) %}<option {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}</select></form>
+    <span class="rounded-md border px-2.5 py-1 font-mono text-xs {% if a.deadline.days_left < 0 %}border-fsp-red text-rose-300{% elif a.deadline.days_left <= 30 %}border-amber-400/70 text-amber-300{% else %}border-fsp-line2 text-fsp-soft{% endif %}">
+      ходатайство до {{ a.deadline.date|ru_date }}{% if a.deadline.days_left >= 0 %} · {{ a.deadline.days_left|days_word }}{% else %} · срок прошёл{% endif %}</span>
+  </div>
+
+  <section class="{{ m.CARD }} p-5" id="rates" aria-labelledby="rates-h">
+    <h2 id="rates-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Справочник размеров премий, ₽</h2>
+    <form method="post" action="/awards/rates">
+      <div class="mt-3 overflow-x-auto"><table class="w-full min-w-[440px] text-sm">
+        <thead><tr><th scope="col" class="{{ m.TH }}">Уровень соревнования</th><th scope="col" class="{{ m.TH }} text-right">1 место</th><th scope="col" class="{{ m.TH }} text-right">2 место</th><th scope="col" class="{{ m.TH }} text-right">3 место</th></tr></thead>
+        <tbody>{% for lv in levels %}<tr class="border-t border-fsp-line"><th scope="row" class="px-3 py-2 text-left font-normal text-fsp-light">{{ level_labels[lv] }}</th>
+          {% for i in range(3) %}<td class="px-3 py-1.5 text-right">{% if can_edit %}<label class="sr-only" for="r-{{ lv }}-{{ i }}">{{ level_labels[lv] }}, {{ i + 1 }} место</label><input id="r-{{ lv }}-{{ i }}" name="{{ lv }}_{{ i }}" type="number" min="0" step="500" value="{{ a.rates[lv][i] }}" class="{{ m.INPUT }} !w-28 text-right font-mono">{% else %}<span class="font-mono">{{ "{:,}".format(a.rates[lv][i]).replace(",", " ") }}</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table></div>
+      {% if can_edit %}<div class="mt-3 flex items-center gap-3"><button class="{{ m.BTN_SM }}">{{ m.icon("check", "h-3.5 w-3.5") }}Сохранить справочник</button><span class="text-xs text-fsp-muted">Значения демонстрационные — сверьте с Указом № 93-ук.</span></div>{% endif %}
+    </form>
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" id="candidates" aria-labelledby="cand-h">
+    <h2 id="cand-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Претенденты по протоколам {{ year }} года · {{ a["items"]|length }} · {{ "{:,}".format(a.total).replace(",", " ") }} ₽</h2>
+    <form method="post" action="/awards/petitions">
+      <input type="hidden" name="year" value="{{ year }}">
+      <ul class="mt-3 grid gap-2">
+        {% for i in a["items"] %}
+        <li class="rounded-lg border border-fsp-line p-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="min-w-0">
+              {% if can_edit and not pet %}<label class="flex items-center gap-2 text-sm text-fsp-light"><input type="checkbox" name="exclude" value="{{ i.fsp_id }}" class="h-4 w-4 accent-fsp-red"><span class="font-medium text-white">{{ i.full_name }}</span><span class="font-mono text-[11px] text-fsp-muted">исключить из ходатайства</span></label>
+              {% else %}<span class="font-medium text-white">{{ i.full_name }}</span>{% endif %}
+              <p class="font-mono text-[11px] text-fsp-muted">{{ i.fsp_id }}{% if i.municipality %} · {{ i.municipality }}{% endif %}{% if i.coaches %} · тренер: {{ i.coaches|join(", ") }}{% endif %}</p>
+            </div>
+            <span class="font-mono text-lg font-bold text-emerald-300">{{ "{:,}".format(i.amount).replace(",", " ") }} ₽</span>
+          </div>
+          <ul class="mt-2 grid gap-1 text-sm text-fsp-soft">{% for r in i.results %}<li><a href="/protocols/{{ r.competition_id }}" class="hover:text-fsp-violet hover:underline">{{ r.title }}</a> · {{ r.level_label }} · {{ r.place }} место → {{ "{:,}".format(r.amount).replace(",", " ") }} ₽</li>{% endfor %}</ul>
+        </li>
+        {% else %}<li class="rounded-lg border border-dashed border-fsp-line2 p-4 text-sm text-fsp-muted">В опубликованных протоколах {{ year }} года нет призовых мест спортсменов региона.</li>{% endfor %}
+      </ul>
+      {% if a.excluded %}<p class="mt-3 text-sm text-amber-200">Не вошли из-за санкции: {% for e in a.excluded %}{{ e.full_name }} ({{ e.reason }}){% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+      {% if can_edit and not pet and a["items"] %}
+      <div class="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]"><label class="sr-only" for="aw-note">Примечание к ходатайству</label><input id="aw-note" name="note" maxlength="300" placeholder="Примечание к ходатайству (по желанию)" class="{{ m.INPUT }}"><button class="{{ m.BTN }}">{{ m.icon("file", "h-4 w-4") }}Подготовить ходатайство</button></div>
+      {% endif %}
+    </form>
+  </section>
+
+  {% if pet %}
+  <section class="mt-6 {{ m.CARD }} border-fsp-blue p-5" id="petition" aria-labelledby="pet-h">
+    <h2 id="pet-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Ходатайство за {{ pet.year }} год</h2>
+    <ol class="mt-3 flex flex-wrap gap-2" aria-label="Статус ходатайства">
+      {% for code, label in (("PREPARED", "Подготовлено"), ("SENT", "Направлено"), ("AWARDED", "Премия назначена")) %}
+      <li class="rounded-md border px-2.5 py-1.5 font-mono text-xs {% if code == pet.status %}border-fsp-blue bg-fsp-blue text-white{% elif (pet.status == "AWARDED") or (pet.status == "SENT" and code == "PREPARED") %}border-emerald-500/50 text-emerald-300{% else %}border-fsp-line2 text-fsp-muted{% endif %}"{% if code == pet.status %} aria-current="step"{% endif %}>{{ label }}</li>
+      {% endfor %}
+    </ol>
+    <p class="mt-3 text-sm text-fsp-soft">{{ pet["items"]|length }} чел. · {{ "{:,}".format(pet.total).replace(",", " ") }} ₽{% if pet.order_no %} · акт {{ pet.order_no }}{% endif %}{% if pet.note %} · {{ pet.note }}{% endif %}</p>
+    <div class="mt-3">{{ m.export_links("/awards/petitions/" ~ pet.id ~ "/package", "Пакет документов") }}</div>
+    {% if can_edit and pet.next_status %}
+    <form method="post" action="/awards/petitions/{{ pet.id }}/status" class="mt-4 flex flex-wrap items-end gap-3">
+      <input type="hidden" name="status" value="{{ pet.next_status }}">
+      {% if pet.next_status == "AWARDED" %}<div><label class="{{ m.LABEL }}" for="aw-ord">Акт о назначении</label><input id="aw-ord" name="order_no" required placeholder="Распоряжение № 15-р" class="{{ m.INPUT }}"></div>{% endif %}
+      <button class="{{ m.BTN }}" data-confirm="{{ 'Отметить ходатайство направленным в министерство?' if pet.next_status == 'SENT' else 'Зафиксировать назначение премий? Спортсмены получат уведомление.' }}" data-confirm-label="Подтвердить">{{ "Направлено в министерство" if pet.next_status == "SENT" else "Премия назначена" }}</button>
+    </form>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

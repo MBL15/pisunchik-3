@@ -25,7 +25,7 @@
     </div>
   </section>
 
-  {% if not t.locked %}
+  {% if editable %}
   <form method="post" action="/cabinet/admin/teams/{{ t.id }}/update" class="{{ m.CARD }} mt-6 grid gap-3 p-5 sm:grid-cols-2">
     <div><label for="t-title" class="{{ m.LABEL }}">Название</label><input id="t-title" name="title" required minlength="5" maxlength="200" value="{{ t.title }}" class="{{ m.INPUT }}"></div>
     <div><label for="t-purpose" class="{{ m.LABEL }}">Цель формирования (для приказа)</label><input id="t-purpose" name="purpose" maxlength="300" value="{{ t.purpose }}" class="{{ m.INPUT }}"></div>
@@ -45,7 +45,7 @@
         <th scope="col" class="{{ m.TH }} text-right">Баллы</th>
         <th scope="col" class="{{ m.TH }}">Тренер</th>
         <th scope="col" class="{{ m.TH }}">Состав</th>
-        {% if not t.locked %}<th scope="col" class="{{ m.TH }}"><span class="sr-only">Действия</span></th>{% endif %}
+        {% if editable %}<th scope="col" class="{{ m.TH }}"><span class="sr-only">Действия</span></th>{% endif %}
       </tr></thead>
       <tbody>
         {% for mem in t.members %}
@@ -56,7 +56,7 @@
           <td class="px-3 py-3 text-right font-mono font-bold tabular-nums text-fsp-violet">{{ "%.1f"|format(mem.points) }}</td>
           <td class="px-3 py-3 text-xs text-fsp-soft">{{ mem.coaches|join(", ") or "—" }}</td>
           <td class="px-3 py-3">{{ m.tag(mem.role_label, "emerald" if mem.role == "MAIN" else "slate") }}</td>
-          {% if not t.locked %}
+          {% if editable %}
           <td class="px-3 py-3">
             <div class="flex flex-wrap items-center justify-end gap-2">
               <form method="post" action="/cabinet/admin/teams/{{ t.id }}/members/{{ mem.fsp_id }}/role">
@@ -75,7 +75,7 @@
   </div>
   <p class="mt-2 font-mono text-[11px] text-fsp-muted">// основной состав: {{ t.main_count }} · резерв: {{ t.reserve_count }}{% if t.coaches %} · тренеры: {{ t.coaches|join(", ") }}{% endif %}</p>
 
-  {% if not t.locked %}
+  {% if editable %}
   <div class="mt-8 grid gap-6 lg:grid-cols-2">
     <form method="post" action="/cabinet/admin/teams/{{ t.id }}/members" class="{{ m.CARD }} grid content-start gap-3 p-5">
       <p class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-soft">// добавить из рейтинга</p>

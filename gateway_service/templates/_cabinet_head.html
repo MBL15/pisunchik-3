@@ -67,3 +67,17 @@
     </div>
   </div>
 </section>
+
+{# Быстрые переходы к дополнительным разделам по активной роли (Д3–Д9, Д12) #}
+{% set quick = {
+  "athlete": [("/journey", "Мой путь"), ("/training", "Нормативы и аттестация"), ("/appeals", "Апелляции"), ("/glossary", "Справочник")],
+  "trainer": [("/training", "Нормативы подопечных"), ("/organizations", "Организации и группы"), ("/appeals", "Апелляции"), ("/glossary", "Справочник")],
+  "judge": [("/appeals", "Рапорты о нарушениях"), ("/glossary", "Справочник")],
+  "admin": [("/development", "Показатели развития"), ("/awards", "Премии Губернатора"), ("/training", "Нормативы"), ("/organizations", "Организации и группы"), ("/appeals", "Апелляции и нарушения"), ("/integrations", "Интеграции"), ("/oidc/clients", "ФСП ID")]
+}.get(user.role, []) %}
+{% if quick %}
+<nav class="no-print mt-3 flex flex-wrap items-center gap-2" aria-label="Дополнительные разделы">
+  <span class="font-mono text-[11px] uppercase tracking-wider text-fsp-muted">Разделы:</span>
+  {% for href, label in quick %}<a href="{{ href }}" class="{{ m.BTN_SM }}">{{ label }}</a>{% endfor %}
+</nav>
+{% endif %}

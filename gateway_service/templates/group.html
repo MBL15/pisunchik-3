@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ g.name }} · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-5xl pt-10">
+  {{ m.section_head("group show --id=" ~ g.id, g.name, g.org ~ " · " ~ g.stage_label ~ " · " ~ g.discipline_label ~ " · тренер " ~ g.trainer_name) }}
+  {{ m.degraded_notice(degraded) }}
+  <div class="no-print mb-6 flex flex-wrap gap-3"><a href="/organizations/card?name={{ g.org|urlencode }}" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← {{ g.org }}</a></div>
+
+  <section class="{{ m.CARD }} p-5" id="members" aria-labelledby="mem-h">
+    <h2 id="mem-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Состав · {{ active|length }}</h2>
+    <ul class="mt-3 grid gap-2">
+      {% for mem in active %}
+      <li class="rounded-lg border border-fsp-line px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="min-w-0"><span class="font-medium text-white">{{ mem.full_name }}</span><p class="font-mono text-[11px] text-fsp-muted">{{ mem.fsp_id }} · {{ mem.age }} {{ plural(mem.age, "год", "года", "лет") }} · с {{ mem.enrolled_at|ru_date }}</p></div>
+          <div class="flex flex-wrap items-center gap-2">
+            {% if mem.ready %}{{ m.tag("готов к переводу", "emerald") }}{% endif %}
+            {% if user.role in ("admin", "trainer") %}<a href="/training/athletes/{{ mem.fsp_id }}" class="{{ m.BTN_SM }}">Нормативы</a>{% endif %}
+          </div>
+        </div>
+        {% if can_run %}
+        <div class="mt-2 flex flex-wrap items-end gap-3">
+          {% if targets %}
+          <form method="post" action="/groups/{{ g.id }}/transfer" class="flex flex-wrap items-end gap-2"><input type="hidden" name="fsp_id" value="{{ mem.fsp_id }}">
+            <div><label class="sr-only" for="tg-{{ mem.fsp_id }}">Перевести в группу</label><select id="tg-{{ mem.fsp_id }}" name="to_group_id" class="{{ m.INPUT }} !w-auto text-xs">{% for t in targets %}<option value="{{ t.id }}">{{ t.name }} ({{ t.stage }})</option>{% endfor %}</select></div>
+            <button class="{{ m.BTN_SM }}">Перевести</button></form>
+          {% endif %}
+          <form method="post" action="/groups/{{ g.id }}/members/{{ mem.fsp_id }}/leave" class="flex flex-wrap items-end gap-2"><label class="sr-only" for="lv-{{ mem.fsp_id }}">Причина</label><input id="lv-{{ mem.fsp_id }}" name="reason" placeholder="Причина (по желанию)" maxlength="200" class="{{ m.INPUT }} !w-48 text-xs"><button class="{{ m.BTN_NO }}" data-confirm="Отчислить {{ mem.full_name }} из группы?" data-confirm-label="Отчислить">Отчислить</button></form>
+        </div>
+        {% endif %}
+      </li>
+      {% else %}<li class="rounded-lg border border-dashed border-fsp-line2 p-4 text-sm text-fsp-muted">В группе пока никого нет.</li>{% endfor %}
+    </ul>
+    {% if former %}<p class="mt-3 text-xs text-fsp-muted">Выбыли: {% for f in former %}{{ f.full_name }} ({{ f.left_at|ru_date }}{% if f.left_reason %}: {{ f.left_reason }}{% endif %}){% if not loop.last %}; {% endif %}{% endfor %}</p>{% endif %}
+    {% if can_run %}
+    <form method="post" action="/groups/{{ g.id }}/members" class="mt-4 flex flex-wrap items-end gap-3">
+      <div class="grow"><label for="en-a" class="{{ m.LABEL }}">Зачислить спортсмена организации</label>
+        <select id="en-a" name="fsp_id" class="{{ m.INPUT }}">{% for p in eligible %}<option value="{{ p.fsp_id }}">{{ p.full_name }} · {{ p.age }} {{ plural(p.age, "год", "года", "лет") }}{% if not p.training_stage %} · этап не указан{% endif %}</option>{% else %}<option value="" disabled selected>Подходящих спортсменов нет</option>{% endfor %}</select></div>
+      <button class="{{ m.BTN_SM }}" {% if not eligible %}disabled{% endif %}>{{ m.icon("users", "h-3.5 w-3.5") }}Зачислить</button>
+    </form>
+    <p class="mt-2 text-xs text-fsp-muted">Зачисление устанавливает этап группы. Перевод на следующий этап — только после выполнения нормативов (аттестации).</p>
+    {% endif %}
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" id="journal" aria-labelledby="jr-h">
+    <h2 id="jr-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Журнал занятий · {{ sessions|length }}</h2>
+    {% if can_run %}
+    <details class="mt-3 rounded-lg border border-fsp-line2 p-3" open><summary class="cursor-pointer font-mono text-xs text-fsp-light">Записать занятие</summary>
+      <form method="post" action="/groups/{{ g.id }}/sessions" class="mt-3 grid gap-3 sm:grid-cols-4">
+        <div><label for="js-d" class="{{ m.LABEL }}">Дата</label><input id="js-d" name="on" type="date" required max="{{ today.isoformat() }}" value="{{ today.isoformat() }}" class="{{ m.INPUT }} [color-scheme:dark]"></div>
+        <div class="sm:col-span-2"><label for="js-t" class="{{ m.LABEL }}">Тема</label><input id="js-t" name="topic" required minlength="3" maxlength="160" class="{{ m.INPUT }}"></div>
+        <div><label for="js-m" class="{{ m.LABEL }}">Длительность, мин</label><input id="js-m" name="duration_min" type="number" min="15" max="480" value="90" class="{{ m.INPUT }}"></div>
+        <div><label for="js-f" class="{{ m.LABEL }}">Формат</label><select id="js-f" name="format" class="{{ m.INPUT }}"><option value="OFFLINE">Очно</option><option value="ONLINE">Онлайн</option></select></div>
+        <div><label for="js-k" class="{{ m.LABEL }}">Подтверждение</label><select id="js-k" name="confirmation_kind" class="{{ m.INPUT }}"><option value="">нет</option>{% for k, v in confirmations.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+        <div class="sm:col-span-2"><label for="js-r" class="{{ m.LABEL }}">Ссылка на запись, номер лога или № листа</label><input id="js-r" name="confirmation_ref" maxlength="300" class="{{ m.INPUT }}"></div>
+        <fieldset class="sm:col-span-4"><legend class="{{ m.LABEL }}">Присутствовали</legend><div class="flex flex-wrap gap-x-4 gap-y-1">{% for mem in active %}<label class="flex items-center gap-2 text-sm text-fsp-soft"><input type="checkbox" name="attendees" value="{{ mem.fsp_id }}" checked class="h-4 w-4 accent-fsp-blue">{{ mem.full_name }}</label>{% endfor %}</div></fieldset>
+        <div class="sm:col-span-4"><button class="{{ m.BTN_SM }}">{{ m.icon("check", "h-3.5 w-3.5") }}Записать</button><span class="ml-3 text-xs text-fsp-muted">Онлайн-занятие подтверждается записью или номером лога платформы.</span></div>
+      </form></details>
+    {% endif %}
+    <ul class="mt-4 grid gap-1.5">
+      {% for s in sessions %}
+      <li class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-fsp-line px-3 py-2 text-sm">
+        <span class="text-fsp-light">{{ s.date|ru_date }} · {{ s.topic }} <span class="font-mono text-[11px] text-fsp-muted">· {{ s.duration_min }} мин · {{ s.attendees|length }} чел.</span></span>
+        <span class="flex items-center gap-2">{{ m.tag(s.format_label, "blue" if s.format == "ONLINE" else "slate") }}
+          {% if s.confirmation_kind %}{% if s.confirmation_kind == "RECORDING" %}<a href="{{ s.confirmation_ref }}" target="_blank" rel="noopener noreferrer nofollow" class="{{ m.BTN_SM }}">{{ m.icon("link", "h-3.5 w-3.5") }}{{ s.confirmation_label }}</a>{% else %}{{ m.tag(s.confirmation_label ~ ": " ~ s.confirmation_ref, "emerald") }}{% endif %}{% else %}{{ m.tag("не подтверждено", "amber") }}{% endif %}</span>
+      </li>
+      {% else %}<li class="text-sm text-fsp-muted">Занятий пока нет.</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}

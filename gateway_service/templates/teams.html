@@ -7,7 +7,7 @@
   {{ m.degraded_notice(degraded) }}
   <div class="no-print mb-6 flex flex-wrap gap-3">
     <a href="/cabinet#teams" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
-    <a href="/rating" class="{{ m.BTN }} !py-2 !text-xs">{{ m.icon("users", "h-3.5 w-3.5") }}Сформировать из рейтинга</a>
+    {% if user.role == "admin" %}<a href="/rating" class="{{ m.BTN }} !py-2 !text-xs">{{ m.icon("users", "h-3.5 w-3.5") }}Сформировать из рейтинга</a>{% endif %}
   </div>
   <ul class="grid gap-3">
     {% for t in teams %}

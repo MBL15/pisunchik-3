@@ -3,6 +3,7 @@ from typing import Any
 
 import httpx
 
+from shared import config
 from shared.config import SERVICE_TIMEOUT
 
 
@@ -24,7 +25,7 @@ class ServiceClient:
         self._client = httpx.AsyncClient(
             base_url=base_url,
             timeout=SERVICE_TIMEOUT,
-            headers={"X-FSP-Caller": caller},
+            headers={"X-FSP-Caller": caller, **({"X-FSP-Service-Token": config.SERVICE_TOKEN} if config.SERVICE_TOKEN else {})},
         )
 
     async def aclose(self) -> None:

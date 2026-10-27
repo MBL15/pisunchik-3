@@ -100,6 +100,7 @@ class Protocol(BaseModel):
     updated_at: datetime
     source: str = "seed"  # seed | live | upload | manual
     results: list[dict] = []  # source=manual: totals entered by the federation
+    corrections: list[dict] = []  # правки по апелляциям и рапортам (Д5): кто, по какому решению, как изменилось место
 
 
 class ResultIn(BaseModel):

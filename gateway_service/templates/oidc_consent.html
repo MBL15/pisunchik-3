@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Войти через ФСП ID · согласие{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-xl pt-14">
+  <section class="{{ m.CARD }} p-6" aria-labelledby="consent-h">
+    <p class="font-mono text-xs uppercase tracking-[0.2em] text-fsp-violet">$ fsp-id consent</p>
+    <h1 id="consent-h" class="mt-2 font-mono text-2xl text-fsp-light">Войти через ФСП ID</h1>
+    <p class="mt-3 text-sm text-fsp-soft">Приложение <b class="text-white">{{ client.name }}</b> просит доступ к данным вашего аккаунта федерации{% if user %} ({{ user.person.full_name }}){% endif %}.</p>
+    <ul class="mt-4 grid gap-2" aria-label="Передаваемые данные">
+      {% for scope, label in scopes %}
+      <li class="rounded-lg border border-fsp-line px-4 py-2.5 text-sm"><span class="font-medium text-fsp-light">{{ label }}</span>
+        <p class="font-mono text-[11px] text-fsp-muted">{% if scope == "openid" %}{{ preview.sub }}{% elif scope == "profile" %}{{ preview.name }}{% elif scope == "roles" %}{% for r in preview.roles %}{{ role_labels[r] }}{% if not loop.last %}, {% endif %}{% endfor %}{% elif scope == "disciplines" %}{{ preview.disciplines|join(", ") or "—" }}{% elif scope == "rank" %}{{ preview.rank.title if preview.rank else "разряда нет" }}{% endif %}</p></li>
+      {% endfor %}
+    </ul>
+    <p class="mt-4 text-xs text-fsp-muted">Пароль приложению не передаётся. Дата рождения, контакты и согласия на обработку данных не передаются. Отозвать доступ можно, выйдя из приложения или обратившись в федерацию.</p>
+    <form method="post" action="/oidc/consent" class="mt-5 flex flex-wrap gap-3">
+      <input type="hidden" name="req" value="{{ blob }}">
+      <button name="decision" value="allow" class="{{ m.BTN }}">{{ m.icon("check", "h-4 w-4") }}Разрешить</button>
+      <button name="decision" value="deny" class="{{ m.BTN_GHOST }}">Отказать</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Приложения ФСП ID · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="pt-10">
+  {{ m.section_head("fsp-id clients", "Приложения «Войти через ФСП ID»", "Платформа — провайдер OpenID Connect: сайты и сервисы партнёров входят аккаунтом федерации. Приложения регистрирует федерация; поток — authorization code с PKCE, согласие пользователя, discovery и userinfo.") }}
+  <div class="no-print mb-6 flex flex-wrap gap-3">
+    <a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
+    <a href="/oidc/demo" class="{{ m.BTN_SM }}">{{ m.icon("code", "h-3.5 w-3.5") }}Тестовое приложение-партнёр</a>
+    <a href="/.well-known/openid-configuration" class="{{ m.BTN_SM }}">{{ m.icon("link", "h-3.5 w-3.5") }}discovery</a>
+    <a href="/oidc/jwks" class="{{ m.BTN_SM }}">{{ m.icon("link", "h-3.5 w-3.5") }}jwks</a>
+  </div>
+  {% if created %}
+  <div class="mb-6 rounded-xl border border-emerald-500/60 bg-emerald-500/10 p-4" role="status">
+    <p class="text-sm font-medium text-emerald-300">Приложение «{{ created.name }}» зарегистрировано.</p>
+    <p class="mt-2 font-mono text-sm text-fsp-light">client_id: <span class="select-all">{{ created.client_id }}</span></p>
+    {% if created.client_secret %}<p class="mt-1 break-all font-mono text-sm text-fsp-light">client_secret: <span class="select-all" data-token>{{ created.client_secret }}</span></p><p class="mt-1 text-xs text-emerald-200">Секрет показывается один раз — сохраните его.</p>{% else %}<p class="mt-1 text-xs text-emerald-200">Публичный клиент: секрета нет, защита — PKCE.</p>{% endif %}
+  </div>
+  {% endif %}
+  <section class="{{ m.CARD }} p-5" aria-labelledby="cl-h">
+    <h2 id="cl-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Зарегистрированные приложения · {{ items|length }}</h2>
+    <ul class="mt-3 grid gap-2">
+      {% for c in items %}
+      <li class="rounded-lg border border-fsp-line p-3 {% if not c.active %}opacity-60{% endif %}">
+        <div class="flex flex-wrap items-center justify-between gap-2"><span class="font-medium text-white">{{ c.name }}</span>
+          <span class="flex items-center gap-2">{{ m.tag("публичный" if c.public else "конфиденциальный") }}{{ m.tag("действует" if c.active else "отключено", "emerald" if c.active else "amber") }}
+            {% if c.active and c.client_id != "fsp-demo-client" %}<form method="post" action="/oidc/clients/{{ c.id }}/revoke"><button class="{{ m.BTN_NO }}" data-confirm="Отключить приложение «{{ c.name }}»?" data-confirm-label="Отключить">Отключить</button></form>{% endif %}</span></div>
+        <p class="mt-1 font-mono text-[11px] text-fsp-muted">client_id: {{ c.client_id }} · области: {{ c.scopes|join(" ") }}</p>
+        <p class="font-mono text-[11px] text-fsp-muted break-all">redirect_uri: {{ c.redirect_uris|join(" · ") }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  <section class="mt-6 {{ m.CARD }} p-5" aria-labelledby="reg-h">
+    <h2 id="reg-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Зарегистрировать приложение</h2>
+    <form method="post" action="/oidc/clients" class="mt-3 grid gap-3">
+      <div><label for="oc-n" class="{{ m.LABEL }}">Название (его увидит пользователь на странице согласия)</label><input id="oc-n" name="name" required minlength="3" maxlength="80" class="{{ m.INPUT }}"></div>
+      <div><label for="oc-u" class="{{ m.LABEL }}">Адреса возврата, по одному в строке</label><textarea id="oc-u" name="redirect_uris" required rows="2" placeholder="https://partner.example.org/callback" class="{{ m.INPUT }} font-mono"></textarea>
+        <p class="mt-1 text-xs text-fsp-muted">https:// (для разработки допустим http://localhost). Совпадение строгое.</p></div>
+      <fieldset><legend class="{{ m.LABEL }}">Разрешённые области данных</legend><div class="flex flex-wrap gap-x-4 gap-y-1">{% for k, v in scopes.items() %}<label class="flex items-center gap-2 text-sm text-fsp-soft"><input type="checkbox" name="scope" value="{{ k }}" checked {% if k == "openid" %}disabled{% endif %} class="h-4 w-4 accent-fsp-blue">{{ k }} — {{ v }}</label>{% endfor %}</div><input type="hidden" name="scope" value="openid"></fieldset>
+      <label class="flex items-center gap-2 text-sm text-fsp-soft"><input type="checkbox" name="public" value="1" class="h-4 w-4 accent-fsp-blue">Публичное приложение (без секрета: SPA, мобильное) — защита только PKCE</label>
+      <div><button class="{{ m.BTN }}">Зарегистрировать</button></div>
+    </form>
+  </section>
+  <section class="mt-6 {{ m.CARD }} p-5" aria-labelledby="how-h">
+    <h2 id="how-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Как подключиться</h2>
+    <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-fsp-soft">
+      <li>Возьмите настройки из <code class="font-mono text-fsp-light">{{ issuer }}/.well-known/openid-configuration</code>.</li>
+      <li>Отправьте пользователя на <code class="font-mono text-fsp-light">/oidc/authorize</code>: <code class="font-mono">response_type=code</code>, <code class="font-mono">client_id</code>, <code class="font-mono">redirect_uri</code>, <code class="font-mono">scope=openid profile roles</code>, <code class="font-mono">state</code>, <code class="font-mono">nonce</code>, <code class="font-mono">code_challenge</code> (S256) и <code class="font-mono">code_challenge_method=S256</code>.</li>
+      <li>Обменяйте <code class="font-mono">code</code> на токены: <code class="font-mono">POST /oidc/token</code> с <code class="font-mono">code_verifier</code>, для конфиденциального клиента — с client_secret (Basic или в теле).</li>
+      <li>Проверьте подпись <code class="font-mono">id_token</code> по <code class="font-mono">/oidc/jwks</code> (RS256), затем читайте <code class="font-mono">/oidc/userinfo</code> с access-токеном.</li>
+    </ol>
+  </section>
+</div>
+{% endblock %}

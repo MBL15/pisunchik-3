@@ -45,7 +45,7 @@
         <li>
           <form method="post" action="/login" class="h-full">
             <input type="hidden" name="email" value="{{ a.email }}"><input type="hidden" name="password" value="{{ DEMO_PASSWORD }}">
-            <input type="hidden" name="role" value="{{ a.role }}"><input type="hidden" name="next" value="/cabinet">
+            <input type="hidden" name="role" value="{{ a.role }}"><input type="hidden" name="next" value="{{ next }}">
             <button class="spotlight group flex h-full w-full cursor-pointer flex-col rounded-xl border border-fsp-line bg-fsp-panel p-4 text-left transition-all duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:border-fsp-blue hover:shadow-[4px_4px_0px_0px_#402FFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet motion-reduce:transition-none">
               <span class="flex w-full items-start justify-between gap-3">
                 <span class="font-mono text-[15px] leading-snug text-fsp-light">{{ a.title }}</span>

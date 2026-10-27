@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Партнёр · Войти через ФСП ID{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-3xl pt-12">
+  <p class="rounded-md border border-amber-400/50 bg-amber-400/10 px-3 py-2 font-mono text-xs text-amber-200" role="note">Это тестовое приложение-партнёр внутри платформы: так выглядит вход на стороннем сайте.</p>
+  <section class="mt-4 {{ m.CARD }} p-6" aria-labelledby="demo-h">
+    <h1 id="demo-h" class="font-mono text-2xl text-fsp-light">Соревновательная платформа «Партнёр»</h1>
+    {% if error %}<p class="mt-4 rounded-lg border border-fsp-red/60 bg-fsp-red/10 p-3 text-sm text-rose-200" role="alert">{{ error }}</p>{% endif %}
+    {% if result %}
+    <p class="mt-4 text-lg text-emerald-300">{{ m.icon("check", "mr-1 inline h-5 w-5") }}Вход выполнен: {{ result.claims.name or result.claims.sub }}</p>
+    <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+      <div class="rounded-lg border border-fsp-line p-3"><dt class="font-mono text-[11px] uppercase text-fsp-muted">ФСП ID (sub)</dt><dd class="text-fsp-light">{{ result.claims.sub }}</dd></div>
+      <div class="rounded-lg border border-fsp-line p-3"><dt class="font-mono text-[11px] uppercase text-fsp-muted">Роли</dt><dd class="text-fsp-light">{{ (result.claims.roles or [])|join(", ") or "—" }}</dd></div>
+      <div class="rounded-lg border border-fsp-line p-3"><dt class="font-mono text-[11px] uppercase text-fsp-muted">Дисциплины</dt><dd class="text-fsp-light">{{ (result.claims.disciplines or [])|join(", ") or "—" }}</dd></div>
+      <div class="rounded-lg border border-fsp-line p-3"><dt class="font-mono text-[11px] uppercase text-fsp-muted">Разряд</dt><dd class="text-fsp-light">{{ result.claims.rank.title if result.claims.rank else "нет" }}{% if result.claims.rank and result.claims.rank.expires_at %} (до {{ result.claims.rank.expires_at|ru_date }}){% endif %}</dd></div>
+    </dl>
+    <p class="mt-4 font-mono text-[11px] text-fsp-muted">Подпись id_token проверена по /oidc/jwks (RS256), nonce и state совпали, области: {{ result.scope }}, access-токен действует {{ result.expires_in }} с.</p>
+    <details class="mt-3"><summary class="cursor-pointer font-mono text-xs text-fsp-light">Утверждения id_token</summary><pre class="mt-2 overflow-x-auto rounded-md bg-fsp-bg p-3 text-xs text-fsp-soft">{{ result.claims_json }}</pre></details>
+    <details class="mt-2"><summary class="cursor-pointer font-mono text-xs text-fsp-light">Ответ userinfo</summary><pre class="mt-2 overflow-x-auto rounded-md bg-fsp-bg p-3 text-xs text-fsp-soft">{{ result.userinfo_json }}</pre></details>
+    <p class="mt-4"><a href="/oidc/demo" class="{{ m.BTN_GHOST }} !py-2 !text-xs">Выйти из партнёра</a></p>
+    {% else %}
+    <p class="mt-3 text-sm text-fsp-soft">Войдите аккаунтом федерации — отдельный пароль не нужен.</p>
+    <p class="mt-5"><a href="/oidc/demo/login" class="{{ m.BTN }}">{{ m.icon("shield", "h-4 w-4") }}Войти через ФСП ID</a></p>
+    <p class="mt-4 text-xs text-fsp-muted">Что происходит: authorization code + PKCE → страница согласия → обмен кода на токены → проверка подписи → userinfo. Настройки: <a href="/.well-known/openid-configuration" class="text-fsp-violet hover:underline">discovery</a>.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

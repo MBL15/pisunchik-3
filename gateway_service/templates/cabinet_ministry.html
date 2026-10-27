@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Кабинет министерства · ФСП Оренбург{% endblock %}
+{% block content %}
+{% include "_cabinet_head.html" %}
+<p class="mt-6 flex items-center gap-2 rounded-xl border border-fsp-blue/50 bg-fsp-blue/10 px-4 py-3 text-sm text-fsp-light" role="note">
+  {{ m.icon("shield", "h-4 w-4 shrink-0 text-fsp-violet") }}Доступ только для чтения: отчёты, календарь, состав сборной и показатели развития вида спорта. Изменять данные может федерация.
+</p>
+<div class="mt-4">{{ m.degraded_notice(degraded) }}</div>
+
+<section class="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4" aria-label="Ключевые показатели">
+  {{ m.kpi("занимающихся", stats.athletes if stats else "—", "в реестре региона") }}
+  {{ m.kpi("организаций", orgs|length, "ведут подготовку", "emerald") }}
+  {{ m.kpi("соревнований", dash.competitions_season if dash else "—", "сезон " ~ (dash.season if dash else ""), "blue") }}
+  {{ m.kpi("участников", dash.participants_unique if dash else "—", "спортсменов региона в протоколах", "emerald") }}
+</section>
+
+<section class="mt-8" aria-labelledby="min-reports">
+  <h2 id="min-reports" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">Отчёты</h2>
+  <div class="flex flex-wrap gap-2">
+    <a href="/reports/headcount" class="{{ m.BTN_SM }}">{{ m.icon("pulse", "h-3.5 w-3.5") }}Численность занимающихся</a>
+    <a href="/development" class="{{ m.BTN_SM }}">{{ m.icon("pulse", "h-3.5 w-3.5") }}Показатели развития вида спорта</a>
+    <a href="/awards" class="{{ m.BTN_SM }}">{{ m.icon("trophy", "h-3.5 w-3.5") }}Премии Губернатора</a>
+    <a href="/calendar" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Календарь соревнований</a>
+    <a href="/rating" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Рейтинг</a>
+  </div>
+</section>
+
+<section class="mt-8 grid gap-6 lg:grid-cols-2">
+  <div aria-labelledby="min-cal">
+    <h2 id="min-cal" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">Ближайшие соревнования</h2>
+    <ul class="grid gap-2">
+      {% for c in upcoming %}
+      <li class="{{ m.CARD }} p-3 text-sm">
+        <div class="flex flex-wrap items-center gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{{ m.tag(c.level_status) }}</div>
+        <a href="/competitions/{{ c.id }}/regulation" class="mt-1 block font-medium text-white hover:text-fsp-violet hover:underline">{{ c.title }}</a>
+        <p class="font-mono text-[11px] text-fsp-muted">{{ c.start_date|ru_date }} · {{ c.plan_label }}, {{ c.plan_number }} · {{ c.venue }}</p>
+      </li>
+      {% else %}<li class="rounded-xl border border-dashed border-fsp-line2 p-4 text-sm text-fsp-muted">Ближайших соревнований нет.</li>{% endfor %}
+    </ul>
+  </div>
+  <div aria-labelledby="min-teams">
+    <h2 id="min-teams" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">Сборные региона</h2>
+    <ul class="grid gap-2">
+      {% for t in teams %}
+      <li class="{{ m.CARD }} flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
+        <div class="min-w-0">
+          <a href="/teams/{{ t.id }}" class="font-medium text-white hover:text-fsp-violet hover:underline">{{ t.title }}</a>
+          <p class="font-mono text-[11px] text-fsp-muted">{{ t.discipline_label }} · сезон {{ t.season }} · основной состав {{ t.main_count }}{% if t.locked %} · приказ {{ t.order_no }}{% endif %}</p>
+        </div>
+        {{ m.tag(t.status_label, "emerald" if t.locked else "amber") }}
+      </li>
+      {% else %}<li class="rounded-xl border border-dashed border-fsp-line2 p-4 text-sm text-fsp-muted">Сборные ещё не сформированы.</li>{% endfor %}
+    </ul>
+  </div>
+</section>
+{% endblock %}

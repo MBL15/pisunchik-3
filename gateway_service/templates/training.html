@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Нормативы и аттестация · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="pt-10">
+  {{ m.section_head("training status", "Нормативы и аттестация по ФССП", "Платформа принимает результаты нормативов, сама сравнивает их с порогами этапа, дисциплины и пола и показывает, кто готов к переводу на следующий этап подготовки.") }}
+  {{ m.degraded_notice(degraded) }}
+  <div class="no-print mb-6 flex flex-wrap items-center gap-3">
+    <a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
+    <a href="/training/norms" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Справочник нормативов</a>
+    <a href="/organizations" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Организации и группы</a>
+  </div>
+
+  <form method="get" data-autosubmit class="mb-4 grid gap-3 md:grid-cols-[1fr_14rem_auto]" aria-label="Фильтры">
+    {{ m.search_box(filters.q, "ФИО или ФСП ID", "tr-q") }}
+    <label class="sr-only" for="tr-st">Этап подготовки</label>
+    <select id="tr-st" name="stage" class="{{ m.INPUT }}"><option value="">Любой этап</option>{% for k, v in stages.items() %}<option value="{{ k }}" {% if filters.stage == k %}selected{% endif %}>{{ k }} · {{ v }}</option>{% endfor %}</select>
+    <label class="flex items-center gap-2 font-mono text-xs text-fsp-soft"><input type="checkbox" name="ready" value="1" {% if filters.ready %}checked{% endif %} class="h-4 w-4 accent-fsp-blue">только готовые к переводу</label>
+  </form>
+  <p class="mb-3 font-mono text-xs text-fsp-muted">Спортсменов: {{ data.total }} · готовы к переводу: <span class="text-emerald-300">{{ data.ready }}</span></p>
+
+  <div class="overflow-x-auto rounded-xl border border-fsp-line bg-fsp-panel">
+    <table class="w-full min-w-[640px] border-collapse text-sm">
+      <caption class="sr-only">Спортсмены, этап подготовки и готовность к переводу</caption>
+      <thead class="border-b border-fsp-line bg-fsp-bg/70"><tr><th scope="col" class="{{ m.TH }}">Спортсмен</th><th scope="col" class="{{ m.TH }}">Этап</th><th scope="col" class="{{ m.TH }}">Нормативы</th><th scope="col" class="{{ m.TH }}">Перевод</th></tr></thead>
+      <tbody>
+        {% for a in data["items"] %}
+        <tr class="border-b border-fsp-line/70">
+          <td class="px-3 py-3"><a href="/training/athletes/{{ a.fsp_id }}" class="font-medium text-white hover:text-fsp-violet hover:underline">{{ a.full_name }}</a><p class="font-mono text-[11px] text-fsp-muted">{{ a.fsp_id }} · {{ a.organization }}</p></td>
+          <td class="px-3 py-3 font-mono text-xs">{% if a.stage %}{{ m.tag(a.stage, "blue") }}{% else %}<span class="text-fsp-muted">не указан</span>{% endif %}</td>
+          <td class="px-3 py-3 font-mono text-xs text-fsp-soft">{% if a.total %}{{ a.passed }} из {{ a.total }}{% else %}—{% endif %}</td>
+          <td class="px-3 py-3">{% if a.ready %}{{ m.tag("готов → " ~ a.next_stage, "emerald") }}{% else %}<span class="text-xs text-fsp-muted">{{ a.reason or "—" }}</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="px-3 py-6 text-center font-mono text-sm text-fsp-muted">// спортсменов не найдено</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -8,7 +8,7 @@
   <div class="min-w-0">
     <div class="flex flex-wrap gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{{ m.tag(c.format_label) }}</div>
     <p class="mt-2 font-medium text-white">{{ c.title }}</p>
-    <p class="font-mono text-[11px] text-fsp-muted">{{ c.venue }}</p>
+    <p class="font-mono text-[11px] text-fsp-muted">{{ c.venue }} · <a href="/competitions/{{ c.id }}/panel.pdf" download class="text-fsp-violet hover:underline">состав коллегии (PDF)</a></p>
   </div>
   <span class="self-start border border-emerald-500/60 bg-emerald-500/10 px-2 py-1 font-mono text-[11px] font-bold uppercase text-emerald-300 rounded-md">{{ c.position }}</span>
 </li>
@@ -45,6 +45,7 @@
 </section>
 <section id="past" class="mt-14 scroll-mt-36" aria-labelledby="past-title">
   {{ m.step_head("02", "Мои соревнования", "past-title") }}
+  <div class="mb-3">{{ m.export_links("/judges/" ~ user.person.fsp_id ~ "/report", "Отчёт о судействе") }}</div>
   <ul class="grid gap-3" data-stagger>{% for c in assignments.past %}{{ assignment(c, True) }}{% else %}<li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Истории судейства пока нет.</li>{% endfor %}</ul>
 </section>
 <section id="category" class="mt-14 scroll-mt-36" aria-labelledby="cat-title">

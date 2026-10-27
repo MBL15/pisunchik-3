@@ -14,8 +14,8 @@ flowchart LR
 
 | Сервис | Владеет данными | Ключевые обязанности |
 |---|---|---|
-| `sportsman_service` | Person, TrainerLink, санкции, аудит | Регистрация и **выдача ФСП ID** (только здесь), проверка пароля, связи тренер↔спортсмен и их переходы, алерты сроков, агрегат выступлений (`/performance`) |
-| `competition_service` | Competition, Protocol, Application, Document, настройки рейтинга, аудит | Календарь, парсинг логов, live-поток, публикация, рейтинг, заявки с проверкой допуска, назначения судей, KPI, справки |
+| `sportsman_service` | Person, TrainerLink, санкции, аудит; нормативы и аттестация, организации, группы, журнал занятий, клиенты ФСП ID (таблицы `ext`) | Регистрация и **выдача ФСП ID** (только здесь), проверка пароля, связи тренер↔спортсмен и их переходы, алерты сроков, агрегат выступлений (`/performance`) |
+| `competition_service` | Competition, Protocol, Application, Document, настройки рейтинга, аудит; апелляции и рапорты, премии, вложения показателей, токены и вебхуки интеграций (таблицы `ext`) | Календарь, парсинг логов, live-поток, публикация, рейтинг, заявки с проверкой допуска, назначения судей, KPI, справки |
 | `market_service` | Profile (анкета), Offer (отклик), аудит | Биржа программистов: анкеты с портфолио, фильтры по навыкам, отклики и их решения. Не зависит от других сервисов: имя и ФСП ID приходят от шлюза — см. [биржа](10-market.md) |
 | `gateway_service` | Ничего не хранит (только подписанные cookie) | UI, сессия и активная роль, ролевые проверки, публичный API-шлюз с allowlist, QR. Код: `main.py` (приложение, кабинеты), `web.py` (общий слой), `routes/` (реестр, модерация, журнал, лента), `listing_ui.py` |
 
@@ -91,7 +91,7 @@ sequenceDiagram
 
 ## Публичный API-шлюз
 
-`GET /api/public/{service}/{path}` проксирует только allowlist (`_PUBLIC_ROUTES`):
+`GET /api/public/{service}/{path}` проксирует только allowlist (`_PUBLIC_ROUTES`); протокол отдаётся только опубликованный (черновик — `404`):
 
 - competition: `api/v1/competitions`, `api/v1/competitions/{id}`, `api/v1/competitions/{id}/protocol`,
   `api/v1/rating`, `api/v1/rating/settings`, `api/v1/documents/{номер}/verify`;
@@ -113,6 +113,8 @@ sequenceDiagram
 | `FSP_HOST` | `127.0.0.1` | Хост для всех сервисов |
 | `FSP_SPORTSMAN_URL` / `FSP_COMPETITION_URL` / `FSP_MARKET_URL` | `http://{HOST}:{PORT}` | Адреса downstream-сервисов |
 | `FSP_PUBLIC_BASE_URL` | `http://localhost:8000` | База для QR-ссылок проверки справок |
+| `FSP_SERVICE_TOKEN` | — | Служебный токен шлюза: при заданном сервисы требуют заголовок `X-FSP-Service-Token` (в compose включён) |
+| `FSP_COOKIE_SECURE` | по `FSP_PUBLIC_BASE_URL` | Флаг `Secure` у cookie; включается сам при `https://` |
 | `FSP_SECRET_KEY` | `dev-only-fsp56-change-me` | HMAC для сессий, flash и кодов справок — **обязательно сменить вне dev** |
 | `FSP_SERVICE_TIMEOUT` | `5.0` | Таймаут межсервисных вызовов, с |
 | `FSP_DEMO_TODAY` | — | Зафиксировать «сегодня» (`YYYY-MM-DD`) для воспроизводимой демонстрации |

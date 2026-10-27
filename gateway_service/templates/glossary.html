@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Справочник понятий · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-4xl pt-10">
+  {{ m.section_head("glossary --plain", "Справочник понятий", "Разряды и звания, статусы и типы соревнований, антидопинговые правила, памятки для тренеров, судей и организаций — простым языком.") }}
+  <nav class="no-print mb-8 flex flex-wrap gap-2" aria-label="Разделы справочника">
+    {% for cat, rows in groups %}<a href="#g{{ loop.index }}" class="{{ m.BTN_SM }}">{{ cat }}</a>{% endfor %}
+    <a href="#howto" class="{{ m.BTN_SM }}">Как стать тренером, судьёй, начать подготовку</a>
+  </nav>
+
+  {% for cat, rows in groups %}
+  <section id="g{{ loop.index }}" class="mb-8 scroll-mt-28" aria-labelledby="g{{ loop.index }}-h">
+    <h2 id="g{{ loop.index }}-h" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-violet">{{ cat }}</h2>
+    <dl class="grid gap-2">
+      {% for term, text in rows %}
+      <div class="{{ m.CARD }} p-4"><dt class="font-medium text-white">{{ term }}</dt><dd class="mt-1 text-sm text-fsp-soft">{{ text }}</dd></div>
+      {% endfor %}
+    </dl>
+    {% if cat == "Антидопинг" %}
+    <p class="mt-3 flex flex-wrap gap-2 text-sm">
+      <a href="{{ rusada.site }}" target="_blank" rel="noopener noreferrer" class="{{ m.BTN_SM }}">{{ m.icon("link", "h-3.5 w-3.5") }}rusada.ru</a>
+      <a href="{{ rusada.course }}" target="_blank" rel="noopener noreferrer" class="{{ m.BTN_SM }}">{{ m.icon("link", "h-3.5 w-3.5") }}Онлайн-курс РУСАДА</a>
+      <a href="{{ rusada.rules }}" target="_blank" rel="noopener noreferrer" class="{{ m.BTN_SM }}">{{ m.icon("link", "h-3.5 w-3.5") }}Документы и правила</a>
+    </p>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  <section id="howto" class="scroll-mt-28" aria-labelledby="howto-h">
+    <h2 id="howto-h" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-violet">Памятки</h2>
+    <div class="grid gap-3 lg:grid-cols-3">
+      {% for key, title, steps in how_to %}
+      <article id="howto-{{ key }}" class="{{ m.CARD }} p-4">
+        <h3 class="font-medium text-white">{{ title }}</h3>
+        <ol class="mt-2 list-decimal space-y-1.5 pl-5 text-sm text-fsp-soft">{% for s in steps %}<li>{{ s }}</li>{% endfor %}</ol>
+      </article>
+      {% endfor %}
+    </div>
+    <p class="mt-4 text-sm text-fsp-muted">Не нашли нужное? Начните с <a href="/#navigator" class="text-fsp-violet hover:underline">навигатора для новичка</a> или <a href="/register" class="text-fsp-violet hover:underline">зарегистрируйтесь</a>.</p>
+  </section>
+</div>
+{% endblock %}

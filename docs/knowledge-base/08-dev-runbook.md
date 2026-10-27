@@ -141,4 +141,4 @@ e2e меняет данные (в памяти или в Postgres) — посл�
 
 ## Всё в Docker
 
-`docker compose up -d --build` поднимает Postgres, sportsman, competition, market и gateway (http://localhost:8000, сервисы 8001/8002/8003). Состояние хранится в томе `fsp_pg`; `docker compose down -v` — полный сброс. Переменные (`FSP_SECRET_KEY`, `FSP_PUBLIC_BASE_URL`, `FSP_TELEGRAM_TOKEN`, `FSP_DEMO_TODAY`) берутся из окружения или `.env`. Порты 8000–8003 должны быть свободны (остановите `py run_all.py`).
+`docker compose up -d --build` поднимает Postgres, sportsman, competition, market и gateway. Наружу опубликован только шлюз (http://localhost:8000); сервисы доступны по внутренней сети compose и требуют служебный токен (`FSP_SERVICE_TOKEN`), Postgres слушает только `127.0.0.1:5432`. Порты сервисов для отладки открывайте в `docker-compose.override.yml`. Состояние хранится в томе `fsp_pg`; `docker compose down -v` — полный сброс. Переменные (`FSP_SECRET_KEY`, `FSP_PUBLIC_BASE_URL`, `FSP_TELEGRAM_TOKEN`, `FSP_DEMO_TODAY`) берутся из окружения или `.env`. Порты 8000–8003 должны быть свободны (остановите `py run_all.py`).

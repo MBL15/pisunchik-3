@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Апелляции и нарушения · ФСП Оренбург{% endblock %}
+{% block content %}
+{% set is_admin = user.role == "admin" %}
+{% macro evidence_fields(prefix) %}
+<fieldset class="grid gap-2"><legend class="{{ m.LABEL }}">Доказательства (логи, скриншоты, видео — ссылки)</legend>
+  {% for i in evidence_rows %}
+  <div class="grid gap-2 sm:grid-cols-[8rem_1fr_1.4fr]">
+    <select name="ev_kind" class="{{ m.INPUT }}" aria-label="Тип доказательства {{ loop.index }}">{% for k, v in kinds.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+    <input name="ev_title" maxlength="100" placeholder="Название" aria-label="Название доказательства {{ loop.index }}" class="{{ m.INPUT }}">
+    <input name="ev_url" type="url" maxlength="300" placeholder="https://…" aria-label="Ссылка на доказательство {{ loop.index }}" class="{{ m.INPUT }}">
+  </div>
+  {% endfor %}
+</fieldset>
+{% endmacro %}
+{% macro history(item) %}
+<ol class="mt-2 grid gap-1 border-l border-fsp-line pl-3 text-xs text-fsp-muted" aria-label="История">
+  {% for h in item.history %}<li><time datetime="{{ h.at }}">{{ h.at|ru_date }} {{ h.at[11:16] }}</time> · {{ h.note or h.status }}</li>{% endfor %}
+</ol>
+{% endmacro %}
+{% macro tone(status) %}{{ {"SUBMITTED": "amber", "REPORTED": "amber", "IN_REVIEW": "blue", "ACCEPTED": "emerald", "DECIDED": "emerald"}.get(status, "slate") }}{% endmacro %}
+
+<div class="mx-auto max-w-4xl pt-10">
+  {{ m.section_head("appeals --open", "Апелляции и нарушения", "Подача апелляции на результат с доказательствами, рапорт о нарушении, решение федерации и корректировка протокола. У каждого шага — статус, история и уведомления.") }}
+  {{ m.degraded_notice(degraded) }}
+  <div class="no-print mb-6 flex flex-wrap items-center gap-3">
+    <a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
+    {% if is_admin %}<form method="get" class="flex items-center gap-2"><label for="ap-st" class="font-mono text-xs text-fsp-muted">Статус</label>
+      <select id="ap-st" name="status" class="{{ m.INPUT }} !w-auto" onchange="this.form.submit()"><option value="">любой</option>{% for k, v in (("SUBMITTED", "Подана"), ("IN_REVIEW", "На рассмотрении"), ("REPORTED", "Рапорт подан"), ("ACCEPTED", "Удовлетворена"), ("REJECTED", "Отклонена"), ("DECIDED", "Решение принято")) %}<option value="{{ k }}" {% if status == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></form>{% endif %}
+  </div>
+
+  {% if user.role in ("athlete", "trainer") %}
+  <section class="{{ m.CARD }} p-5" id="new-appeal" aria-labelledby="na-h">
+    <h2 id="na-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Подать апелляцию</h2>
+    {% if results %}
+    <form method="post" action="/appeals" class="mt-3 grid gap-3">
+      <div><label for="ap-res" class="{{ m.LABEL }}">Оспариваемый результат</label>
+        <select id="ap-res" name="result" required class="{{ m.INPUT }}">{% for r in results %}<option value="{{ r.fsp_id }}|{{ r.competition_id }}">{{ r.name }} · {{ r.title }} · {{ "DSQ" if r.status == "DSQ" else (r.place ~ " место") }}</option>{% endfor %}</select></div>
+      <div><label for="ap-sub" class="{{ m.LABEL }}">Суть апелляции</label><input id="ap-sub" name="subject" required minlength="5" maxlength="160" placeholder="Например: не засчитана задача C" class="{{ m.INPUT }}"></div>
+      <div><label for="ap-d" class="{{ m.LABEL }}">Обоснование</label><textarea id="ap-d" name="description" required minlength="20" maxlength="2000" rows="4" class="{{ m.INPUT }}"></textarea></div>
+      {{ evidence_fields("a") }}
+      <div><button class="{{ m.BTN }}">Подать апелляцию</button></div>
+    </form>
+    {% else %}<p class="mt-2 text-sm text-fsp-muted">Оспаривать пока нечего: результатов в опубликованных протоколах нет.</p>{% endif %}
+  </section>
+  {% endif %}
+
+  {% if user.role in ("admin", "judge") %}
+  <section class="{{ m.CARD }} p-5 {% if user.role in ('athlete', 'trainer') %}mt-6{% endif %}" id="new-violation" aria-labelledby="nv-h">
+    <h2 id="nv-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Рапорт о нарушении</h2>
+    <form method="get" class="mt-3 flex flex-wrap items-end gap-2"><div><label for="v-c" class="{{ m.LABEL }}">Соревнование</label>
+      <select id="v-c" name="violation_cid" class="{{ m.INPUT }}">{% for c in report_comps %}<option value="{{ c.id }}" {% if c.id == violation_cid %}selected{% endif %}>{{ c.code }} · {{ c.title }}</option>{% endfor %}</select></div>
+      <button class="{{ m.BTN_SM }}">Выбрать участников</button></form>
+    {% if entries %}
+    <form method="post" action="/violations" class="mt-4 grid gap-3">
+      <input type="hidden" name="competition_id" value="{{ violation_cid }}">
+      <div><label for="v-s" class="{{ m.LABEL }}">Участник</label><select id="v-s" name="subject_fsp_id" required class="{{ m.INPUT }}">{% for e in entries %}<option value="{{ e.fsp_id }}">{{ e.full_name }} · {{ "DSQ" if e.status == "DSQ" else (e.place ~ " место") }}</option>{% endfor %}</select></div>
+      <div><label for="v-d" class="{{ m.LABEL }}">Описание нарушения</label><textarea id="v-d" name="description" required minlength="20" maxlength="2000" rows="4" class="{{ m.INPUT }}"></textarea></div>
+      {{ evidence_fields("v") }}
+      <div><button class="{{ m.BTN }}">Подать рапорт</button></div>
+    </form>
+    {% elif not report_comps %}<p class="mt-2 text-sm text-fsp-muted">Нет соревнований с протоколом: рапорт подаётся на участника протокола.</p>{% endif %}
+  </section>
+  {% endif %}
+
+  <section class="mt-8" id="appeals-list" aria-labelledby="al-h">
+    <h2 id="al-h" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">Апелляции · {{ appeals|length }}</h2>
+    <ul class="grid gap-3">
+      {% for a in appeals %}
+      <li class="{{ m.CARD }} p-4" id="appeal-{{ a.id }}">
+        <div class="flex flex-wrap items-center justify-between gap-2"><p class="font-medium text-white">№{{ a.id }} · {{ a.subject }}</p>{{ m.tag(a.status_label, tone(a.status)) }}</div>
+        <p class="mt-1 font-mono text-[11px] text-fsp-muted">{{ a.athlete_name }} · <a href="/protocols/{{ a.competition_id }}" class="text-fsp-violet hover:underline">{{ a.competition_title }}</a> · {{ a.created_at|ru_date }}</p>
+        <p class="mt-2 whitespace-pre-line text-sm text-fsp-soft">{{ a.description }}</p>
+        {% if a.evidence %}<ul class="mt-2 flex flex-wrap gap-2">{% for e in a.evidence %}<li><a href="{{ e.url }}" target="_blank" rel="noopener noreferrer nofollow" class="{{ m.BTN_SM }}">{{ m.icon("link", "h-3.5 w-3.5") }}{{ e.kind_label }}: {{ e.title }}</a></li>{% endfor %}</ul>{% endif %}
+        {{ history(a) }}
+        {% if a.decision %}<p class="mt-2 rounded-md border border-fsp-line px-3 py-2 text-sm {{ 'text-emerald-200' if a.decision.accepted else 'text-rose-200' }}">Решение: {{ a.decision.rationale }}{% if a.decision.correction %} · протокол скорректирован: {{ a.decision.correction.action_label }} ({{ a.decision.correction.before.place or "DSQ" }} → {{ a.decision.correction.after.place or "DSQ" }}){% endif %}</p>{% endif %}
+        {% if a.status == "SUBMITTED" and user.role in ("athlete", "trainer") %}<form method="post" action="/appeals/{{ a.id }}/action" class="mt-3"><input type="hidden" name="action" value="withdraw"><button class="{{ m.BTN_SM }}">Отозвать</button></form>{% endif %}
+        {% if is_admin and a.open %}
+        {% if a.status == "SUBMITTED" %}<form method="post" action="/appeals/{{ a.id }}/action" class="mt-3"><input type="hidden" name="action" value="review"><button class="{{ m.BTN_SM }}">Взять в рассмотрение</button></form>{% endif %}
+        <details class="mt-3 rounded-lg border border-fsp-line2 p-3"><summary class="cursor-pointer font-mono text-xs text-fsp-light">Принять решение</summary>
+          <form method="post" action="/appeals/{{ a.id }}/decision" class="mt-3 grid gap-3">
+            <div class="flex flex-wrap gap-4 text-sm text-fsp-soft"><label class="flex items-center gap-2"><input type="radio" name="decision" value="accept" required class="accent-emerald-500">Удовлетворить</label><label class="flex items-center gap-2"><input type="radio" name="decision" value="reject" class="accent-rose-500">Отклонить</label></div>
+            <div><label for="dr-{{ a.id }}" class="{{ m.LABEL }}">Обоснование решения</label><textarea id="dr-{{ a.id }}" name="rationale" required minlength="10" maxlength="1000" rows="3" class="{{ m.INPUT }}"></textarea></div>
+            <div class="grid gap-2 sm:grid-cols-[1.4fr_repeat(3,1fr)]">
+              <div><label for="dc-{{ a.id }}" class="{{ m.LABEL }}">Корректировка протокола</label><select id="dc-{{ a.id }}" name="correction" class="{{ m.INPUT }}"><option value="">без корректировки</option><option value="RESTORE">снять дисквалификацию</option><option value="DSQ">дисквалифицировать результат</option><option value="RESCORE">пересчитать результат</option><option value="TECH_DEFEAT">техническое поражение</option></select></div>
+              <div><label for="ds-{{ a.id }}" class="{{ m.LABEL }}">Решено</label><input id="ds-{{ a.id }}" name="solved" type="number" min="0" max="26" class="{{ m.INPUT }}"></div>
+              <div><label for="dp-{{ a.id }}" class="{{ m.LABEL }}">Штраф, мин</label><input id="dp-{{ a.id }}" name="penalty" type="number" min="0" class="{{ m.INPUT }}"></div>
+              <div><label for="dsc-{{ a.id }}" class="{{ m.LABEL }}">Баллы</label><input id="dsc-{{ a.id }}" name="score" type="number" min="0" step="0.01" class="{{ m.INPUT }}"></div>
+            </div>
+            <p class="text-xs text-fsp-muted">Пересчёт задаёт новые итоги (решено/штраф для ICPC, баллы для остальных). Места пересчитываются, рейтинг и история обновятся.</p>
+            <div><button class="{{ m.BTN }}" data-confirm="Принять решение по апелляции? Оно будет отправлено заявителю." data-confirm-label="Принять решение">Сохранить решение</button></div>
+          </form></details>
+        {% endif %}
+      </li>
+      {% else %}<li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Апелляций нет.</li>{% endfor %}
+    </ul>
+  </section>
+
+  {% if user.role in ("admin", "judge", "athlete") %}
+  <section class="mt-8" id="violations-list" aria-labelledby="vl-h">
+    <h2 id="vl-h" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">Рапорты о нарушениях · {{ violations|length }}</h2>
+    <ul class="grid gap-3">
+      {% for v in violations %}
+      <li class="{{ m.CARD }} p-4" id="violation-{{ v.id }}">
+        <div class="flex flex-wrap items-center justify-between gap-2"><p class="font-medium text-white">№{{ v.id }} · {{ v.subject_name }}</p>{{ m.tag(v.decision_label or v.status_label, tone(v.status)) }}</div>
+        <p class="mt-1 font-mono text-[11px] text-fsp-muted"><a href="/protocols/{{ v.competition_id }}" class="text-fsp-violet hover:underline">{{ v.competition_title }}</a> · {{ v.created_at|ru_date }}</p>
+        <p class="mt-2 whitespace-pre-line text-sm text-fsp-soft">{{ v.description }}</p>
+        {% if v.evidence %}<ul class="mt-2 flex flex-wrap gap-2">{% for e in v.evidence %}<li><a href="{{ e.url }}" target="_blank" rel="noopener noreferrer nofollow" class="{{ m.BTN_SM }}">{{ m.icon("link", "h-3.5 w-3.5") }}{{ e.kind_label }}: {{ e.title }}</a></li>{% endfor %}</ul>{% endif %}
+        {{ history(v) }}
+        {% if v.status == "DECIDED" %}<p class="mt-2 rounded-md border border-fsp-line px-3 py-2 text-sm text-fsp-soft">Решение: {{ v.decision_label }} — {{ v.rationale }}{% if v.sanction %} · санкция до {{ v.sanction.date_to|ru_date }}{% endif %}</p>{% endif %}
+        {% if is_admin and v.open %}
+        {% if v.status == "REPORTED" %}<form method="post" action="/violations/{{ v.id }}/action" class="mt-3"><button class="{{ m.BTN_SM }}">Взять в рассмотрение</button></form>{% endif %}
+        <details class="mt-3 rounded-lg border border-fsp-line2 p-3"><summary class="cursor-pointer font-mono text-xs text-fsp-light">Принять решение</summary>
+          <form method="post" action="/violations/{{ v.id }}/decision" class="mt-3 grid gap-3 sm:grid-cols-2">
+            <div><label for="vd-{{ v.id }}" class="{{ m.LABEL }}">Решение</label><select id="vd-{{ v.id }}" name="decision" class="{{ m.INPUT }}"><option value="DSQ">Дисквалификация</option><option value="TECH_DEFEAT">Техническое поражение</option><option value="NO_VIOLATION">Нарушение не подтверждено</option></select></div>
+            <div><label for="vs-{{ v.id }}" class="{{ m.LABEL }}">Санкция в реестре, дней (0 — только протокол)</label><input id="vs-{{ v.id }}" name="sanction_days" type="number" min="0" max="3650" value="0" class="{{ m.INPUT }}"></div>
+            <div class="sm:col-span-2"><label for="vr-{{ v.id }}" class="{{ m.LABEL }}">Основание в протоколе (для дисквалификации)</label><input id="vr-{{ v.id }}" name="reason" maxlength="200" class="{{ m.INPUT }}"></div>
+            <div class="sm:col-span-2"><label for="vt-{{ v.id }}" class="{{ m.LABEL }}">Обоснование решения</label><textarea id="vt-{{ v.id }}" name="rationale" required minlength="10" maxlength="1000" rows="3" class="{{ m.INPUT }}"></textarea></div>
+            <div class="sm:col-span-2"><button class="{{ m.BTN }}" data-confirm="Принять решение по рапорту? Протокол и реестр изменятся." data-confirm-label="Принять решение">Сохранить решение</button></div>
+          </form></details>
+        {% endif %}
+      </li>
+      {% else %}<li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Рапортов нет.</li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

@@ -7,3 +7,4 @@ docs
 pitch
 tests
 .telegram_links.json
+.oidc_key.pem

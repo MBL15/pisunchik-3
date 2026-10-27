@@ -9,7 +9,8 @@ from datetime import date, datetime
 from fastapi import FastAPI, HTTPException, Query, Request
 from starlette.concurrency import run_in_threadpool
 
-from competition_service import evsk
+from competition_service import appeals, awards, development, evsk, integrations
+from competition_service.deps import clients
 from competition_service.log_parser import parse_log
 from competition_service.models import (
     ActorIn, Application, ApplicationIn, BatchDecisionIn, Competition, CompetitionCreateIn, CompetitionTypeIn, DecisionIn,
@@ -21,17 +22,17 @@ from competition_service.rating import RatingSettings, compute_rating
 from competition_service.seed import seed
 from competition_service.store import DDL, restore, snapshot, store
 from shared import config
+from shared import service_auth
 from shared.db import Persistence
 from shared.domain import (
     AGE_GROUPS, DEFAULT_COMPETITION_TYPES, DISCIPLINE_BY_CODE, EVSK_REQUIREMENTS, JUDGE_POSITIONS, LEVEL_LABELS,
     RANK_BY_CODE, RANK_ORDER, REGION_CODE, SANCTION_LABELS, TEAM_ROLE_LABELS, ApplicationStatus, CompetitionStatus,
-    LinkStatus, protocol_mode,
+    LinkStatus, age_group_fit, protocol_mode,
 )
 from shared.http import ServiceClient, ServiceError
 from shared.listing import AUDIT_LIMIT, MAX_LIMIT, audit_page, facets, matches, page, search_audit, tokens
 
 db = Persistence(DDL)
-clients: dict[str, ServiceClient] = {}
 LIVE_TICK_MIN_INTERVAL = 1.5  # seconds; many open dashboards must not fast-forward the stream
 
 
@@ -47,11 +48,18 @@ async def lifespan(_: FastAPI):
         else:
             db.save(snapshot(store))
     clients["sportsman"] = ServiceClient("sportsman_service", config.SPORTSMAN_URL, caller="competition_service")
+    driver = asyncio.create_task(_live_driver())
     yield
+    driver.cancel()
     await clients["sportsman"].aclose()
 
 
 app = FastAPI(title="ФСП Оренбург · Competition Service", version="1.0.0", lifespan=lifespan)
+service_auth.install(app)
+app.include_router(development.router)
+app.include_router(awards.router)
+app.include_router(appeals.router)
+app.include_router(integrations.router)
 
 
 @app.middleware("http")
@@ -80,7 +88,7 @@ def _present_protocol(cid: int) -> dict:
         "last_time": proto.last_time, "published": proto.published,
         "published_at": proto.published_at.isoformat(timespec="seconds") if proto.published_at else None,
         "updated_at": proto.updated_at.isoformat(timespec="seconds"), "source": proto.source,
-        "raw_tail": proto.raw_log[-14:], "live_remaining": len(store.live_queue.get(cid, [])), "tasks": tasks,
+        "corrections": proto.corrections, "raw_tail": proto.raw_log[-14:], "live_remaining": len(store.live_queue.get(cid, [])), "tasks": tasks,
     }
 
 
@@ -142,6 +150,7 @@ async def create_competition(data: CompetitionCreateIn):
                     **data.model_dump(exclude={"actor"}))
     store.competitions[cid] = c
     store.log(data.actor, "Создано соревнование", f"{c.code} · {c.title}")
+    integrations.emit("competition.published", integrations.competition_payload(store.present_competition(c, today)))
     return store.present_competition(c, today)
 
 
@@ -237,9 +246,8 @@ async def ingest_log(cid: int, data: IngestIn):
     return _present_protocol(cid)
 
 
-@app.post("/api/v1/competitions/{cid}/live/tick")
-async def live_tick(cid: int):
-    _competition(cid)
+def _advance_live(cid: int) -> None:
+    """Один шаг демонстрационного live-потока: до двух событий из очереди, не чаще `LIVE_TICK_MIN_INTERVAL`."""
     queue = store.live_queue.get(cid)
     now = time.monotonic()
     proto = store.protocols.get(cid)
@@ -255,6 +263,21 @@ async def live_tick(cid: int):
         batch, store.live_queue[cid] = queue[:2], queue[2:]
         proto.raw_log.extend(batch)
         store.reparse(proto)
+
+
+async def _live_driver() -> None:
+    """Поток движется по часам сервиса, а не по запросам посетителей: чтение протокола остаётся безопасным GET."""
+    while True:
+        await asyncio.sleep(LIVE_TICK_MIN_INTERVAL)
+        for cid in list(store.live_replay) + [c for c in store.live_queue if c not in store.live_replay]:
+            _advance_live(cid)
+
+
+@app.post("/api/v1/competitions/{cid}/live/tick")
+async def live_tick(cid: int):
+    """Принудительный шаг потока (отладка и тесты); в работе поток двигает `_live_driver`."""
+    _competition(cid)
+    _advance_live(cid)
     return _present_protocol(cid)
 
 
@@ -264,6 +287,8 @@ def _publish(c: Competition, proto: Protocol, actor: str) -> None:
     c.status = CompetitionStatus.FINISHED
     store.reparse(proto)
     store.log(actor, "Протокол опубликован", f"{c.code}: {len(proto.entries)} участников → рейтинг и история")
+    integrations.emit("protocol.published", {"competition_id": c.id, "code": c.code, "title": c.title, "participants": len(proto.entries),
+                                             "protocol_url": f"/api/ext/v1/competitions/{c.id}/protocol"})
 
 
 @app.post("/api/v1/competitions/{cid}/protocol/publish")
@@ -331,6 +356,16 @@ async def enter_results(cid: int, data: ResultsIn):
     if data.publish:
         _publish(c, new, data.actor)
     return _present_protocol(cid)
+
+
+@app.post("/api/v1/integrations/import/{cid}")
+async def import_results(cid: int, data: integrations.ImportIn):
+    """Импорт результатов из внешней системы: участники — только с одобренными заявками; создаётся черновик, публикует федерация."""
+    client = store.ext.table(integrations.CLIENTS).get(data.client_id)
+    if not client or not client["active"] or "results:write" not in client["scopes"]:
+        raise HTTPException(403, "У токена нет области results:write")
+    actor = f"ext:{client['name']}" + (f" ({data.system})" if data.system else "")
+    return await enter_results(cid, ResultsIn(results=data.results, actor=actor, publish=False))
 
 
 @app.get("/api/v1/results")
@@ -615,9 +650,9 @@ async def submit_application(data: ApplicationIn):
         raise HTTPException(422, "Спортсмен не заявлен в дисциплине соревнования")
     if athlete["is_sanctioned"]:
         raise HTTPException(422, "Спортсмен с действующей дисквалификацией не может быть заявлен")
-    lo, hi = AGE_GROUPS[c.age_group]
-    if not lo <= athlete["age"] <= hi:
-        raise HTTPException(422, f"Возраст спортсмена ({athlete['age']}) не соответствует группе «{c.age_group}»")
+    age, fits = age_group_fit(athlete["birth_date"], c.age_group, c.start_date)
+    if not fits:
+        raise HTTPException(422, f"Возраст спортсмена на дату старта ({age}) не соответствует группе «{c.age_group}»")
     if data.submitted_by != data.athlete_fsp_id and not any(
             link["trainer_fsp_id"] == data.submitted_by and link["status"] == LinkStatus.ACTIVE
             and link["discipline"] == c.discipline for link in links):
@@ -675,6 +710,14 @@ async def search_applications(status: str | None = None, competition_id: int | N
     return result
 
 
+def _announce_approval(a: Application) -> None:
+    """Вебхук `application.approved`: только идентификаторы, без ФИО."""
+    if a.status == ApplicationStatus.APPROVED:
+        c = store.competitions[a.competition_id]
+        integrations.emit("application.approved", {"application_id": a.id, "competition_id": c.id, "competition_code": c.code,
+                                                   "athlete_fsp_id": a.athlete_fsp_id})
+
+
 @app.post("/api/v1/applications/decisions")
 async def decide_applications(data: BatchDecisionIn):
     """Массовое решение: каждая заявка решается отдельно, ошибки не мешают остальным; протоколы пересчитываются один раз."""
@@ -693,6 +736,7 @@ async def decide_applications(data: BatchDecisionIn):
         a.status, a.decided_at, a.comment = data.status, datetime.now(), data.comment
         touched.add(a.competition_id)
         store.log(data.actor, "Модерация заявки", f"#{a.id} {a.athlete_name} → {data.status} (пакетно)")
+        _announce_approval(a)
         done.append(store.present_application(a))
     for cid in touched:
         if (proto := store.protocols.get(cid)) and not proto.published:
@@ -711,6 +755,7 @@ async def decide_application(app_id: int, data: DecisionIn):
     if (proto := store.protocols.get(a.competition_id)) and not proto.published:
         store.reparse(proto)
     store.log(data.actor, "Модерация заявки", f"#{a.id} {a.athlete_name} → {data.status}")
+    _announce_approval(a)
     return store.present_application(a)
 
 

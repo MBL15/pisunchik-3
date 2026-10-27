@@ -53,7 +53,7 @@ Swagger: `http://127.0.0.1:8001/docs` (sportsman), `http://127.0.0.1:8002/docs` 
 | `GET /api/v1/competitions/{id}/protocol/entry-sheet` | Лист ввода: участники с одобренными заявками, внесённые результаты, заявки на модерации, текущий черновик | — |
 | `POST /api/v1/competitions/{id}/protocol/results` | Ввод результатов `{results: [{fsp_id, solved, penalty, score, dsq, dsq_reason}], actor, publish}` → протокол ранжируется автоматически | `422`: старт не наступил, нет одобренных заявок, участник без одобренной заявки, дубль; `409`: уже опубликован или live из лога |
 | `POST /api/v1/competitions/{id}/protocol/ingest` | Загрузка лога `{log, actor}` | `422`, если нет участников; предупреждения парсера в ответе |
-| `POST /api/v1/competitions/{id}/live/tick` | Следующий шаг live-потока | Не чаще 1.5 с |
+| `POST /api/v1/competitions/{id}/live/tick` | Ручной шаг live-потока (отладка; обычно поток движет фоновая задача сервиса) | Не чаще 1.5 с |
 | `POST /api/v1/competitions/{id}/protocol/publish` | Публикация → `FINISHED` | `404` нет протокола, `409` уже опубликован |
 | `GET /api/v1/results?fsp_ids=a,b&season=` | Опубликованные результаты участников | — |
 | `GET/PUT /api/v1/rating/settings` | Таблица баллов, коэффициент, минимум призовых | PUT пересчитывает все протоколы |

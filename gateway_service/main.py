@@ -8,19 +8,23 @@
   (registry, moderation, audit, notifications) are routers in `routes/`.
 """
 import asyncio
+import logging
 import re
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from gateway_service import market_api, notify, reports
+from gateway_service import integrations_api, market_api, notify, reports
 from gateway_service.listing_ui import chips, list_args, pages
 from gateway_service.qr import qr_svg
-from gateway_service.routes import audit, market, moderation, notifications, registry
+from gateway_service.routes import (
+    appeals, audit, awards, guide, integrations, judging, market, ministry, moderation, notifications, oidc, organizations, registry,
+    training,
+)
 from gateway_service.session import clear_session, write_session
 from gateway_service.web import (
     BASE_DIR, Redirect, admin_ids, back, clients, current_user, discipline_audience, download, form_dict, humanize,
@@ -36,6 +40,8 @@ JUDGE_CATEGORY_DEFAULT_YEARS = 2  # подсказка в форме решен�
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if config.SECRET_KEY == config.DEV_SECRET_KEY and config.PUBLIC_BASE_URL.startswith("https://"):
+        logging.getLogger("fsp.gateway").warning("FSP_SECRET_KEY не задан: сессии подписаны ключом по умолчанию — задайте свой")
     clients["sportsman"] = ServiceClient("sportsman_service", config.SPORTSMAN_URL, caller="gateway")
     clients["competition"] = ServiceClient("competition_service", config.COMPETITION_URL, caller="gateway")
     clients["market"] = ServiceClient("market_service", config.MARKET_URL, caller="gateway")
@@ -49,7 +55,10 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="ФСП Оренбург · Gateway", version="1.0.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/api/market/v1", market_api.api)
-for router in (registry.router, moderation.router, audit.router, notifications.router, market.router):
+app.mount("/api/ext/v1", integrations_api.api)
+for router in (registry.router, moderation.router, audit.router, notifications.router, market.router, guide.router, judging.router,
+               ministry.router, awards.router, appeals.router, training.router, organizations.router, oidc.router,
+               integrations.router):
     app.include_router(router)
 
 
@@ -132,9 +141,8 @@ async def calendar_page(request: Request, discipline: str = "", plan: str = "", 
         status=status or None, level=level or None, season=season_no,
         age_group=age_group if age_group in domain.AGE_GROUPS else None), [], degraded)
     athlete = user["person"] if user and Role.ATHLETE in user["person"]["roles"] else None
-    for c in comps:  # спортсмену платформа сама показывает, куда он проходит по возрасту
-        lo, hi = domain.AGE_GROUPS[c["age_group"]]
-        c["age_ok"] = lo <= athlete["age"] <= hi if athlete else None
+    for c in comps:  # спортсмену платформа сама показывает, куда он проходит по возрасту на дату старта
+        c["age_ok"] = domain.age_group_fit(athlete["birth_date"], c["age_group"], c["start_date"])[1] if athlete else None
     if athlete and mine:
         comps = [c for c in comps if c["age_ok"] and c["discipline"] in athlete["disciplines"]]
     today = config.today().isoformat()
@@ -169,7 +177,10 @@ async def regulation_page(request: Request, cid: int):
 
 @app.get("/partials/live/{cid}", response_class=HTMLResponse)
 async def live_partial(request: Request, cid: int, compact: bool = False):
-    proto = await clients["competition"].post(f"/api/v1/competitions/{cid}/live/tick")
+    """Живая таблица для всех: только идущее соревнование или опубликованный протокол. Поток двигает сервис, а не этот GET."""
+    proto = await clients["competition"].get(f"/api/v1/competitions/{cid}/protocol")
+    if not proto["published"] and proto["competition"]["status"] != "LIVE":
+        raise HTTPException(404, "Протокол ещё не опубликован")
     return templates.TemplateResponse(request, "_live_protocol.html", {"p": proto, "compact": compact})
 
 
@@ -238,7 +249,7 @@ async def login_submit(request: Request):
     except ServiceError as exc:
         if exc.unavailable:
             raise
-        return back(f"/login?next={nxt}", "error", humanize(exc.detail))
+        return back(f"/login?next={quote(nxt, safe='')}", "error", humanize(exc.detail))
     role = form.get("role") if form.get("role") in person["roles"] else person["roles"][0]
     resp = back(nxt, "ok", f"Добро пожаловать, {person['first_name']}! Активная роль: {domain.ROLE_LABELS[role]}")
     write_session(resp, person["fsp_id"], role)
@@ -269,7 +280,7 @@ async def cabinet(request: Request):
     user = await require(request)
     return await {
         Role.ADMIN: _cabinet_admin, Role.TRAINER: _cabinet_trainer,
-        Role.ATHLETE: _cabinet_athlete, Role.JUDGE: _cabinet_judge,
+        Role.ATHLETE: _cabinet_athlete, Role.JUDGE: _cabinet_judge, Role.MINISTRY: ministry.cabinet_ministry,
     }[user["role"]](request, user)
 
 
@@ -426,13 +437,13 @@ async def _cabinet_athlete(request: Request, user: dict):
         safe(clients["sportsman"].get("/api/v1/qualification-requests", person_fsp_id=fid, kind="RANK"), [], degraded),
     )
     applied = {a["competition_id"] for a in apps if a["status"] != "REJECTED"}
-    age = user["person"]["age"]
+    birth = user["person"]["birth_date"]
     comps = []
     for c in open_comps:
         if c["discipline"] not in user["person"]["disciplines"]:
             continue
-        lo, hi = domain.AGE_GROUPS[c["age_group"]]
-        comps.append({**c, "age_ok": lo <= age <= hi, "applied": c["id"] in applied})
+        age, fits = domain.age_group_fit(birth, c["age_group"], c["start_date"])
+        comps.append({**c, "age_ok": fits, "age_at_start": age, "applied": c["id"] in applied})
     # Journey stage per application: 1 подана → 2 допуск → 3 старт → 4 результат (then it lives in history)
     today = config.today().isoformat()
     with_result = {r["competition_id"] for r in perf["results"]} if perf and perf.get("available") else set()
@@ -807,7 +818,7 @@ def _headcount_query(years: int, discipline: str, municipality: str, organizatio
 
 @app.get("/reports/headcount", response_class=HTMLResponse)
 async def headcount_page(request: Request, years: int = 3, discipline: str = "", municipality: str = "", organization: str = ""):
-    user = await require(request, Role.ADMIN)
+    user = await require(request, Role.ADMIN, Role.MINISTRY)
     query = _headcount_query(years, discipline, municipality, organization)
     try:
         report = await clients["sportsman"].get("/api/v1/reports/headcount", **query)
@@ -824,7 +835,7 @@ async def headcount_page(request: Request, years: int = 3, discipline: str = "",
 async def export_headcount(request: Request, fmt: str, years: int = 3, discipline: str = "", municipality: str = "",
                            organization: str = ""):
     known_format(fmt)
-    await require(request, Role.ADMIN)
+    await require(request, Role.ADMIN, Role.MINISTRY)
     try:
         report = await clients["sportsman"].get("/api/v1/reports/headcount", **_headcount_query(years, discipline, municipality, organization))
     except ServiceError as exc:
@@ -861,7 +872,7 @@ async def create_team(request: Request):
 
 @app.get("/teams", response_class=HTMLResponse)
 async def teams_page(request: Request):
-    user = await require(request, Role.ADMIN)
+    user = await require(request, Role.ADMIN, Role.MINISTRY)
     degraded: list[str] = []
     teams = await safe(clients["competition"].get("/api/v1/teams"), [], degraded)
     return render(request, "teams.html", user=user, teams=teams, degraded=degraded)
@@ -869,16 +880,17 @@ async def teams_page(request: Request):
 
 @app.get("/teams/{tid}", response_class=HTMLResponse)
 async def team_page(request: Request, tid: int):
-    user = await require(request, Role.ADMIN)
+    user = await require(request, Role.ADMIN, Role.MINISTRY)
     degraded: list[str] = []
     t = await clients["competition"].get(f"/api/v1/teams/{tid}")
     candidates: list[dict] = []
-    if not t["locked"]:
+    editable = user["role"] == Role.ADMIN and not t["locked"]  # министерство видит состав, но не меняет его
+    if editable:
         rating = await safe(clients["competition"].get("/api/v1/rating", discipline=t["discipline"], season=t["season"],
                                                        age_group=t["age_group"], min_rank=t["min_rank"]), None, degraded)
         taken = {m["fsp_id"] for m in t["members"]}
         candidates = [r for r in (rating["rows"] if rating else []) if r["fsp_id"] not in taken]
-    return render(request, "team.html", user=user, t=t, candidates=candidates, degraded=degraded)
+    return render(request, "team.html", user=user, t=t, candidates=candidates, editable=editable, degraded=degraded)
 
 
 async def _team_action(request: Request, tid: int, call, ok: str):
@@ -937,7 +949,7 @@ async def export_team(request: Request, tid: int, kind: str, fmt: str):
     known_format(fmt)
     if kind not in ("roster", "order"):
         raise HTTPException(404, "Документ не найден: доступны список сборной (roster) и проект приказа (order)")
-    await require(request, Role.ADMIN)
+    await require(request, Role.ADMIN, Role.MINISTRY)
     t = await clients["competition"].get(f"/api/v1/teams/{tid}")
     return await download(reports.team_roster_doc(t) if kind == "roster" else reports.team_order_doc(t), fmt)
 
@@ -981,6 +993,9 @@ async def public_proxy(service: str, path: str, request: Request):
     if not pattern or not pattern.match(path):
         raise HTTPException(404, "Маршрут не опубликован в API-шлюзе")
     try:
-        return await clients[service].get(f"/{path}", **dict(request.query_params))
+        data = await clients[service].get(f"/{path}", **dict(request.query_params))
     except ServiceError as exc:
         return JSONResponse({"detail": exc.detail, "service": exc.service}, status_code=exc.status)
+    if path.endswith("/protocol") and not data.get("published"):  # черновик с ФИО участников — только федерации через кабинет
+        raise HTTPException(404, "Протокол ещё не опубликован")
+    return data

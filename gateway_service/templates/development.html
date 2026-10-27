@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Показатели развития вида спорта · ФСП Оренбург{% endblock %}
+{% block content %}
+{% macro evidence(key, title) %}
+<div class="mt-4 border-t border-fsp-line pt-3">
+  <p class="font-mono text-[11px] uppercase tracking-wider text-fsp-muted">Источник: {{ sources[key] }}</p>
+  <ul class="mt-2 grid gap-1.5" aria-label="Подтверждающие документы: {{ title }}">
+    {% for a in attachments[key] %}
+    <li class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-fsp-line px-3 py-1.5 text-sm">
+      {% if a.url %}<a href="{{ a.url }}" target="_blank" rel="noopener noreferrer nofollow" class="text-fsp-violet hover:underline">{{ m.icon("link", "mr-1 inline h-3.5 w-3.5") }}{{ a.title }}</a>
+      {% else %}<a href="/development/attachments/{{ a.id }}" class="text-fsp-violet hover:underline">{{ m.icon("file", "mr-1 inline h-3.5 w-3.5") }}{{ a.title }} <span class="font-mono text-[11px] text-fsp-muted">({{ a.filename }}, {{ (a.size / 1024)|round(0)|int }} КБ)</span></a>{% endif %}
+      {% if can_edit %}<form method="post" action="/development/attachments/{{ a.id }}/delete"><input type="hidden" name="year" value="{{ year }}"><button class="{{ m.BTN_NO }}" data-confirm="Удалить документ «{{ a.title }}»?" data-confirm-label="Удалить">Удалить</button></form>{% endif %}
+    </li>
+    {% else %}<li class="text-sm text-fsp-muted">Подтверждающих документов нет.</li>{% endfor %}
+  </ul>
+  {% if can_edit %}
+  <form method="post" action="/development/attachments" enctype="multipart/form-data" class="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+    <input type="hidden" name="indicator" value="{{ key }}"><input type="hidden" name="year" value="{{ year }}">
+    <label class="sr-only" for="at-t-{{ key }}">Название документа</label>
+    <input id="at-t-{{ key }}" name="title" required minlength="3" maxlength="120" placeholder="Название документа" class="{{ m.INPUT }}">
+    <div class="grid gap-2">
+      <label class="sr-only" for="at-f-{{ key }}">Файл (pdf, png, jpg, docx, xlsx, до 2 МБ)</label>
+      <input id="at-f-{{ key }}" type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" class="text-xs text-fsp-soft">
+      <label class="sr-only" for="at-u-{{ key }}">…или ссылка</label>
+      <input id="at-u-{{ key }}" name="url" type="url" placeholder="…или ссылка https://" class="{{ m.INPUT }}">
+    </div>
+    <button class="{{ m.BTN_SM }} self-start">{{ m.icon("file", "h-3.5 w-3.5") }}Приложить</button>
+  </form>
+  {% endif %}
+</div>
+{% endmacro %}
+<div class="pt-10">
+  {{ m.section_head("development show --year=" ~ year, "Показатели развития вида спорта", "Как развивается спортивное программирование в регионе: численность, организации и официальные соревнования. У каждого показателя — источник данных и подтверждающие документы.") }}
+  {{ m.degraded_notice(degraded) }}
+  <form method="get" class="no-print mb-6 flex flex-wrap items-center gap-3" aria-label="Год показателей">
+    <a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
+    <label for="dev-year" class="font-mono text-xs text-fsp-muted">Год</label>
+    <select id="dev-year" name="year" class="{{ m.INPUT }} !w-auto" onchange="this.form.submit()">{% for y in years %}<option {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}</select>
+    <noscript><button class="{{ m.BTN_SM }}">Показать</button></noscript>
+  </form>
+
+  <section class="{{ m.CARD }} p-5" id="headcount" aria-labelledby="hc-h">
+    <h2 id="hc-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">1 · Численность занимающихся</h2>
+    {% if headcount %}
+    <div class="mt-3 overflow-x-auto"><table class="w-full min-w-[420px] text-sm">
+      <thead><tr><th scope="col" class="{{ m.TH }}">Показатель</th>{% for d in headcount.as_of %}<th scope="col" class="{{ m.TH }} text-right">на {{ d|ru_date }}</th>{% endfor %}<th scope="col" class="{{ m.TH }} text-right">Δ</th></tr></thead>
+      <tbody>
+        <tr class="border-t border-fsp-line"><td class="px-3 py-2 text-fsp-light">Занимающихся — всего</td>{% for n in headcount.total.counts %}<td class="px-3 py-2 text-right font-mono tabular-nums">{{ n }}</td>{% endfor %}<td class="px-3 py-2 text-right font-mono text-emerald-300">{{ "%+d"|format(headcount.total.delta) }}</td></tr>
+        <tr class="border-t border-fsp-line"><td class="px-3 py-2 text-fsp-soft">начали заниматься в течение года</td>{% for n in headcount.total.joined %}<td class="px-3 py-2 text-right font-mono tabular-nums text-fsp-soft">{{ n }}</td>{% endfor %}<td></td></tr>
+      </tbody></table></div>
+    <p class="mt-2 text-sm"><a href="/reports/headcount" class="text-fsp-violet hover:underline">Полный отчёт с разрезами и выгрузкой →</a></p>
+    {% else %}<p class="mt-2 text-sm text-fsp-muted">Отчёт о численности недоступен.</p>{% endif %}
+    {{ evidence("headcount", "Численность") }}
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" id="organizations" aria-labelledby="org-h">
+    <h2 id="org-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">2 · Организации, ведущие спортивную подготовку · {{ orgs|length }}</h2>
+    <div class="mt-3 overflow-x-auto"><table class="w-full min-w-[560px] text-sm">
+      <thead><tr><th scope="col" class="{{ m.TH }}">Организация</th><th scope="col" class="{{ m.TH }}">Тип</th><th scope="col" class="{{ m.TH }}">Муниципалитет</th><th scope="col" class="{{ m.TH }} text-right">Спортсменов</th><th scope="col" class="{{ m.TH }} text-right">Тренеров</th><th scope="col" class="{{ m.TH }}">Дисциплины</th></tr></thead>
+      <tbody>{% for o in orgs %}<tr class="border-t border-fsp-line"><td class="px-3 py-2 text-fsp-light">{{ o.name }}</td><td class="px-3 py-2 text-fsp-soft">{{ o.type }}</td><td class="px-3 py-2 text-fsp-soft">{{ o.municipality }}</td><td class="px-3 py-2 text-right font-mono">{{ o.athletes }}</td><td class="px-3 py-2 text-right font-mono">{{ o.trainers }}</td><td class="px-3 py-2 text-xs text-fsp-soft">{{ o.discipline_labels|join(", ") }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {{ evidence("organizations", "Организации") }}
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" id="competitions" aria-labelledby="comp-h">
+    <h2 id="comp-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">3 · Официальные соревнования {{ year }} года</h2>
+    {% if comps %}
+    <p class="mt-2 text-sm text-fsp-soft">Всего в планах: <b class="text-fsp-light">{{ comps.kpi.total }}</b> · проведено: <b class="text-fsp-light">{{ comps.kpi.held }}</b> · опубликовано протоколов: <b class="text-fsp-light">{{ comps.kpi.published_protocols }}</b> · участников в проведённых: <b class="text-fsp-light">{{ comps.kpi.participants }}</b></p>
+    <p class="mt-1 font-mono text-[11px] text-fsp-muted">{% for k, v in comps.kpi.by_plan.items() %}{{ k }}: {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}{% if comps.kpi.by_plan and comps.kpi.by_level %} · {% endif %}{% for k, v in comps.kpi.by_level.items() %}{{ k }}: {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+    <div class="mt-3 overflow-x-auto"><table class="w-full min-w-[720px] text-sm">
+      <thead><tr><th scope="col" class="{{ m.TH }}">Дата</th><th scope="col" class="{{ m.TH }}">Соревнование</th><th scope="col" class="{{ m.TH }}">Статус</th><th scope="col" class="{{ m.TH }}">Календарный план</th><th scope="col" class="{{ m.TH }}">Состояние</th><th scope="col" class="{{ m.TH }} text-right">Участников</th></tr></thead>
+      <tbody>{% for c in comps["items"] %}
+        <tr class="border-t border-fsp-line"><td class="px-3 py-2 font-mono text-xs">{{ c.start_date|ru_date }}</td>
+          <td class="px-3 py-2"><a href="/competitions/{{ c.id }}/regulation" class="text-fsp-light hover:text-fsp-violet hover:underline">{{ c.title }}</a><p class="font-mono text-[11px] text-fsp-muted">{{ c.code }} · {{ c.discipline_label }}</p></td>
+          <td class="px-3 py-2 text-fsp-soft">{{ c.level_status }}</td><td class="px-3 py-2 text-fsp-soft">{{ c.plan_label }}<p class="font-mono text-[11px] text-fsp-muted">{{ c.plan_number }}</p></td>
+          <td class="px-3 py-2">{{ m.tag(c.status_label, "emerald" if c.status == "FINISHED" else "slate") }}</td>
+          <td class="px-3 py-2 text-right font-mono">{% if c.protocol_published %}<a href="/protocols/{{ c.id }}" class="text-fsp-violet hover:underline">{{ c.participants }}</a>{% else %}—{% endif %}</td></tr>
+      {% else %}<tr><td colspan="6" class="px-3 py-4 text-fsp-muted">В {{ year }} году соревнований нет.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="mt-2 text-sm text-fsp-muted">Календарь недоступен.</p>{% endif %}
+    {{ evidence("competitions", "Соревнования") }}
+  </section>
+</div>
+{% endblock %}

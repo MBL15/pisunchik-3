@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY shared shared
 COPY sportsman_service sportsman_service
 COPY competition_service competition_service
+COPY market_service market_service
 COPY gateway_service gateway_service
 
 ENV FSP_PDF_FONT=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \

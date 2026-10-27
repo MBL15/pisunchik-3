@@ -124,6 +124,13 @@
       Равные показатели делят место; дисквалифицированные участники указаны без места.
     </p>
 
+    {% if p.corrections %}
+    <section class="mt-4 text-xs text-[#5F5F66]" aria-label="Корректировки протокола">
+      <p class="font-semibold">Корректировки по решениям федерации:</p>
+      <ul class="mt-1 list-disc pl-5">{% for c in p.corrections %}<li>{{ c.at[:10]|ru_date }} · {{ c.ref }} · {{ c.action_label }} ({{ c.fsp_id }}): место {{ c.before.place or "DSQ" }} → {{ c.after.place or "DSQ" }}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+
     <footer class="mt-10 grid gap-8 text-sm sm:grid-cols-2">
       {% for position in ["Главный судья", "Главный секретарь"] %}
       <div>

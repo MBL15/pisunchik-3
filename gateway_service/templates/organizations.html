@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Организации спортивной подготовки · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="pt-10">
+  {{ m.section_head("organizations list", "Организации спортивной подготовки", "Карточка организации: тип, лицензия, программы подготовки по этапам и дисциплинам, тренеры-преподаватели, группы и журнал занятий. Данные групп и журнала попадают в отчёт о динамике численности.") }}
+  {{ m.degraded_notice(degraded) }}
+  <div class="no-print mb-6 flex flex-wrap gap-3">
+    <a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
+    <a href="/training" class="{{ m.BTN_SM }}">{{ m.icon("check", "h-3.5 w-3.5") }}Нормативы и аттестация</a>
+    <a href="/reports/headcount" class="{{ m.BTN_SM }}">{{ m.icon("pulse", "h-3.5 w-3.5") }}Отчёт о численности</a>
+  </div>
+  <ul class="grid gap-3 lg:grid-cols-2">
+    {% for c in cards %}
+    <li class="{{ m.CARD }} flex flex-col gap-3 p-5">
+      <div><a href="/organizations/card?name={{ c.name|urlencode }}" class="font-medium text-white hover:text-fsp-violet hover:underline">{{ c.name }}</a>
+        <p class="font-mono text-[11px] text-fsp-muted">{{ c.type }} · {{ c.municipality }}</p></div>
+      <div class="flex flex-wrap gap-2">
+        {{ m.tag("лицензия " ~ c.license_state.label, "emerald" if c.license_state.state == "ok" else "amber") }}
+        {{ m.tag("программ: " ~ c.programs|length, "blue") }}{{ m.tag("групп: " ~ c.groups|length) }}{{ m.tag("спортсменов: " ~ c.athletes) }}
+      </div>
+      <p class="mt-auto font-mono text-[11px] text-fsp-muted">занятий в журнале: {{ c.sessions.total }} · очно {{ c.sessions.offline }} · онлайн {{ c.sessions.online }}</p>
+    </li>
+    {% else %}<li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Организаций пока нет.</li>{% endfor %}
+  </ul>
+</div>
+{% endblock %}

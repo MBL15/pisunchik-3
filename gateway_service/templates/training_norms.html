@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Справочник нормативов · ФСП Оренбург{% endblock %}
+{% block content %}
+{% macro norm_fields(n) %}
+<div><label class="{{ m.LABEL }}">Название</label><input name="title" required minlength="3" maxlength="120" value="{{ n.title if n else '' }}" class="{{ m.INPUT }}"></div>
+<div><label class="{{ m.LABEL }}">Вид</label><select name="kind" class="{{ m.INPUT }}"><option value="GENERAL" {% if n and n.kind == "GENERAL" %}selected{% endif %}>ОФП</option><option value="SPECIAL" {% if not n or n.kind == "SPECIAL" %}selected{% endif %}>СФП</option></select></div>
+<div><label class="{{ m.LABEL }}">Этап</label><select name="stage" class="{{ m.INPUT }}">{% for k in stage_order %}<option value="{{ k }}" {% if (n and n.stage == k) or (not n and filters.stage == k) %}selected{% endif %}>{{ k }}</option>{% endfor %}</select></div>
+<div><label class="{{ m.LABEL }}">Дисциплина</label><select name="discipline" class="{{ m.INPUT }}"><option value="ALL">Общий</option>{% for d in disciplines %}<option value="{{ d.code }}" {% if n and n.discipline == d.code %}selected{% endif %}>{{ d.short }}</option>{% endfor %}</select></div>
+<div><label class="{{ m.LABEL }}">Пол</label><select name="gender" class="{{ m.INPUT }}">{% for k, v in (("ALL", "М и Ж"), ("М", "Мужской"), ("Ж", "Женский")) %}<option value="{{ k }}" {% if n and n.gender == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+<div><label class="{{ m.LABEL }}">Единица</label><input name="unit" required maxlength="20" value="{{ n.unit if n else '' }}" class="{{ m.INPUT }}"></div>
+<div><label class="{{ m.LABEL }}">Сравнение</label><select name="direction" class="{{ m.INPUT }}"><option value="MIN" {% if not n or n.direction == "MIN" %}selected{% endif %}>не меньше порога</option><option value="MAX" {% if n and n.direction == "MAX" %}selected{% endif %}>не больше порога</option></select></div>
+<div><label class="{{ m.LABEL }}">Порог</label><input name="threshold" required inputmode="decimal" value="{{ ('%g'|format(n.threshold)) if n else '' }}" class="{{ m.INPUT }} font-mono"></div>
+<div class="flex items-end gap-4 text-sm text-fsp-soft"><label class="flex items-center gap-2"><input type="checkbox" name="required" value="1" {% if not n or n.required %}checked{% endif %} class="h-4 w-4 accent-fsp-blue">обязателен</label>
+  <label class="flex items-center gap-2"><input type="hidden" name="active" value="0"><input type="checkbox" name="active" value="1" {% if not n or n.active %}checked{% endif %} class="h-4 w-4 accent-fsp-blue">действует</label></div>
+{% endmacro %}
+<div class="pt-10">
+  {{ m.section_head("norms list", "Справочник нормативов", "Нормативы Федерального стандарта спортивной подготовки по этапам, дисциплинам и полу, включая скорость печати. Пороги демонстрационные: сверьте с приказом № 445, федерация может менять справочник.") }}
+  {{ m.degraded_notice(degraded) }}
+  <form method="get" class="no-print mb-4 flex flex-wrap items-center gap-3" data-autosubmit>
+    <a href="/training" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Нормативы</a>
+    <label class="sr-only" for="nf-st">Этап</label><select id="nf-st" name="stage" class="{{ m.INPUT }} !w-auto"><option value="">Все этапы</option>{% for k in stage_order %}<option value="{{ k }}" {% if filters.stage == k %}selected{% endif %}>{{ k }} · {{ stages[k] }}</option>{% endfor %}</select>
+    <label class="sr-only" for="nf-d">Дисциплина</label><select id="nf-d" name="discipline" class="{{ m.INPUT }} !w-auto"><option value="">Все дисциплины</option>{% for d in disciplines %}<option value="{{ d.code }}" {% if filters.discipline == d.code %}selected{% endif %}>{{ d.short }}</option>{% endfor %}</select>
+  </form>
+  <div class="overflow-x-auto rounded-xl border border-fsp-line bg-fsp-panel">
+    <table class="w-full min-w-[760px] border-collapse text-sm">
+      <caption class="sr-only">Нормативы по этапам</caption>
+      <thead class="border-b border-fsp-line bg-fsp-bg/70"><tr><th scope="col" class="{{ m.TH }}">Этап</th><th scope="col" class="{{ m.TH }}">Норматив</th><th scope="col" class="{{ m.TH }}">Дисциплина · пол</th><th scope="col" class="{{ m.TH }}">Порог</th><th scope="col" class="{{ m.TH }}">Статус</th>{% if can_edit %}<th scope="col" class="{{ m.TH }}"><span class="sr-only">Изменить</span></th>{% endif %}</tr></thead>
+      <tbody>{% for n in norms %}
+        <tr class="border-b border-fsp-line/70 {% if not n.active %}opacity-60{% endif %}">
+          <td class="px-3 py-2 font-mono text-xs">{{ n.stage }}</td><td class="px-3 py-2 text-fsp-light">{{ n.title }}<p class="font-mono text-[11px] text-fsp-muted">{{ n.kind_label }}</p></td>
+          <td class="px-3 py-2 text-xs text-fsp-soft">{{ n.discipline_label }} · {{ n.gender_label }}</td>
+          <td class="px-3 py-2 font-mono text-xs">{{ n.direction_label }} {{ "%g"|format(n.threshold) }} {{ n.unit }}</td>
+          <td class="px-3 py-2">{{ m.tag("обязателен" if n.required else "необязателен", "blue" if n.required else "slate") }}{% if not n.active %} {{ m.tag("отключён", "amber") }}{% endif %}</td>
+          {% if can_edit %}<td class="px-3 py-2"><details class="relative"><summary class="{{ m.BTN_SM }} cursor-pointer list-none">Изменить</summary>
+            <form method="post" action="/training/norms" class="absolute right-0 z-10 mt-2 grid w-[min(34rem,90vw)] gap-3 rounded-xl border border-fsp-line bg-fsp-panel p-4 shadow-lg sm:grid-cols-2"><input type="hidden" name="id" value="{{ n.id }}">{{ norm_fields(n) }}<div class="sm:col-span-2"><button class="{{ m.BTN_SM }}">Сохранить</button></div></form></details></td>{% endif %}
+        </tr>
+      {% else %}<tr><td colspan="6" class="px-3 py-6 text-center font-mono text-sm text-fsp-muted">// нормативов нет</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  {% if can_edit %}
+  <section class="mt-6 {{ m.CARD }} p-5" aria-labelledby="newnorm-h"><h2 id="newnorm-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Добавить норматив</h2>
+    <form method="post" action="/training/norms" class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{{ norm_fields(none) }}<div class="sm:col-span-2 lg:col-span-3"><button class="{{ m.BTN }}">Добавить</button></div></form></section>
+  {% endif %}
+</div>
+{% endblock %}

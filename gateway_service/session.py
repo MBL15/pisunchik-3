@@ -12,7 +12,7 @@ import time
 from fastapi import Request
 from fastapi.responses import Response
 
-from shared.config import SECRET_KEY
+from shared.config import COOKIE_SECURE, SECRET_KEY
 
 SESSION_COOKIE = "fsp_session"
 FLASH_COOKIE = "fsp_flash"
@@ -47,7 +47,7 @@ def read_session(request: Request) -> dict | None:
 
 def write_session(response: Response, fsp_id: str, role: str) -> None:
     token = sign({"fid": fsp_id, "role": role, "exp": int(time.time()) + SESSION_TTL})
-    response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_TTL, httponly=True, samesite="lax")
+    response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_TTL, httponly=True, samesite="lax", secure=COOKIE_SECURE)
 
 
 def clear_session(response: Response) -> None:
@@ -56,7 +56,7 @@ def clear_session(response: Response) -> None:
 
 def set_flash(response: Response, kind: str, text: str, extra: dict | None = None) -> None:
     response.set_cookie(FLASH_COOKIE, sign({"kind": kind, "text": text[:400], **(extra or {})}),
-                        max_age=60, httponly=True, samesite="lax")
+                        max_age=60, httponly=True, samesite="lax", secure=COOKIE_SECURE)
 
 
 def pop_flash(request: Request) -> dict | None:

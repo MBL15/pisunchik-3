@@ -2,7 +2,7 @@
 from datetime import date
 
 from gateway_service.exports import Doc, Heading, Para, Signatures, Table
-from shared.domain import FEDERATION_NAME, ORDER_ISSUER, TEAM_ROLE_LABELS
+from shared.domain import FEDERATION_NAME, JUDGE_POSITIONS, ORDER_ISSUER, TEAM_ROLE_LABELS
 
 
 def _d(value) -> str:
@@ -240,3 +240,92 @@ def audit_doc(rows: list[dict], filter_text: str, today: date) -> Doc:
         blocks=[Table(["Время", "Сервис", "Кто", "Действие", "Объект"], data, widths=[1.6, 1.1, 1.8, 2, 4.5],
                       align=["left", "left", "left", "left", "left"])], landscape=True,
         footer="Выгрузка журнала Единой цифровой платформы ФСП Оренбургской области.")
+
+
+# ---------------------------------------------------------------- документы о судействе (Д12)
+def _judge_category(person: dict | None) -> str:
+    jc = person and person.get("judge_category")
+    return f"{jc['code']} до {_d(jc['expires_at'])}" if jc else "нет"
+
+
+def judging_panel_doc(c: dict, judges: list[dict], today: date) -> Doc:
+    """Справка о составе судейской коллегии соревнования: должность, судья, категория и срок её действия."""
+    order = {p: i for i, p in enumerate(JUDGE_POSITIONS)}
+    panel = sorted(c["judges"], key=lambda j: (order.get(j["position"], 99), j["full_name"]))
+    people = {p["fsp_id"]: p for p in judges}
+    rows = [[i, j["position"], j["full_name"], j["fsp_id"], _judge_category(people.get(j["fsp_id"])),
+             (people.get(j["fsp_id"]) or {}).get("municipality", "—")] for i, j in enumerate(panel, 1)]
+    chief = next((j["full_name"] for j in panel if j["position"] == "Главный судья"), "")
+    secretary = next((j["full_name"] for j in panel if j["position"] == "Главный секретарь"), "")
+    return Doc(
+        title="СПРАВКА О СОСТАВЕ СУДЕЙСКОЙ КОЛЛЕГИИ", subtitle=c["title"], filename=f"Судейская коллегия {c['code']}",
+        header_lines=["Вид спорта «спортивное программирование»", FEDERATION_NAME],
+        meta=[("Код / план", f"{c['code']} · {c['plan_label']}, {c['plan_number']}"), ("Дисциплина", c["discipline_title"]),
+              ("Статус / тип", f"{c['level_status']} · {c['type']}"), ("Сроки проведения", _period(c)), ("Место проведения", c["venue"]),
+              ("Состав коллегии", f"{len(panel)} чел."), ("Сформирована", _d(today))],
+        blocks=[Table(["№", "Судейская должность", "Фамилия, имя, отчество", "ФСП ID", "Судейская категория", "Муниципальное образование"],
+                      rows, widths=[0.5, 2.4, 3, 2, 1.8, 2], align=["center", "left", "left", "left", "left", "left"]),
+                Signatures([("Главный судья", chief), ("Главный секретарь", secretary),
+                            ("Руководитель регионального отделения", "")])],
+        landscape=True,
+        footer="Справка сформирована автоматически в Единой цифровой платформе ФСП Оренбургской области по назначениям федерации; "
+               "категории и сроки — по реестру судей на дату формирования.")
+
+
+def judge_report_doc(person: dict, assignments: dict, today: date) -> Doc:
+    """Отчёт о соревнованиях, на которых работал судья: дата, соревнование, уровень, план, должность."""
+    worked = assignments["past"]
+    rows = [[_d(c["start_date"]), c["title"], c["code"], c["level_status"], f"{c['plan_label']}, {c['plan_number']}", c["venue"], c["position"]]
+            for c in sorted(worked, key=lambda c: c["start_date"])]
+    by_position: dict[str, int] = {}
+    for c in worked:
+        by_position[c["position"]] = by_position.get(c["position"], 0) + 1
+    blocks: list = [Table(["Дата", "Соревнование", "Код", "Статус", "Календарный план", "Место проведения", "Судейская должность"], rows,
+                          title=f"Отработано соревнований: {len(worked)}" + (" · " + ", ".join(f"{p}: {n}" for p, n in by_position.items()) if by_position else ""),
+                          widths=[1, 3.4, 1.8, 1.6, 2.2, 2.2, 1.8], align=["center", "left", "left", "left", "left", "left", "left"])]
+    if assignments["upcoming"]:
+        blocks.append(Table(["Дата", "Соревнование", "Код", "Судейская должность"],
+                            [[_d(c["start_date"]), c["title"], c["code"], c["position"]] for c in assignments["upcoming"]],
+                            title="Назначен на предстоящие соревнования", widths=[1, 4, 2, 2.4], align=["center", "left", "left", "left"]))
+    blocks.append(Signatures([("Руководитель регионального отделения", "")]))
+    return Doc(
+        title="ОТЧЁТ О СОРЕВНОВАНИЯХ СУДЬИ", subtitle=person["full_name"], filename=f"Отчёт судьи {person['short_name']}",
+        header_lines=[FEDERATION_NAME],
+        meta=[("ФСП ID", person["fsp_id"]), ("Муниципальное образование", person["municipality"]),
+              ("Судейская категория", _judge_category(person)), ("Сформирован", _d(today))],
+        blocks=blocks, landscape=True,
+        footer="Отчёт сформирован по назначениям судьи на соревнования, завершённые на дату формирования.")
+
+
+# ---------------------------------------------------------------- ходатайство о премиях Губернатора (Д8)
+def _rub(n: int) -> str:
+    return f"{n:,}".replace(",", " ") + " ₽"
+
+
+def awards_petition_doc(p: dict) -> Doc:
+    """Пакет на премии: ходатайство, список претендентов с основанием (результаты) и реквизиты (в демо — маски)."""
+    year, items = p["year"], p["items"]
+    rows = [[i, a["full_name"], _d(a.get("birth_date")), a.get("municipality", "—"), a.get("organization", "—"),
+             "; ".join(f"{r['title']} ({r['level_label'].lower()}) — {r['place']} место" for r in a["results"]),
+             ", ".join(a.get("coaches") or []) or "—", _rub(a["amount"])] for i, a in enumerate(items, 1)]
+    ident = [[i, a["full_name"], a["passport"], a["inn"], a["snils"]] for i, a in enumerate(items, 1)]
+    status = p["status_label"] + (f" · акт {p['order_no']}" if p.get("order_no") else "")
+    blocks: list = [
+        Para("Министру физической культуры и спорта Оренбургской области", align="right"),
+        Para(f"Региональное отделение Федерации спортивного программирования Оренбургской области ходатайствует о назначении премий "
+             f"Губернатора Оренбургской области спортсменам за высокие спортивные результаты {year} года в соответствии с "
+             f"Указом Губернатора Оренбургской области от 04.03.2011 № 93-ук. Основание — протоколы официальных соревнований, опубликованные "
+             f"в Единой цифровой платформе ФСП. Общая сумма — {_rub(p['total'])} ({len(items)} {'спортсмен' if len(items) == 1 else 'спортсменов'})."),
+        Table(["№", "Фамилия, имя, отчество", "Дата рождения", "Муниципальное образование", "Организация", "Результаты, давшие право на премию",
+               "Тренер", "Сумма"], rows, title="Список претендентов", widths=[0.5, 2.4, 1.1, 1.6, 2.2, 4, 1.8, 1.2],
+              align=["center", "left", "center", "left", "left", "left", "left", "right"]),
+        Table(["№", "Фамилия, имя, отчество", "Паспорт", "ИНН", "СНИЛС"], ident, title="Реквизиты (в демонстрационной версии — маски)",
+              widths=[0.5, 3, 1.8, 1.8, 1.8], align=["center", "left", "left", "left", "left"]),
+        Signatures([("Руководитель регионального отделения", "")]),
+    ]
+    return Doc(title="ХОДАТАЙСТВО", subtitle=f"о назначении премий Губернатора Оренбургской области за {year} год",
+               filename=f"Ходатайство на премии {year}", header_lines=[FEDERATION_NAME], blocks=blocks, landscape=True,
+               meta=[("Год результатов", str(year)), ("Статус ходатайства", status), ("Подано до", _d(p["deadline"]["date"])),
+                     ("Подготовлено", _d(p["created_at"])), ("Сумма", _rub(p["total"]))],
+               footer="Размеры премий взяты из справочника платформы (по уровню соревнования и месту); паспортные данные, ИНН и СНИЛС в "
+                      "демонстрационной версии заменены масками. Пакет подлежит проверке федерацией перед направлением.")

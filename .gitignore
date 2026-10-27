@@ -4,3 +4,4 @@ __pycache__/
 .env
 .venv/
 .telegram_links.json
+.oidc_key.pem

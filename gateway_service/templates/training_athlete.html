@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Подготовка: {{ t.full_name }} · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-5xl pt-10">
+  {{ m.section_head("training show " ~ t.fsp_id, "Профиль подготовки", t.full_name ~ " · " ~ (t.stage_label or "этап не указан")) }}
+  {{ m.degraded_notice(degraded) }}
+  <div class="no-print mb-6 flex flex-wrap items-center gap-3">
+    <a href="{{ '/training' if user.role != 'athlete' else '/cabinet' }}" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← {{ "Нормативы" if user.role != "athlete" else "Кабинет" }}</a>
+    <a href="/training/norms?stage={{ t.stage or '' }}" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Справочник нормативов</a>
+    {% if t.stage %}{{ m.tag(t.stage, "blue") }}{% endif %}
+    {% if t.ready %}{{ m.tag("готов к переводу → " ~ t.next_stage, "emerald") }}{% endif %}
+  </div>
+
+  {% if not t.stage %}
+  <section class="{{ m.CARD }} p-5" aria-labelledby="no-stage">
+    <h2 id="no-stage" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Этап не указан</h2>
+    <p class="mt-2 text-sm text-fsp-soft">{{ t.reason }}. Зачисление в группу организации устанавливает этап автоматически.</p>
+    {% if user.role == "admin" %}
+    <form method="post" action="/training/athletes/{{ t.fsp_id }}/stage" class="mt-3 flex flex-wrap items-end gap-3"><div><label for="st-set" class="{{ m.LABEL }}">Назначить этап</label>
+      <select id="st-set" name="stage" class="{{ m.INPUT }}">{% for k, v in stages.items() %}<option value="{{ k }}">{{ k }} · {{ v }}</option>{% endfor %}</select></div><button class="{{ m.BTN_SM }}">Назначить</button></form>
+    {% endif %}
+  </section>
+  {% else %}
+  <section class="{{ m.CARD }} p-5" aria-labelledby="norms-h">
+    <h2 id="norms-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Нормативы этапа «{{ t.stage_label }}» · выполнено {{ t.passed }} из {{ t.total }}</h2>
+    <div class="mt-3 overflow-x-auto"><table class="w-full min-w-[620px] text-sm">
+      <thead><tr><th scope="col" class="{{ m.TH }}">Норматив</th><th scope="col" class="{{ m.TH }}">Порог</th><th scope="col" class="{{ m.TH }}">Последняя попытка</th><th scope="col" class="{{ m.TH }}">Итог</th></tr></thead>
+      <tbody>{% for r in t.norms %}
+        <tr class="border-t border-fsp-line"><td class="px-3 py-2"><span class="text-fsp-light">{{ r.norm.title }}</span><p class="font-mono text-[11px] text-fsp-muted">{{ r.norm.kind_label }} · {{ r.norm.discipline_label }}{% if r.norm.required %} · обязателен{% endif %}</p></td>
+          <td class="px-3 py-2 font-mono text-xs text-fsp-soft">{{ r.norm.direction_label }} {{ "%g"|format(r.norm.threshold) }} {{ r.norm.unit }}</td>
+          <td class="px-3 py-2 font-mono text-xs">{% if r.result %}{{ "%g"|format(r.result.value) }} {{ r.norm.unit }} · {{ r.result.date|ru_date }}{% else %}<span class="text-fsp-muted">не сдавал</span>{% endif %}</td>
+          <td class="px-3 py-2">{% if r.result %}{{ m.tag("выполнен" if r.passed else "не выполнен", "emerald" if r.passed else "amber") }}{% else %}—{% endif %}</td></tr>
+      {% else %}<tr><td colspan="4" class="px-3 py-4 text-fsp-muted">Для этапа и дисциплин спортсмена нет нормативов в справочнике.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <p class="mt-3 text-sm {{ 'text-emerald-300' if t.ready else 'text-fsp-soft' }}">{% if t.ready %}Все обязательные нормативы выполнены — спортсмен может быть переведён на этап «{{ t.next_stage_label }}».{% else %}{{ t.reason }}.{% endif %}</p>
+    {% if can_edit and t.ready %}
+    <form method="post" action="/training/athletes/{{ t.fsp_id }}/attest" class="mt-3 flex flex-wrap items-end gap-3">
+      <div class="grow"><label for="at-note" class="{{ m.LABEL }}">Примечание к аттестации</label><input id="at-note" name="note" maxlength="300" class="{{ m.INPUT }}"></div>
+      <button class="{{ m.BTN }}" data-confirm="Перевести спортсмена на этап «{{ t.next_stage_label }}»? Членство в группе прежнего этапа будет закрыто." data-confirm-label="Оформить перевод">{{ m.icon("check", "h-4 w-4") }}Оформить перевод → {{ t.next_stage }}</button>
+    </form>
+    {% endif %}
+  </section>
+
+  {% if can_edit and entry_norms %}
+  <section class="mt-6 {{ m.CARD }} p-5" aria-labelledby="entry-h">
+    <h2 id="entry-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Внести результат</h2>
+    <form method="post" action="/training/athletes/{{ t.fsp_id }}/results" class="mt-3 grid gap-3 sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-end">
+      <div><label for="en-norm" class="{{ m.LABEL }}">Норматив</label><select id="en-norm" name="norm_id" class="{{ m.INPUT }}">{% for n in entry_norms %}<option value="{{ n.id }}">{{ n.title }} ({{ n.direction_label }} {{ "%g"|format(n.threshold) }} {{ n.unit }})</option>{% endfor %}</select></div>
+      <div><label for="en-val" class="{{ m.LABEL }}">Результат</label><input id="en-val" name="value" required inputmode="decimal" placeholder="например 185" class="{{ m.INPUT }} font-mono"></div>
+      <div><label for="en-date" class="{{ m.LABEL }}">Дата сдачи</label><input id="en-date" name="performed_on" type="date" max="{{ today.isoformat() }}" value="{{ today.isoformat() }}" class="{{ m.INPUT }} font-mono [color-scheme:dark]"></div>
+      <button class="{{ m.BTN_SM }}">{{ m.icon("check", "h-3.5 w-3.5") }}Записать</button>
+    </form>
+    <p class="mt-2 text-xs text-fsp-muted">Платформа сама определит, выполнен ли норматив, по порогу этапа, дисциплины и пола.</p>
+  </section>
+  {% endif %}
+  {% endif %}
+
+  <section class="mt-6 {{ m.CARD }} p-5" aria-labelledby="hist-h">
+    <h2 id="hist-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">История нормативов · {{ t.history|length }}</h2>
+    <ul class="mt-3 grid gap-1.5">
+      {% for r in t.history %}
+      <li class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-fsp-line px-3 py-2 text-sm">
+        <span class="text-fsp-light">{{ r.date|ru_date }} · {{ r.norm.title }} <span class="font-mono text-xs text-fsp-soft">{{ "%g"|format(r.value) }} {{ r.unit }} ({{ r.norm.direction_label }} {{ "%g"|format(r.threshold) }})</span> <span class="font-mono text-[11px] text-fsp-muted">· этап {{ r.stage }}</span></span>
+        <span class="flex items-center gap-2">{{ m.tag("выполнен" if r.passed else "не выполнен", "emerald" if r.passed else "amber") }}
+          {% if can_edit %}<form method="post" action="/training/results/{{ r.id }}/delete"><input type="hidden" name="athlete" value="{{ t.fsp_id }}"><button class="flex h-7 w-7 items-center justify-center rounded border border-fsp-line2 text-fsp-muted hover:border-fsp-red hover:text-rose-300" data-confirm="Удалить результат от {{ r.date|ru_date }}?" data-confirm-label="Удалить" aria-label="Удалить результат">{{ m.icon("x", "h-3.5 w-3.5") }}</button></form>{% endif %}</span>
+      </li>
+      {% else %}<li class="text-sm text-fsp-muted">Результатов пока нет.</li>{% endfor %}
+    </ul>
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" aria-labelledby="att-h">
+    <h2 id="att-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Аттестации и переводы · {{ t.attestations|length }}</h2>
+    <ul class="mt-3 grid gap-1.5">
+      {% for a in t.attestations %}<li class="rounded-md border border-fsp-line px-3 py-2 text-sm text-fsp-light">{{ a.date|ru_date }} · {{ a.from_stage }} → {{ a.to_stage }} <span class="text-fsp-soft">({{ a.to_label }})</span>{% if a.note %} · {{ a.note }}{% endif %}</li>
+      {% else %}<li class="text-sm text-fsp-muted">Переводов на следующий этап ещё не было.</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}

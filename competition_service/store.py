@@ -5,6 +5,7 @@ from competition_service.log_parser import parse_log, rank_manual
 from competition_service.models import Application, Competition, Protocol, Team
 from competition_service.rating import RatingSettings, base_points
 from shared import config
+from shared.ext import ExtTables
 from shared.listing import AUDIT_LIMIT
 from shared.domain import (
     APPLICATION_STATUS_LABELS, CALENDAR_PLAN_LABELS, COMPETITION_STATUS_LABELS, DEFAULT_COMPETITION_TYPES,
@@ -27,6 +28,7 @@ class Store:
         self.teams: dict[int, Team] = {}
         self.audit: list[dict] = []
         self.doc_seq = 0
+        self.ext = ExtTables()  # приложения к показателям, апелляции, рапорты, премии, интеграции
 
     def log(self, actor: str, action: str, obj: str) -> None:
         self.audit.insert(0, {"at": datetime.now().isoformat(timespec="seconds"), "service": "competition",
@@ -152,6 +154,7 @@ def snapshot(s: Store) -> dict:
             "types": ({"items": s.competition_types}, {}),
             "counters": ({"doc_seq": s.doc_seq}, {}),
             "audit": ({"items": s.audit}, {}),
+            "ext": (s.ext.dump(), {}),
         },
     }
 
@@ -170,3 +173,5 @@ def restore(s: Store, rows: dict[str, dict[str, dict]]) -> None:
     s.competition_types = meta["types"]["items"]
     s.doc_seq = meta["counters"]["doc_seq"]
     s.audit = meta["audit"]["items"]
+    if "ext" in meta:
+        s.ext.load(meta["ext"])

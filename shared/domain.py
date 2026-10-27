@@ -1,4 +1,5 @@
 """Domain dictionaries (справочники) shared by all services. Russian localisation lives here."""
+from datetime import date
 from enum import StrEnum
 
 REGION_CODE = "56"
@@ -12,6 +13,7 @@ class Role(StrEnum):
     ATHLETE = "athlete"
     TRAINER = "trainer"
     JUDGE = "judge"
+    MINISTRY = "ministry"  # министерство спорта: только чтение (отчёты, календарь, сборная); выдаётся федерацией
 
 
 ROLE_LABELS: dict[str, str] = {
@@ -19,6 +21,7 @@ ROLE_LABELS: dict[str, str] = {
     Role.ATHLETE: "Спортсмен",
     Role.TRAINER: "Тренер",
     Role.JUDGE: "Судья",
+    Role.MINISTRY: "Министерство спорта",
 }
 
 # Roles a person may self-assign at public registration (admin is granted by the federation only).
@@ -213,6 +216,19 @@ AGE_GROUPS: dict[str, tuple[int, int]] = {
     "мужчины/женщины 18+": (18, 99),
     "без ограничений 12+": (12, 99),
 }
+
+
+def age_on(birth: "date | str", on: "date | str") -> int:
+    """Полных лет на дату `on`; даты — `date` или ISO-строка."""
+    birth, on = (date.fromisoformat(v) if isinstance(v, str) else v for v in (birth, on))
+    return on.year - birth.year - ((on.month, on.day) < (birth.month, birth.day))
+
+
+def age_group_fit(birth: "date | str", group: str, start: "date | str") -> tuple[int, bool]:
+    """(возраст, подходит ли группе) на дату начала соревнования, а не на сегодня: допуск определяется возрастом к старту."""
+    age = age_on(birth, start)
+    lo, hi = AGE_GROUPS[group]
+    return age, lo <= age <= hi
 
 
 class LinkStatus(StrEnum):

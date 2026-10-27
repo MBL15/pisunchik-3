@@ -26,10 +26,19 @@ HOST = os.getenv("FSP_HOST", "127.0.0.1")
 SPORTSMAN_URL = os.getenv("FSP_SPORTSMAN_URL", f"http://{HOST}:{SPORTSMAN_PORT}")
 COMPETITION_URL = os.getenv("FSP_COMPETITION_URL", f"http://{HOST}:{COMPETITION_PORT}")
 MARKET_URL = os.getenv("FSP_MARKET_URL", f"http://{HOST}:{MARKET_PORT}")
+GATEWAY_URL = os.getenv("FSP_GATEWAY_URL", f"http://{HOST}:{GATEWAY_PORT}")  # как шлюз виден сервисам (вебхуки на демо-приёмник)
 PUBLIC_BASE_URL = os.getenv("FSP_PUBLIC_BASE_URL", f"http://localhost:{GATEWAY_PORT}")
 
 # Development-only default. Override FSP_SECRET_KEY in any shared/deployed environment.
-SECRET_KEY = os.getenv("FSP_SECRET_KEY", "dev-only-fsp56-change-me")
+DEV_SECRET_KEY = "dev-only-fsp56-change-me"
+SECRET_KEY = os.getenv("FSP_SECRET_KEY", DEV_SECRET_KEY)
+
+# Служебный токен шлюза для внутренних сервисов (заголовок X-FSP-Service-Token). Пусто — проверка выключена (локальный запуск).
+SERVICE_TOKEN = os.getenv("FSP_SERVICE_TOKEN", "")
+
+# Флаг Secure у cookie сессии: по умолчанию включается, если публичный адрес — https.
+_cookie_secure = os.getenv("FSP_COOKIE_SECURE")
+COOKIE_SECURE = PUBLIC_BASE_URL.startswith("https://") if _cookie_secure is None else _cookie_secure.lower() in ("1", "true", "yes")
 
 TELEGRAM_TOKEN = os.getenv("FSP_TELEGRAM_TOKEN", "")
 TELEGRAM_BOT = os.getenv("FSP_TELEGRAM_BOT", "")

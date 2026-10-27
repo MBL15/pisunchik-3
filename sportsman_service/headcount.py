@@ -43,13 +43,53 @@ def _cuts() -> list[tuple[str, str, object, list[str] | None]]:
     ]
 
 
+def _row(label: str, counts: list[int]) -> dict:
+    diff, pct = _delta(counts)
+    return {"label": label, "counts": counts, "delta": diff, "delta_pct": pct}
+
+
+def _active_on(m: dict, on: date) -> bool:
+    return date.fromisoformat(m["enrolled_at"]) <= on and (not m["left_at"] or date.fromisoformat(m["left_at"]) > on)
+
+
+def _training_cuts(athletes: list[PersonRecord], enrolled: list[list[PersonRecord]], span: list[int], as_of: list[date],
+                   training: dict, filtered: bool) -> list[dict]:
+    """Д3: что дают группы и журнал занятий — зачисление по группам, этапы по группам, проведённые и посещённые занятия."""
+    ids = {p.fsp_id for p in athletes}
+    members = [m for m in training["memberships"] if m["fsp_id"] in ids]
+    sessions = [s for s in training["sessions"] if not filtered or any(a in ids for a in s["attendees"])]
+    in_group, stage_rows, offline, online, attended = [], {st: [] for st in TRAINING_STAGES}, [], [], []
+    for group, on, y in zip(enrolled, as_of, span):
+        active = [m for m in members if _active_on(m, on)]
+        who = {m["fsp_id"] for m in active if m["fsp_id"] in {p.fsp_id for p in group}}
+        in_group.append(len(who))
+        for st in TRAINING_STAGES:
+            stage_rows[st].append(len({m["fsp_id"] for m in active if m["stage"] == st}))
+        year = [s for s in sessions if date.fromisoformat(s["date"]).year == y and date.fromisoformat(s["date"]) <= on]
+        offline.append(sum(s["format"] == "OFFLINE" for s in year))
+        online.append(sum(s["format"] == "ONLINE" and s["confirmed"] for s in year))
+        attended.append(len({a for s in year for a in s["attendees"] if a in ids}))
+    totals = [len(g) for g in enrolled]
+    return [
+        {"key": "groups", "title": "По зачислению в группы спортивной подготовки",
+         "rows": [_row("Зачислены в группы подготовки", in_group), _row("Не зачислены в группы", [t - n for t, n in zip(totals, in_group)])],
+         "note": "данные раздела «Организации и группы»: зачисление действует с даты зачисления до даты отчисления"},
+        {"key": "stage_groups", "title": "По этапам подготовки (группы)",
+         "rows": [_row(label, stage_rows[st]) for st, label in TRAINING_STAGES.items() if any(stage_rows[st])], "note": ""},
+        {"key": "sessions", "title": "Занятия по журналу",
+         "rows": [_row("Проведено очных занятий", offline), _row("Проведено онлайн-занятий (подтверждённых)", online),
+                  _row("Занимались хотя бы на одном занятии, чел.", attended)],
+         "note": "онлайн-занятие учитывается при подтверждении записью или логом платформы; год — по дате занятия"},
+    ]
+
+
 def _delta(counts: list[int]) -> tuple[int, float | None]:
     diff = counts[-1] - counts[0]
     return diff, round(diff * 100 / counts[0], 1) if counts[0] else None
 
 
 def build_report(persons: list[PersonRecord], today: date, years: int = 3, discipline: str | None = None,
-                 municipality: str | None = None, organization: str | None = None) -> dict:
+                 municipality: str | None = None, organization: str | None = None, training: dict | None = None) -> dict:
     athletes = [p for p in persons if Role.ATHLETE in p.roles
                 and (not discipline or discipline in p.disciplines)
                 and (not municipality or p.municipality == municipality)
@@ -73,6 +113,8 @@ def build_report(persons: list[PersonRecord], today: date, years: int = 3, disci
         cuts.append({"key": key, "title": title, "rows": rows,
                      "note": "спортсмен учитывается в каждой своей дисциплине — сумма может превышать итог" if key == "discipline" else ""})
 
+    if training:
+        cuts += _training_cuts(athletes, enrolled, span, as_of, training, bool(discipline or municipality or organization))
     totals = [len(g) for g in enrolled]
     diff, pct = _delta(totals)
     return {

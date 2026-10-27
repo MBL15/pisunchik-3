@@ -3,6 +3,7 @@
 Drives the three case scenarios through the gateway like a browser (cookies, form posts, redirects).
 """
 import asyncio
+import contextlib
 import json
 import os
 import re
@@ -142,9 +143,14 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
     check("Нет одобренной заявки" in stranger.text, "participant without an approved application rejected")
     with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as anon:
         check(anon.get(f"/protocols/{SEC4}").status_code == 403, "draft protocol hidden from the public")
+        check(anon.get(f"/api/public/competition/api/v1/competitions/{SEC4}/protocol").status_code == 404,
+              "public proxy: draft protocol is not served")
+        check(anon.get(f"/partials/live/{SEC4}").status_code == 404, "live partial: only for a live or published protocol")
     r = c.post(f"/cabinet/admin/protocol/{SEC4}/results", data={**form, "action": "publish"})
     check(r.url.path == f"/protocols/{SEC4}" and "ПРОТОКОЛ" in r.text.upper() and "Главный судья" in r.text,
           "published → official protocol form with judges")
+    check(httpx.get(f"{BASE}/api/public/competition/api/v1/competitions/{SEC4}/protocol", timeout=15).status_code == 200,
+          "public proxy: published protocol is served")
     p = c.get(f"/api/public/competition/api/v1/competitions/{SEC4}/protocol").json()
     places = {e["fsp_id"]: e["place"] for e in p["entries"]}
     check(places == {ZAITSEVA: 1, ISAEV: 2, HASANOV: 2, VALIEVA: 4}, f"places computed, ties shared: {places}")
@@ -349,6 +355,12 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
 with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
     login(c, "abramov@fsp56.ru")
     check("Истекает срок разряда" in c.get("/notifications").text, "rank expiry reminder lands in the athlete's feed")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "trainer@fsp56.ru")
+    check("Истекает срок разряда подопечного" in c.get("/notifications").text, "rank expiry reminder reaches the trainer")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "admin@fsp56.ru")
+    check("срок разряда" in c.get("/notifications").text, "rank expiry digest reaches the federation")
 
 print("== 9. large lists: paging, sorting, facets, bulk moderation, audit search")
 with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
@@ -459,6 +471,268 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as ui, \
     tid = re.search(r"/market/tokens/(\d+)/revoke", ui.get("/market/my").text).group(1)
     ui.post(f"/market/tokens/{tid}/revoke")
     check(api.get("/me", headers=auth).status_code == 401, "revoked token stops working at once")
+
+from shared.demo_roster import ROSTER_BY_SEQ  # noqa: E402
+
+FID = {n: ROSTER_BY_SEQ[n]["fsp_id"] for n in (2, 3, 6, 8, 9, 10, 11, 13)}
+
+
+@contextlib.contextmanager
+def as_user(email: str, role: str, follow: bool = True):
+    with httpx.Client(base_url=BASE, follow_redirects=follow, timeout=30) as cl:
+        cl.post("/login", data={"email": email, "password": DEMO_PASSWORD, "role": role})
+        yield cl
+
+
+print("== 12. Д12 документы о судействе, Д9 кабинет министерства (только чтение)")
+PANEL = next(c["id"] for c in httpx.get(f"{BASE}/api/public/competition/api/v1/competitions", timeout=15).json() if c["judges"])
+with as_user("admin@fsp56.ru", "admin") as adm, as_user("judge@fsp56.ru", "judge") as judge, as_user("ministry@fsp56.ru", "ministry") as mini, \
+        as_user("athlete@fsp56.ru", "athlete") as ath:
+    r = adm.get(f"/competitions/{PANEL}/panel.xlsx")
+    check(r.status_code == 200 and r.content[:2] == b"PK" and "spreadsheet" in r.headers["content-type"], "панель коллегии выгружается в .xlsx")
+    check(adm.get(f"/competitions/{PANEL}/panel.pdf").content[:4] == b"%PDF", "и в .pdf")
+    check(judge.get(f"/judges/{FID[6]}/report.docx").status_code == 200, "судья скачивает собственный отчёт о судействе")
+    check(judge.get(f"/judges/{FID[2]}/report.docx").status_code == 403, "чужой отчёт судье недоступен")
+    check(ath.get(f"/competitions/{PANEL}/panel.xlsx").status_code == 403, "спортсмену справка о коллегии недоступна")
+    r = mini.get("/cabinet")
+    check("Доступ только для чтения" in r.text and "Показатели развития" in r.text, "кабинет министерства открывается")
+    check(mini.get(f"/judges/{FID[6]}/report.pdf").status_code == 200, "министерство читает отчёт судьи")
+    check(mini.get("/reports/headcount").status_code == 200 and mini.get("/teams").status_code == 200, "министерство видит отчёт о численности и сборные")
+    check(mini.get("/registry").status_code == 403 and mini.get("/integrations").status_code == 403, "реестр и интеграции министерству закрыты")
+    check(mini.post("/cabinet/admin/competitions", data={"title": "Не должно создаться"}).status_code == 403, "министерство ничего не меняет")
+    check('action="/cabinet/admin/teams/' not in mini.get("/teams/1").text, "в составе сборной у министерства нет кнопок правки")
+
+print("== 13. Д6 показатели развития и подтверждающие документы")
+with as_user("admin@fsp56.ru", "admin") as adm, as_user("ministry@fsp56.ru", "ministry") as mini:
+    html = adm.get("/development").text
+    check("Численность занимающихся" in html and "Официальные соревнования" in html and "Организации, ведущие" in html, "три показателя с источниками")
+    r = adm.post("/development/attachments", data={"indicator": "headcount", "year": "2026", "title": "Справка по численности",
+                                                   "url": "https://docs.example.org/hc.pdf"})
+    check("Справка по численности" in r.text, "ссылка-подтверждение приложена")
+    r = adm.post("/development/attachments", data={"indicator": "organizations", "year": "2026", "title": "Выписка из реестра"},
+                 files={"file": ("vypiska.pdf", b"%PDF-1.4 e2e", "application/pdf")})
+    aid = re.search(r'/development/attachments/(\d+)"', r.text).group(1)
+    got = mini.get(f"/development/attachments/{aid}")
+    check(got.content == b"%PDF-1.4 e2e" and "attachment" in got.headers["content-disposition"] and got.headers["x-content-type-options"] == "nosniff",
+          "файл скачивается как вложение, министерство его видит")
+    r = adm.post("/development/attachments", data={"indicator": "organizations", "year": "2026", "title": "Вредный файл"},
+                 files={"file": ("a.exe", b"MZ", "application/octet-stream")})
+    check("Допустимые файлы" in r.text, "исполняемый файл отклонён")
+    check(mini.post("/development/attachments", data={"indicator": "headcount", "year": "2026", "title": "Чужое", "url": "https://x.example"}).status_code == 403,
+          "министерство вложения не добавляет")
+
+print("== 14. Д7 личный путь и справочник понятий")
+with as_user("athlete@fsp56.ru", "athlete") as ath, httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as guest:
+    html = ath.get("/journey").text
+    check("Ступени ЕВСК" in html and "Что нужно для" in html and "Подходящие старты" in html, "личный путь: ступени, требования и старты")
+    g = guest.get("/glossary").text
+    check("РУСАДА" in g and "Как стать судьёй" in g and "Чемпионат" in g and "rusada.ru" in g, "справочник понятий открыт без входа")
+    check(guest.get("/journey").url.path == "/login", "личный путь — только для вошедших")
+
+print("== 15. Д8 премии Губернатора: автоотбор → ходатайство → статусы")
+with as_user("admin@fsp56.ru", "admin") as adm, as_user("ministry@fsp56.ru", "ministry") as mini:
+    html = adm.get("/awards").text
+    year = re.search(r'name="year" value="(\d+)"', html).group(1)
+    check("Претенденты по протоколам" in html and "Справочник размеров премий" in html and "до 1 февраля" in html.replace("\n", " ") or f"{int(year) + 1}" in html,
+          "претенденты и справочник размеров")
+    r = adm.post("/awards/petitions", data={"year": year, "note": "e2e"})
+    check("Ходатайство подготовлено" in r.text, "ходатайство сформировано по протоколам года")
+    check("уже подготовлено" in adm.post("/awards/petitions", data={"year": year}).text, "второе ходатайство за год не создаётся")
+    pid = re.search(r"/awards/petitions/(\d+)/package", r.text).group(1)
+    check(adm.get(f"/awards/petitions/{pid}/package.docx").content[:2] == b"PK" and mini.get(f"/awards/petitions/{pid}/package.pdf").content[:4] == b"%PDF",
+          "пакет документов: .docx у федерации, .pdf у министерства")
+    r = adm.post(f"/awards/petitions/{pid}/status", data={"status": "SENT"})
+    check("направлено" in r.text.lower(), "статус: направлено")
+    r = adm.post(f"/awards/petitions/{pid}/status", data={"status": "AWARDED", "order_no": ""})
+    check("реквизиты акта" in r.text, "назначение без реквизитов акта отклонено")
+    r = adm.post(f"/awards/petitions/{pid}/status", data={"status": "AWARDED", "order_no": "Распоряжение № 15-р"})
+    check("премия назначена" in r.text.lower(), "статус: премия назначена")
+    check(mini.post("/awards/rates", data={}).status_code == 403, "справочник размеров министерству недоступен для правки")
+
+print("== 16. Д5 апелляции и рапорты о нарушениях")
+with as_user("abramov@fsp56.ru", "athlete") as ath, as_user("admin@fsp56.ru", "admin") as adm:
+    html = ath.get("/appeals").text
+    opt = re.search(r'<option value="(FSP-[^|"]+)\|(\d+)">', html)
+    check(bool(opt), "спортсмен видит свои результаты для апелляции")
+    fid, cid = opt.group(1), opt.group(2)
+    r = ath.post("/appeals", data={"result": f"{fid}|{cid}", "subject": "Не засчитана задача C", "ev_kind": ["LOG", "OTHER", "OTHER"],
+                                   "description": "Решение прошло все тесты на стороне жюри, посылка отмечена неверной — прошу проверить журнал.",
+                                   "ev_title": ["Лог проверки", "", ""], "ev_url": ["https://logs.example.org/42", "", ""]})
+    aid = re.search(r"appeal-(\d+)", r.text).group(1)
+    check("Апелляция №" in r.text and "Лог проверки" in r.text, "апелляция подана с доказательством")
+    r = adm.post(f"/appeals/{aid}/action", data={"action": "review"})
+    check("на рассмотрении" in r.text.lower(), "федерация берёт апелляцию в рассмотрение")
+    r = adm.post(f"/appeals/{aid}/decision", data={"decision": "accept", "rationale": "Журнал проверок подтвердил ошибку: результат пересчитан.",
+                                                   "correction": "RESCORE", "solved": "26", "penalty": "0", "score": "100"})
+    check("удовлетворена" in r.text.lower() and "Протокол скорректирован" in r.text, "решение: удовлетворена, протокол скорректирован")
+    proto = httpx.get(f"{BASE}/api/public/competition/api/v1/competitions/{cid}/protocol", timeout=15).json()
+    me = next(e for e in proto["entries"] if e["fsp_id"] == fid)
+    check(proto["corrections"] and me["place"] == 1, "в протоколе запись о корректировке, спортсмен переместился на 1 место")
+    check("Корректировки по решениям федерации" in httpx.get(f"{BASE}/protocols/{cid}", timeout=15).text, "корректировка видна на странице протокола")
+    check(ath.post(f"/appeals/{aid}/decision", data={"decision": "reject", "rationale": "Попытка самому решить"}).status_code == 403,
+          "решать может только федерация")
+    html = adm.get(f"/appeals?violation_cid={cid}").text
+    subj = re.search(r'name="subject_fsp_id"[^>]*>.*?<option value="(FSP-[^"]+)"', html, re.S).group(1)
+    r = adm.post("/violations", data={"competition_id": cid, "subject_fsp_id": subj, "description": "Передача решений третьим лицам во время тура.",
+                                     "ev_kind": ["VIDEO", "OTHER", "OTHER"], "ev_title": ["Запись экрана", "", ""],
+                                     "ev_url": ["https://video.example.org/9", "", ""]})
+    vid = re.search(r"violation-(\d+)", r.text).group(1)
+    check("Рапорт №" in r.text, "рапорт о нарушении подан")
+    r = adm.post(f"/violations/{vid}/decision", data={"decision": "DSQ", "rationale": "Нарушение подтверждено записью экрана.",
+                                                      "sanction_days": "30", "reason": "Передача решений"})
+    check("дисквалификация" in r.text.lower() and "санкция до" in r.text, "решение: дисквалификация и санкция в реестре")
+    proto = httpx.get(f"{BASE}/api/public/competition/api/v1/competitions/{cid}/protocol", timeout=15).json()
+    check(next(e for e in proto["entries"] if e["fsp_id"] == subj)["status"] == "DSQ" and len(proto["corrections"]) == 2,
+          "в протоколе нарушитель дисквалифицирован")
+
+print("== 17. Д4 нормативы и аттестация по ФССП")
+with as_user("trainer@fsp56.ru", "trainer") as tr, as_user("admin@fsp56.ru", "admin") as adm, as_user("athlete@fsp56.ru", "athlete") as ath:
+    html = tr.get("/training").text
+    check("Нормативы и аттестация по ФССП" in html and "готов → " in html, "тренер видит подопечных и готовых к переводу")
+    check(f"/training/athletes/{FID[10]}" in html, "в списке подопечные тренера")
+    r = tr.post(f"/training/athletes/{FID[10]}/attest", data={})
+    check("Не выполнено обязательных нормативов" in r.text, "не готового к переводу аттестовать нельзя")
+    page_html = tr.get(f"/training/athletes/{FID[10]}").text
+    typing = re.search(r'<option value="(\d+)">Скорость печати', page_html).group(1)
+    r = tr.post(f"/training/athletes/{FID[10]}/results", data={"norm_id": typing, "value": "400"})
+    check("норматив выполнен" in r.text and "готов к переводу" in r.text, "результат внесён — платформа сама признала норматив выполненным")
+    r = tr.post(f"/training/athletes/{FID[10]}/attest", data={"note": "e2e"})
+    check("Оформлен перевод" in r.text, "перевод на следующий этап оформлен")
+    check("Аттестации и переводы" in tr.get(f"/training/athletes/{FID[10]}").text, "история аттестаций в профиле")
+    r = tr.post(f"/training/athletes/{FID[3]}/results", data={"norm_id": typing, "value": "400"})
+    check("Результаты вносит" in r.text or "доступ" in r.text.lower() or r.status_code == 403, "тренер не вносит результаты чужому спортсмену")
+    check(ath.get("/training").url.path == f"/training/athletes/{FID[3]}", "спортсмен попадает в собственный профиль подготовки")
+    check("Аттестации и переводы" in ath.get("/training/athletes/" + FID[3]).text, "у спортсмена видна история аттестаций")
+    check(ath.get(f"/training/athletes/{FID[8]}").status_code == 403, "чужой профиль подготовки спортсмену закрыт")
+    r = adm.post("/training/norms", data={"title": "Тестовый норматив e2e", "kind": "SPECIAL", "stage": "УТ", "discipline": "ALL", "gender": "ALL",
+                                         "unit": "балл", "direction": "MIN", "threshold": "7", "required": "1", "active": "1"})
+    check("Тестовый норматив e2e" in r.text, "федерация пополняет справочник нормативов")
+    check(tr.post("/training/norms", data={"title": "Чужой норматив", "kind": "SPECIAL", "stage": "УТ", "unit": "x", "direction": "MIN",
+                                          "threshold": "1"}).status_code == 403, "тренер справочник не правит")
+
+print("== 18. Д3 организации, группы, журнал занятий → отчёт о численности")
+with as_user("admin@fsp56.ru", "admin") as adm, as_user("trainer@fsp56.ru", "trainer") as tr:
+    html = adm.get("/organizations").text
+    check("Лицей № 1 г. Оренбурга" in html and "лицензия" in html and "групп:" in html, "карточки организаций: лицензия, программы, группы")
+    gid = re.search(r"/groups/(\d+)", adm.get("/organizations/card?name=" + "Лицей № 1 г. Оренбурга").text).group(1)
+    grp = adm.get(f"/groups/{gid}")
+    check("Журнал занятий" in grp.text and "Состав" in grp.text, "страница группы: состав и журнал")
+    attendees = re.findall(r'name="attendees" value="([^"]+)"', grp.text)
+    base = {"on": time.strftime("%Y-%m-%d"), "topic": "Контрольный контест", "duration_min": "90", "attendees": attendees}
+    r = adm.post(f"/groups/{gid}/sessions", data={**base, "format": "ONLINE", "confirmation_kind": "", "confirmation_ref": ""})
+    check("подтверждается ссылкой на запись" in r.text, "онлайн-занятие без подтверждения не принимается")
+    r = adm.post(f"/groups/{gid}/sessions", data={**base, "format": "ONLINE", "confirmation_kind": "RECORDING",
+                                                  "confirmation_ref": "https://video.example.org/e2e"})
+    check("Занятие занесено в журнал" in r.text and "Контрольный контест" in r.text, "онлайн-занятие с записью занесено в журнал")
+    check(tr.get(f"/groups/{gid}").status_code == 200, "тренер видит группы организаций")
+    rep = adm.get("/reports/headcount").text
+    check("занятия по журналу" in rep.lower() and "по зачислению в группы" in rep.lower(), "группы и журнал попали в отчёт о численности")
+    x = adm.get("/reports/headcount/export.xlsx")
+    check(x.status_code == 200 and x.content[:2] == b"PK", "отчёт с новыми разрезами выгружается в .xlsx")
+
+print("== 19. Д1 «Войти через ФСП ID» (OpenID Connect, authorization code + PKCE)")
+import base64 as _b64  # noqa: E402
+import hashlib as _h  # noqa: E402
+from urllib.parse import parse_qs, urlsplit  # noqa: E402
+
+import jwt as _jwt  # noqa: E402
+
+
+def pkce() -> tuple[str, str]:
+    v = _b64.urlsafe_b64encode(os.urandom(40)).decode().rstrip("=")
+    return v, _b64.urlsafe_b64encode(_h.sha256(v.encode()).digest()).decode().rstrip("=")
+
+
+with httpx.Client(base_url=BASE, follow_redirects=False, timeout=30) as anon:
+    conf = anon.get("/.well-known/openid-configuration").json()
+    check(conf["code_challenge_methods_supported"] == ["S256"] and conf["jwks_uri"].endswith("/oidc/jwks")
+          and "RS256" in conf["id_token_signing_alg_values_supported"], "discovery-документ")
+    verifier, challenge = pkce()
+    redirect = f"{BASE}/oidc/demo/callback"
+    params = {"response_type": "code", "client_id": "fsp-demo-client", "redirect_uri": redirect, "scope": "openid profile roles disciplines rank",
+              "state": "st-1", "nonce": "nn-1", "code_challenge": challenge, "code_challenge_method": "S256"}
+    r = anon.get("/oidc/authorize", params=params)
+    check(r.status_code == 303 and r.headers["location"].startswith("/login?next="), "без входа authorize ведёт на страницу входа")
+    check(anon.get("/oidc/authorize", params={**params, "redirect_uri": "https://evil.example/cb"}).status_code == 400,
+          "незарегистрированный адрес возврата отклонён")
+with as_user("athlete@fsp56.ru", "athlete", follow=False) as me, httpx.Client(base_url=BASE, timeout=30) as api:
+    r = me.get("/oidc/authorize", params={**params, "code_challenge": ""})
+    check(r.status_code == 303 and "error=invalid_request" in r.headers["location"], "без PKCE авторизация отклоняется")
+    r = me.get("/oidc/authorize", params=params)
+    check(r.status_code == 200 and "Войти через ФСП ID" in r.text and "Идентификатор ФСП ID" in r.text, "страница согласия показывает передаваемые данные")
+    blob = re.search(r'name="req" value="([^"]+)"', r.text).group(1)
+    denied = me.post("/oidc/consent", data={"req": blob, "decision": "deny"})
+    check("error=access_denied" in denied.headers["location"] and "state=st-1" in denied.headers["location"], "отказ пользователя возвращается приложению")
+    allowed = me.post("/oidc/consent", data={"req": blob, "decision": "allow"})
+    back_url = urlsplit(allowed.headers["location"])
+    q = parse_qs(back_url.query)
+    check(back_url.path == "/oidc/demo/callback" and q["state"] == ["st-1"] and "code" in q, "после согласия приложение получает код и state")
+    tok_req = {"grant_type": "authorization_code", "code": q["code"][0], "redirect_uri": redirect, "code_verifier": verifier}
+    bad = api.post("/oidc/token", data={**tok_req, "code_verifier": "x" * 50}, auth=("fsp-demo-client", "fsp-demo-secret"))
+    check(bad.status_code == 400 and bad.json()["error"] == "invalid_grant", "неверный code_verifier отклонён (код при этом сгорает)")
+    r = me.get("/oidc/authorize", params=params)
+    blob = re.search(r'name="req" value="([^"]+)"', r.text).group(1)
+    code = parse_qs(urlsplit(me.post("/oidc/consent", data={"req": blob, "decision": "allow"}).headers["location"]).query)["code"][0]
+    check(api.post("/oidc/token", data={**tok_req, "code": code}).status_code == 401, "без секрета клиента токен не выдаётся")
+    code = parse_qs(urlsplit(me.post("/oidc/consent", data={"req": blob, "decision": "allow"}).headers["location"]).query)["code"][0]
+    tok = api.post("/oidc/token", data={**tok_req, "code": code}, auth=("fsp-demo-client", "fsp-demo-secret")).json()
+    check("id_token" in tok and tok["token_type"] == "Bearer", "обмен кода на токены")
+    key = _jwt.PyJWK(api.get("/oidc/jwks").json()["keys"][0]).key
+    claims = _jwt.decode(tok["id_token"], key, algorithms=["RS256"], audience="fsp-demo-client", issuer=conf["issuer"])
+    check(claims["sub"] == FID[3] and claims["nonce"] == "nn-1" and "Соколов" in claims["name"] and "athlete" in claims["roles"],
+          "id_token подписан RS256, в нём ФИО, роли и nonce")
+    info = api.get("/oidc/userinfo", headers={"Authorization": "Bearer " + tok["access_token"]}).json()
+    check(info["sub"] == FID[3] and info["rank"] and "disciplines" in info, "userinfo: ФИО, роли, дисциплины, разряд")
+    check(api.get("/oidc/userinfo", headers={"Authorization": "Bearer nope"}).status_code == 401, "userinfo с чужим токеном недоступен")
+    reuse = api.post("/oidc/token", data={**tok_req, "code": code}, auth=("fsp-demo-client", "fsp-demo-secret"))
+    check(reuse.status_code == 400, "код одноразовый")
+with as_user("admin@fsp56.ru", "admin") as adm:
+    r = adm.post("/oidc/clients", data={"name": "Сайт партнёра e2e", "redirect_uris": "https://partner.example.org/cb"})
+    check(bool(re.search(r"data-token>(fspcs_[\w-]+)<", r.text)) and "client_id:" in r.text, "администратор регистрирует приложение, секрет показан один раз")
+    check("fspcs_" not in adm.get("/oidc/clients").text, "секрет повторно не показывается")
+    check(adm.get("/oidc/demo").status_code == 200, "тестовое приложение-партнёр доступно")
+
+print("== 20. Д2 интеграции: токены с ограничением прав, вебхуки, импорт результатов")
+with as_user("admin@fsp56.ru", "admin") as adm, httpx.Client(base_url=f"{BASE}/api/ext/v1", timeout=30) as ext, as_user("ministry@fsp56.ru", "ministry") as mini:
+    check(mini.get("/integrations").status_code == 403, "интеграции — только федерации")
+    r = adm.post("/integrations/clients", data={"name": "Партнёр e2e", "scope": ["competitions:read", "protocols:read"]})
+    token = re.search(r"data-token>(fspi_[\w-]+)<", r.text).group(1)
+    auth = {"Authorization": f"Bearer {token}"}
+    check(ext.get("/competitions").status_code == 401 and ext.get("/competitions", headers={"Authorization": "Bearer fspi_x"}).status_code == 401,
+          "без токена и с чужим — 401")
+    cal = ext.get("/competitions", headers=auth, params={"status": "REGISTRATION_OPEN"})
+    check(cal.status_code == 200 and cal.json() and all(c["status"] == "REGISTRATION_OPEN" for c in cal.json()), "календарь по токену")
+    pub = next(c["id"] for c in ext.get("/competitions", headers=auth).json() if c["protocol_published"])
+    check(ext.get(f"/competitions/{pub}/protocol", headers=auth).json()["entries"], "опубликованный протокол по токену")
+    check(ext.get("/competitions/999/protocol", headers=auth).status_code == 404, "несуществующий протокол — 404")
+    check(ext.post("/competitions/22/results", headers=auth, json={"results": [{"fsp_id": FID[9], "solved": 1}]}).status_code == 403,
+          "без области results:write импорт закрыт")
+    check("/competitions/{cid}/results" in ext.get("/openapi.json").text and ext.get("/docs").status_code == 200, "описание API (OpenAPI) для разработчиков")
+    r = adm.post("/integrations/clients", data={"name": "Импорт e2e", "scope": ["competitions:read", "results:write"]})
+    token_w = re.search(r"data-token>(fspi_[\w-]+)<", r.text).group(1)
+    sys_id = re.findall(r"/integrations/clients/(\d+)/revoke", r.text)[0]
+    r = adm.post("/integrations/webhooks", data={"client_id": sys_id, "url": f"{BASE}/integrations/demo-receiver",
+                                                 "event": ["protocol.published", "competition.published", "application.approved"]})
+    check(bool(re.search(r"data-token>([0-9a-f]{48})<", r.text)), "вебхук создан, секрет подписи показан один раз")
+    hid = re.search(r"/integrations/webhooks/(\d+)/test", r.text).group(1)
+    r = adm.post(f"/integrations/webhooks/{hid}/test")
+    check("доставлено" in r.text, "тестовое событие доставлено")
+    time.sleep(0.3)
+    check("ping" in adm.get("/integrations").text, "демо-приёмник показывает принятое событие")
+    adm.post("/cabinet/admin/competitions", data={"title": "Открытый кубок вебхуков", "discipline": "ALG", "level": "REGIONAL", "type": "Кубок",
+                                                 "format": "ONLINE", "calendar_plan": "REGIONAL", "plan_number": "№ 56-301", "start_date": "2027-04-01",
+                                                 "end_date": "2027-04-01", "venue": "онлайн", "age_group": "без ограничений 12+",
+                                                 "registration_deadline": "2027-03-20"})
+    deadline = time.time() + 5
+    while time.time() < deadline and "competition.published" not in adm.get("/integrations").text:
+        time.sleep(0.2)
+    check("competition.published" in adm.get("/integrations").text, "создание соревнования уходит вебхуком competition.published")
+    r = ext.post("/competitions/22/results", headers={"Authorization": f"Bearer {token_w}"}, json={"system": "Партнёр", "results": [
+        {"fsp_id": FID[9], "solved": 5, "penalty": 240}, {"fsp_id": FID[13], "solved": 6, "penalty": 400}]})
+    check(r.status_code in (202, 422, 409), f"импорт результатов принят API: {r.status_code} {r.text[:80]}")
+    r = adm.post("/integrations/clients/" + sys_id + "/revoke")
+    check("Токен отозван" in r.text, "токен можно отозвать, вебхуки отключаются")
+    check(ext.get("/competitions", headers={"Authorization": f"Bearer {token_w}"}).status_code == 401, "отозванный токен не работает")
 
 print("\nRESULT:", "ALL PASSED" if ok else "FAILURES")
 sys.exit(0 if ok else 1)

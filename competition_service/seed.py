@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from shared import config, demo_scale
 from shared.demo_roster import ROSTER_BY_SEQ, athletes_in, full_name
-from shared.domain import AGE_GROUPS, ApplicationStatus, CompetitionStatus, protocol_mode
+from shared.domain import ApplicationStatus, CompetitionStatus, age_group_fit, protocol_mode
 from shared.fsp_id import make_fsp_id
 
 # (key, discipline, level, type, format, format_note, plan, plan_no, start_offset, days, venue, age_group, status, deadline_offset)
@@ -237,9 +237,8 @@ def _seed_scale_applications(store, today, now) -> None:
     rnd = random.Random(57)
     opened = [c for c in store.competitions.values() if c.status == CompetitionStatus.REGISTRATION_OPEN]
     for c in opened:
-        lo, hi = AGE_GROUPS[c.age_group]
         for p in people:
-            if c.discipline in p["disciplines"] and lo <= demo_scale.age_on(p["birth_date"], today) <= hi and rnd.random() < 0.5:
+            if c.discipline in p["disciplines"] and age_group_fit(p["birth_date"], c.age_group, c.start_date)[1] and rnd.random() < 0.5:
                 roll = rnd.random()
                 status = "PENDING" if roll < 0.7 else "APPROVED" if roll < 0.92 else "REJECTED"
                 store.applications.append(Application(

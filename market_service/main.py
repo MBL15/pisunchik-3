@@ -13,7 +13,8 @@ from market_service.models import (
     ActorIn, ApiToken, DecisionIn, Offer, OfferIn, Profile, ProfileIn, StatusIn, TokenIn, TokenVerifyIn,
 )
 from market_service.seed import seed
-from market_service.store import AVAILABILITY_LABELS, DDL, OFFER_STATUS_LABELS, restore, snapshot, store
+from market_service.store import DDL, OFFER_STATUS_LABELS, restore, snapshot, store
+from shared import service_auth
 from shared.db import Persistence
 from shared.listing import AUDIT_LIMIT, audit_page, facets, matches, page, tokens
 
@@ -45,6 +46,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="ФСП Оренбург · Market Service", version="1.0.0", lifespan=lifespan)
+service_auth.install(app)
 
 
 @app.middleware("http")

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Мой путь · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-5xl pt-10">
+  {{ m.section_head("journey show --me", "Мой путь в спорте", "Где вы сейчас, что нужно для следующего разряда по ЕВСК и какие старты подходят вам по дисциплине, возрасту и уровню.") }}
+  {{ m.degraded_notice(degraded) }}
+  <div class="no-print mb-6 flex flex-wrap gap-3">
+    <a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
+    <a href="/glossary" class="{{ m.BTN_GHOST }} !py-2 !text-xs">Справочник понятий</a>
+  </div>
+
+  <section class="{{ m.CARD }} p-5" aria-labelledby="ladder-h">
+    <h2 id="ladder-h" class="font-mono text-xs uppercase tracking-wider text-fsp-muted">Ступени ЕВСК</h2>
+    <ol class="mt-4 flex flex-wrap gap-2" aria-label="Разряды по возрастанию">
+      {% for r in ranks %}
+      {% set order = loop.index0 %}
+      <li class="rounded-md border px-2.5 py-1.5 font-mono text-xs {% if person.rank and r.code == person.rank.code %}border-fsp-blue bg-fsp-blue text-white{% elif target and r.code == target.code %}border-amber-400/70 bg-amber-400/10 text-amber-300{% elif order < held_order %}border-emerald-500/50 text-emerald-300{% else %}border-fsp-line2 text-fsp-muted{% endif %}"
+          {% if person.rank and r.code == person.rank.code %}aria-current="step"{% endif %}>{{ r.short }}{% if person.rank and r.code == person.rank.code %} · у вас{% elif target and r.code == target.code %} · цель{% endif %}</li>
+      {% endfor %}
+    </ol>
+    <p class="mt-3 text-sm text-fsp-soft">
+      {% if person.rank %}Сейчас: <b class="text-fsp-light">{{ person.rank.title }}</b>{% if person.rank.expires_at %}, действует до {{ person.rank.expires_at|ru_date }} ({{ m.expiry_badge(person.rank.state, person.rank.days_left, person.rank.expires_at) }}){% else %}, бессрочно{% endif %}.
+      {% else %}Разряда пока нет — начать можно с III юношеского.{% endif %}
+    </p>
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" aria-labelledby="need-h">
+    <h2 id="need-h" class="font-mono text-xs uppercase tracking-wider text-fsp-muted">
+      {% if kind == "confirm" %}Как подтвердить «{{ target.short }}»{% elif target %}Что нужно для «{{ target.title }}»{% else %}Высшая ступень{% endif %}
+    </h2>
+    {% if target %}
+    <p class="mt-2 text-sm text-fsp-soft">Достаточно выполнить <b>одно</b> из условий: занять нужное место на соревновании уровня не ниже указанного при достаточном числе участников. Пороги — рабочая таблица платформы, перед подачей сверяйтесь с действующей ЕВСК.</p>
+    <ul class="mt-4 grid gap-2">
+      {% for p in progress %}
+      <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-4 py-3 {% if p.done %}border-emerald-500/50 bg-emerald-500/10{% else %}border-fsp-line{% endif %}">
+        <span class="text-sm {% if p.done %}text-emerald-200{% else %}text-fsp-light{% endif %}">{{ m.icon("check" if p.done else "trophy", "mr-1 inline h-4 w-4") }}{{ p.text }}</span>
+        {% if p.done %}<a href="/protocols/{{ p.result.competition_id }}" class="font-mono text-[11px] text-emerald-300 hover:underline">выполнено: {{ p.result.title }}, {{ p.result.place }} место →</a>{% else %}<span class="font-mono text-[11px] text-fsp-muted">пока не выполнено</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% if progress|selectattr("done")|list %}
+    <p class="mt-3 text-sm text-emerald-300">Условие выполнено — подайте заявку на {{ "подтверждение" if kind == "confirm" else "присвоение" }} разряда в <a href="/cabinet#rank" class="underline">кабинете</a>.</p>
+    {% endif %}
+    {% else %}
+    <p class="mt-2 text-sm text-fsp-soft">Вы на высшей ступени классификации платформы. Звание МС присваивается по отдельной процедуре.</p>
+    {% endif %}
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" aria-labelledby="starts-h">
+    <h2 id="starts-h" class="font-mono text-xs uppercase tracking-wider text-fsp-muted">Подходящие старты</h2>
+    <ul class="mt-3 grid gap-2">
+      {% for c in suitable %}
+      <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-fsp-line px-4 py-3">
+        <div class="min-w-0">
+          <a href="/competitions/{{ c.id }}/regulation" class="font-medium text-white hover:text-fsp-violet hover:underline">{{ c.title }}</a>
+          <p class="font-mono text-[11px] text-fsp-muted">{{ c.start_date|ru_date }} · {{ c.level_label }} · {{ c.age_group }} · на старте {{ c.age_at_start }} {{ plural(c.age_at_start, "год", "года", "лет") }}</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          {% if c.gives_rank %}{{ m.tag("даёт шанс на разряд", "amber") }}{% endif %}
+          {{ m.tag("приём заявок" if c.can_apply else c.status_label, "emerald" if c.can_apply else "slate") }}
+          {% if c.can_apply %}<a href="/cabinet#starts" class="{{ m.BTN_SM }}">Подать заявку</a>{% endif %}
+        </div>
+      </li>
+      {% else %}
+      <li class="rounded-lg border border-dashed border-fsp-line2 p-4 text-sm text-fsp-muted">Подходящих по дисциплине и возрасту стартов пока нет — следите за <a href="/calendar" class="text-fsp-violet hover:underline">календарём</a>.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" aria-labelledby="check-h">
+    <h2 id="check-h" class="font-mono text-xs uppercase tracking-wider text-fsp-muted">Чек-лист спортсмена</h2>
+    <ul class="mt-3 grid gap-2 sm:grid-cols-2">
+      {% for label, ok, href in checklist %}
+      <li><a href="{{ href }}" class="flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm {% if ok %}border-emerald-500/40 text-emerald-200{% else %}border-fsp-line text-fsp-soft hover:border-fsp-blue{% endif %}">{{ m.icon("check" if ok else "alert", "h-4 w-4 shrink-0") }}{{ label }}</a></li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}

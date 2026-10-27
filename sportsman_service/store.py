@@ -8,6 +8,7 @@ from shared.domain import (
     QUALIFICATION_PURPOSE_LABELS, QUALIFICATION_STATUS_LABELS, RANK_BY_CODE, RANK_ORDER, ROLE_LABELS, SANCTION_LABELS,
     TRAINING_STAGES, ApplicationStatus, LinkStatus, expiry_state,
 )
+from shared.ext import ExtTables
 from shared.fsp_id import make_fsp_id
 from shared.listing import AUDIT_LIMIT
 from sportsman_service.models import (
@@ -36,6 +37,7 @@ class Store:
         self.notifications: list[Notification] = []
         self.notified_keys: set[tuple[str, str]] = set()  # (адресат, ключ) — напоминание уже было
         self.audit: list[dict] = []
+        self.ext = ExtTables()  # организации, группы, журнал, нормативы, клиенты ФСП ID
         self._next_seq = 1
         self._next_link_id = 1
         self._next_notification_id = 1
@@ -170,7 +172,8 @@ def snapshot(s: Store) -> dict:
         "sp_notifications": {str(x.id): (dump(x), {}) for x in s.notifications},
         "sp_meta": {"counters": ({"next_seq": s._next_seq, "next_link_id": s._next_link_id,
                                   "next_notification_id": s._next_notification_id}, {}),
-                    "audit": ({"items": s.audit}, {})},
+                    "audit": ({"items": s.audit}, {}),
+                    "ext": (s.ext.dump(), {})},
     }
 
 
@@ -186,6 +189,8 @@ def restore(s: Store, rows: dict[str, dict[str, dict]]) -> None:
     s._next_link_id = meta["counters"]["next_link_id"]
     s._next_notification_id = meta["counters"].get("next_notification_id", len(s.notifications) + 1)
     s.audit = meta.get("audit", {}).get("items", [])
+    if "ext" in meta:
+        s.ext.load(meta["ext"])
 
 
 def seed(s: Store) -> None:
@@ -243,6 +248,12 @@ def seed(s: Store) -> None:
         status=ApplicationStatus.PENDING, created_at=now - timedelta(days=2),
     ))
     _seed_notifications(s, now)
+    from sportsman_service import training_seed  # отложенный импорт: модуль зависит только от shared
+
+    training_seed.seed(s)
+    from sportsman_service import oidc
+
+    oidc.seed_demo_client(s)
     s.log("system", "seed", f"{len(s.persons)} персон, {len(s.links)} связей тренер–спортсмен")
 
 

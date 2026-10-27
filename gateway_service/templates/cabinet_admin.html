@@ -295,6 +295,7 @@
         </li>
         {% else %}<li class="text-xs text-fsp-muted">Коллегия не назначена.</li>{% endfor %}
       </ul>
+      {% if c.judges %}<div class="mt-2">{{ m.export_links("/competitions/" ~ c.id ~ "/panel", "Справка о составе коллегии") }}</div>{% endif %}
       <form method="post" action="/cabinet/admin/competitions/{{ c.id }}/judges" class="mt-3 grid gap-2 border-t border-fsp-line pt-3 sm:grid-cols-[1fr_13rem_auto] sm:items-end">
         <div>
           <label for="jf-{{ c.id }}" class="{{ m.LABEL }} !mb-1 !text-[10px]">Судья</label>

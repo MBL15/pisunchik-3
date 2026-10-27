@@ -1,5 +1,6 @@
 import re
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -81,6 +82,21 @@ class Antidoping(BaseModel):
     """Отметка о прохождении онлайн-курса РУСАДА."""
     course_date: date
     certificate_url: str
+
+
+class SanctionIn(BaseModel):
+    """Санкция по решению федерации (например, по рапорту о нарушении): исключает из рейтинга и подачи заявок на срок."""
+    type: Literal["DISQUALIFICATION", "SUSPENSION"] = "DISQUALIFICATION"
+    date_from: date
+    date_to: date
+    reason: str = Field(min_length=5, max_length=200)
+    actor: str
+
+    @model_validator(mode="after")
+    def _period(self):
+        if self.date_to < self.date_from:
+            raise ValueError("Окончание санкции раньше её начала")
+        return self
 
 
 class AntidopingIn(BaseModel):

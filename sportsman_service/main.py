@@ -14,12 +14,14 @@ from shared.domain import (
 from shared.fsp_id import is_valid_fsp_id
 from shared.listing import AUDIT_LIMIT, MAX_LIMIT, audit_page, facets, matches, norm, page, search_audit, tokens
 from shared.http import ServiceClient, ServiceError
+from sportsman_service import groups, norms, oidc
 from sportsman_service.headcount import build_report
 from sportsman_service.models import (
-    Antidoping, AntidopingIn, AuthIn, Guardian, JudgeCategoryRecord, LinkCreateIn, LinkEvent, LinkStatusIn, LookupIn,
+    Antidoping, AntidopingIn, AuthIn, Guardian, Sanction, SanctionIn, JudgeCategoryRecord, LinkCreateIn, LinkEvent, LinkStatusIn, LookupIn,
     NotificationIn, NotificationsReadIn, PersonRecord, QualificationDecisionIn, QualificationIn, QualificationRequest, RankRecord, RegistrationIn,
 )
 from sportsman_service.security import hash_password, verify_password
+from shared import service_auth
 from shared.db import Persistence
 from sportsman_service.store import DDL, age_on, restore, seed, snapshot, store
 
@@ -46,6 +48,10 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="ФСП Оренбург · Sportsman Service", version="1.0.0", lifespan=lifespan)
+service_auth.install(app)
+app.include_router(norms.router)
+app.include_router(groups.router)
+app.include_router(oidc.router)
 
 
 @app.middleware("http")
@@ -248,6 +254,14 @@ async def set_antidoping(fsp_id: str, data: AntidopingIn):
     return store.present(p)
 
 
+@app.post("/api/v1/persons/{fsp_id}/sanctions", status_code=201)
+async def add_sanction(fsp_id: str, data: SanctionIn):
+    p = _person(fsp_id)
+    p.sanctions.append(Sanction(type=data.type, date_from=data.date_from, date_to=data.date_to, reason=data.reason.strip()))
+    store.log(data.actor, "Наложена санкция", f"{fsp_id}: {data.type} {data.date_from:%d.%m.%Y}–{data.date_to:%d.%m.%Y}")
+    return store.present(p)
+
+
 @app.post("/api/v1/persons/lookup")
 async def lookup_persons(data: LookupIn):
     return {fid: {"full_name": f"{p.last_name} {p.first_name} {p.middle_name}".strip(), "municipality": p.municipality,
@@ -296,7 +310,7 @@ async def headcount_report(years: int = Query(3, ge=2, le=6), discipline: str | 
     if organization and organization not in ORGANIZATIONS:
         raise HTTPException(422, "Неизвестная организация")
     return build_report(list(store.persons.values()), config.today(), years, discipline or None, municipality or None,
-                        organization or None)
+                        organization or None, training=groups.report_data())
 
 
 @app.get("/api/v1/audit")

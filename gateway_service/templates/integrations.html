@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Интеграции · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="pt-10">
+  {{ m.section_head("integrations list", "Интеграции с внешними системами", "Токены доступа с ограничением прав, вебхуки о событиях платформы, импорт результатов соревнований и описание API — для соревновательных платформ, сайтов организаций и сервисов партнёров.") }}
+  {{ m.degraded_notice(degraded) }}
+  <div class="no-print mb-6 flex flex-wrap gap-3">
+    <a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
+    <a href="/api/ext/v1/docs" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Описание API (OpenAPI)</a>
+    <a href="/oidc/clients" class="{{ m.BTN_SM }}">{{ m.icon("shield", "h-3.5 w-3.5") }}Войти через ФСП ID</a>
+  </div>
+  {% if created %}
+  <div class="mb-6 rounded-xl border border-emerald-500/60 bg-emerald-500/10 p-4" role="status">
+    <p class="text-sm font-medium text-emerald-300">Токен для «{{ created.name }}» создан. Скопируйте его сейчас — повторно он не показывается.</p>
+    <p class="mt-2 break-all rounded-md bg-fsp-bg px-3 py-2 font-mono text-sm text-fsp-light select-all" data-token>{{ created.token }}</p></div>
+  {% endif %}
+  {% if hook_secret %}
+  <div class="mb-6 rounded-xl border border-emerald-500/60 bg-emerald-500/10 p-4" role="status">
+    <p class="text-sm font-medium text-emerald-300">Вебхук создан. Секрет подписи показывается один раз:</p>
+    <p class="mt-2 break-all rounded-md bg-fsp-bg px-3 py-2 font-mono text-sm text-fsp-light select-all" data-token>{{ hook_secret.secret }}</p></div>
+  {% endif %}
+
+  <section class="{{ m.CARD }} p-5" aria-labelledby="sys-h">
+    <h2 id="sys-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Внешние системы · {{ systems|length }}</h2>
+    <ul class="mt-3 grid gap-3">
+      {% for s in systems %}
+      <li class="rounded-lg border border-fsp-line p-4 {% if not s.active %}opacity-60{% endif %}">
+        <div class="flex flex-wrap items-center justify-between gap-2"><span class="font-medium text-white">{{ s.name }}</span>
+          <span class="flex items-center gap-2">{{ m.tag("действует" if s.active else "отозвана", "emerald" if s.active else "amber") }}
+            {% if s.active %}<form method="post" action="/integrations/clients/{{ s.id }}/revoke"><button class="{{ m.BTN_NO }}" data-confirm="Отозвать токен «{{ s.name }}»? Вебхуки системы будут отключены." data-confirm-label="Отозвать">Отозвать</button></form>{% endif %}</span></div>
+        <p class="mt-1 font-mono text-[11px] text-fsp-muted">токен {{ s.prefix }}… · создан {{ s.created_at|ru_date }} · {% if s.last_used_at %}использован {{ s.last_used_at|ru_date }}{% else %}не использовался{% endif %}</p>
+        <ul class="mt-2 flex flex-wrap gap-1.5">{% for sc in s.scopes %}<li>{{ m.tag(sc, "blue") }}</li>{% endfor %}</ul>
+        <ul class="mt-3 grid gap-1.5">
+          {% for h in by_client.get(s.id, []) %}
+          <li class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-fsp-line px-3 py-1.5 text-sm">
+            <span class="min-w-0 break-all text-fsp-light">{{ h.url }} <span class="font-mono text-[11px] text-fsp-muted">· {{ h.events|join(", ") }}</span></span>
+            <span class="flex items-center gap-2"><form method="post" action="/integrations/webhooks/{{ h.id }}/test"><button class="{{ m.BTN_SM }}">Проверить</button></form>
+              <form method="post" action="/integrations/webhooks/{{ h.id }}/delete"><button class="{{ m.BTN_NO }}" data-confirm="Удалить вебхук?" data-confirm-label="Удалить">Удалить</button></form></span></li>
+          {% endfor %}
+        </ul>
+        {% if s.active %}
+        <details class="mt-3 rounded-lg border border-fsp-line2 p-3"><summary class="cursor-pointer font-mono text-xs text-fsp-light">Добавить вебхук</summary>
+          <form method="post" action="/integrations/webhooks" class="mt-3 grid gap-3">
+            <input type="hidden" name="client_id" value="{{ s.id }}">
+            <div><label for="hu-{{ s.id }}" class="{{ m.LABEL }}">Адрес приёма событий</label><input id="hu-{{ s.id }}" name="url" type="url" required value="{{ receiver_url }}" class="{{ m.INPUT }} font-mono"><p class="mt-1 text-xs text-fsp-muted">По умолчанию — демо-приёмник платформы: пришедшие события видны ниже.</p></div>
+            <fieldset><legend class="{{ m.LABEL }}">События</legend><div class="flex flex-wrap gap-x-4 gap-y-1">{% for k, v in meta.events.items() %}<label class="flex items-center gap-2 text-sm text-fsp-soft"><input type="checkbox" name="event" value="{{ k }}" checked class="h-4 w-4 accent-fsp-blue">{{ k }} — {{ v }}</label>{% endfor %}</div></fieldset>
+            <div><button class="{{ m.BTN_SM }}">Добавить</button></div>
+          </form></details>
+        {% endif %}
+      </li>
+      {% else %}<li class="rounded-lg border border-dashed border-fsp-line2 p-4 text-sm text-fsp-muted">Внешних систем пока нет.</li>{% endfor %}
+    </ul>
+    <details class="mt-4 rounded-lg border border-fsp-line2 p-3" {% if not systems %}open{% endif %}><summary class="cursor-pointer font-mono text-xs text-fsp-light">Выдать токен новой системе</summary>
+      <form method="post" action="/integrations/clients" class="mt-3 grid gap-3">
+        <div><label for="sy-n" class="{{ m.LABEL }}">Название системы</label><input id="sy-n" name="name" required minlength="3" maxlength="80" placeholder="Соревновательная платформа «Партнёр»" class="{{ m.INPUT }}"></div>
+        <fieldset><legend class="{{ m.LABEL }}">Права (области)</legend><div class="grid gap-1">{% for k, v in meta.scopes.items() %}<label class="flex items-center gap-2 text-sm text-fsp-soft"><input type="checkbox" name="scope" value="{{ k }}" {% if k != "results:write" %}checked{% endif %} class="h-4 w-4 accent-fsp-blue"><span class="font-mono text-xs text-fsp-light">{{ k }}</span> — {{ v }}</label>{% endfor %}</div></fieldset>
+        <div><button class="{{ m.BTN }}">Выдать токен</button></div>
+      </form></details>
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" id="deliveries" aria-labelledby="dl-h">
+    <h2 id="dl-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Журнал доставки вебхуков</h2>
+    <ul class="mt-3 grid gap-1.5">
+      {% for d in deliveries %}<li class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-fsp-line px-3 py-1.5 text-sm"><span class="text-fsp-light">{{ d.at|ru_date }} {{ d.at[11:16] }} · {{ d.event }} <span class="break-all font-mono text-[11px] text-fsp-muted">→ {{ d.url }}</span></span>{{ m.tag("ответ " ~ d.status_code if d.ok else (d.error or "ошибка"), "emerald" if d.ok else "amber") }}</li>
+      {% else %}<li class="text-sm text-fsp-muted">Доставок пока не было.</li>{% endfor %}
+    </ul>
+    <h3 class="mt-5 font-mono text-[11px] uppercase tracking-wider text-fsp-muted">Демо-приёмник: принятые события · {{ received|length }}</h3>
+    <ul class="mt-2 grid gap-1.5">
+      {% for r in received %}<li class="rounded-md border border-fsp-line px-3 py-2 text-sm"><p class="text-fsp-light">{{ r.at|ru_date }} {{ r.at[11:16] }} · {{ r.event }} <span class="font-mono text-[11px] text-fsp-muted">· {{ r.signature[:23] }}…</span></p><pre class="mt-1 overflow-x-auto text-xs text-fsp-soft">{{ r.body }}</pre></li>
+      {% else %}<li class="text-sm text-fsp-muted">Приёмник ещё ничего не получал — нажмите «Проверить» у вебхука.</li>{% endfor %}
+    </ul>
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" aria-labelledby="ex-h">
+    <h2 id="ex-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Пример подключения</h2>
+    <pre class="mt-3 overflow-x-auto rounded-md bg-fsp-bg p-3 text-xs text-fsp-soft"># календарь открытых для заявок соревнований
+curl -H "Authorization: Bearer fspi_..." "{{ base }}/api/ext/v1/competitions?status=REGISTRATION_OPEN"
+
+# импорт результатов → черновик протокола (область results:write)
+curl -X POST -H "Authorization: Bearer fspi_..." -H "Content-Type: application/json" \
+  -d '{"system": "Партнёр", "results": [{"fsp_id": "FSP-56-25-00008-3", "solved": 6, "penalty": 412}]}' \
+  "{{ base }}/api/ext/v1/competitions/20/results"
+
+# проверка подписи вебхука (Python)
+import hmac, hashlib
+ok = hmac.compare_digest(request.headers["X-FSP-Signature"], "sha256=" + hmac.new(SECRET, body, hashlib.sha256).hexdigest())</pre>
+  </section>
+</div>
+{% endblock %}

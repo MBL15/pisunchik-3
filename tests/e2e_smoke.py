@@ -501,6 +501,9 @@ with as_user("admin@fsp56.ru", "admin") as adm, as_user("judge@fsp56.ru", "judge
     check(mini.get("/registry").status_code == 403 and mini.get("/integrations").status_code == 403, "реестр и интеграции министерству закрыты")
     check(mini.post("/cabinet/admin/competitions", data={"title": "Не должно создаться"}).status_code == 403, "министерство ничего не меняет")
     check('action="/cabinet/admin/teams/' not in mini.get("/teams/1").text, "в составе сборной у министерства нет кнопок правки")
+    html = mini.get("/cabinet").text
+    check("Прирост занимающихся" in html and "Участники проведённых соревнований" in html and "Спортсмены с разрядом" in html
+          and html.count('role="img"') >= 4 and "Дисциплины" in html, "инфографика министерства: прирост, соревнования, разрезы")
 
 print("== 13. Д6 показатели развития и подтверждающие документы")
 with as_user("admin@fsp56.ru", "admin") as adm, as_user("ministry@fsp56.ru", "ministry") as mini:

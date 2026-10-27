@@ -10,6 +10,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
+from gateway_service import infographic
 from gateway_service.web import back, clients, humanize, render, require, safe
 from shared import config
 from shared.domain import Role
@@ -23,17 +24,22 @@ SOURCES = {
     "competitions": "Календарь и протоколы (competition_service) · календарные планы ЕКП / области",
 }
 MAX_UPLOAD = 2 * 1024 * 1024
+INFOGRAPHIC_YEARS = 6  # глубина графиков динамики: последние N лет
 
 
 async def cabinet_ministry(request: Request, user: dict):
     degraded: list[str] = []
     sp, co = clients["sportsman"], clients["competition"]
-    stats, dash, upcoming, teams, orgs = await asyncio.gather(
+    stats, dash, upcoming, teams, orgs, headcount = await asyncio.gather(
         safe(sp.get("/api/v1/stats"), None, degraded), safe(co.get("/api/v1/dashboard"), None, degraded),
         safe(co.get("/api/v1/competitions", upcoming=True), [], degraded), safe(co.get("/api/v1/teams"), [], degraded),
-        safe(sp.get("/api/v1/organizations"), [], degraded))
+        safe(sp.get("/api/v1/organizations"), [], degraded),
+        safe(sp.get("/api/v1/reports/headcount", years=INFOGRAPHIC_YEARS), None, degraded))
+    by_year = await asyncio.gather(*(safe(co.get("/api/v1/development/competitions", year=y), None, degraded)
+                                     for y in (headcount or {}).get("years", [])))
     return render(request, "cabinet_ministry.html", user=user, stats=stats, dash=dash, upcoming=sorted(
-        upcoming, key=lambda c: c["start_date"])[:8], teams=teams, orgs=[o for o in orgs if o["athletes"]], degraded=sorted(set(degraded)))
+        upcoming, key=lambda c: c["start_date"])[:8], teams=teams, orgs=[o for o in orgs if o["athletes"]], degraded=sorted(set(degraded)),
+        charts=infographic.build(headcount, stats, [c for c in by_year if c]))
 
 
 @router.get("/development", response_class=HTMLResponse)

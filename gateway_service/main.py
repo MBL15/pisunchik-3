@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from gateway_service import notify
 from gateway_service.qr import qr_svg
 from gateway_service.session import (
     FLASH_COOKIE, clear_session, pop_flash, read_session, set_flash, write_session,
@@ -36,14 +37,29 @@ JUDGE_CATEGORY_DEFAULT_YEARS = 2  # подсказка в форме решен�
 async def lifespan(_: FastAPI):
     clients["sportsman"] = ServiceClient("sportsman_service", config.SPORTSMAN_URL, caller="gateway")
     clients["competition"] = ServiceClient("competition_service", config.COMPETITION_URL, caller="gateway")
+    tg_tasks = await notify.start(_deadline_reminders)
     yield
+    await notify.stop(tg_tasks)
     for c in clients.values():
         await c.aclose()
+
+
+async def _deadline_reminders() -> list[tuple]:
+    """Истекающие разряды и судейские категории → (fsp_id, ключ, заголовок, текст, дней до окончания)."""
+    out = []
+    for p in await clients["sportsman"].get("/api/v1/alerts/ranks", within_days=30):
+        out.append((p["fsp_id"], "rank", "Истекает срок разряда",
+                    f"{p['rank']['title']}: до {ru_date(p['rank']['expires_at'])}", p["rank"]["days_left"]))
+    for p in await clients["sportsman"].get("/api/v1/alerts/judge-categories", within_days=30):
+        out.append((p["fsp_id"], "judge", "Истекает судейская категория",
+                    f"до {ru_date(p['judge_category']['expires_at'])}", p["judge_category"]["days_left"]))
+    return out
 
 
 app = FastAPI(title="ФСП Оренбург · Gateway", version="1.0.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+templates.env.globals["tg"] = notify
 
 _MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]
 
@@ -262,7 +278,9 @@ async def verify_page(request: Request, number: str, c: str = ""):
 # ---------------------------------------------------------------- auth & roles
 @app.get("/register", response_class=HTMLResponse)
 async def register_form(request: Request):
-    return render(request, "register.html", user=await current_user(request), values={}, errors=None)
+    if await current_user(request):
+        return RedirectResponse("/cabinet", status_code=303)
+    return render(request, "register.html", user=None, values={}, errors=None)
 
 
 @app.post("/register", response_class=HTMLResponse)
@@ -294,6 +312,8 @@ async def register_submit(request: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request, next: str = "/cabinet"):
+    if await current_user(request):
+        return RedirectResponse("/cabinet", status_code=303)
     groups: dict[str, list[dict]] = {}
     for acc in DEMO_ACCOUNTS:
         groups.setdefault(acc["group"], []).append(acc)
@@ -320,7 +340,7 @@ async def login_submit(request: Request):
 
 @app.post("/logout")
 async def logout():
-    resp = RedirectResponse("/", status_code=303)
+    resp = back("/", "ok", "Вы вышли из аккаунта")
     clear_session(resp)
     return resp
 
@@ -492,6 +512,8 @@ async def request_link(request: Request):
             "discipline": form.get("discipline", "")})
     except ServiceError as exc:
         return back("/cabinet", "error", humanize(exc.detail))
+    await notify.notify(link["athlete_fsp_id"], "Запрос на привязку тренера",
+                        f"{link['trainer_name']} · {link['discipline_label']}. Подтвердите в кабинете.", "/cabinet")
     return back("/cabinet", "ok", f"Запрос отправлен: {link['athlete']['full_name']} · {link['discipline_label']}. Ожидает подтверждения спортсменом.")
 
 
@@ -504,6 +526,8 @@ async def change_link(request: Request, link_id: int):
             "status": form.get("status"), "actor_fsp_id": user["person"]["fsp_id"], "note": form.get("note", "")})
     except ServiceError as exc:
         return back("/cabinet", "error", humanize(exc.detail))
+    other = link["trainer_fsp_id"] if user["role"] == Role.ATHLETE else link["athlete_fsp_id"]
+    await notify.notify(other, "Связь тренер ↔ спортсмен", f"{link['discipline_label']}: {link['status_label']}", "/cabinet")
     return back("/cabinet", "ok", f"Связь #{link['id']}: {link['status_label']}", celebrate=link["status"] == "ACTIVE")
 
 
@@ -518,6 +542,8 @@ async def submit_application(request: Request):
             "submitted_by": user["person"]["fsp_id"]})
     except ServiceError as exc:
         return back("/cabinet", "error", humanize(exc.detail))
+    if app_["athlete_fsp_id"] != user["person"]["fsp_id"]:
+        await notify.notify(app_["athlete_fsp_id"], "Тренер подал заявку за вас", app_["competition_title"], "/cabinet")
     anchor = "#starts" if user["role"] == Role.ATHLETE else "#apps"
     return back(f"/cabinet{anchor}", "ok", f"Заявка #{app_['id']} подана: {app_['athlete_name']} → {app_['competition_title']}",
                 celebrate=True, app_id=app_["id"])
@@ -548,6 +574,19 @@ async def submit_qualification(request: Request):
                 celebrate=True)
 
 
+@app.post("/cabinet/telegram")
+async def telegram_link(request: Request):
+    user = await require(request)
+    fid = user["person"]["fsp_id"]
+    if not notify.enabled():
+        return back("/cabinet", "error", "Telegram-уведомления не настроены")
+    form = await request.form()
+    if form.get("action") == "unlink":
+        notify.unlink(fid)
+        return back("/cabinet", "ok", "Telegram отключён")
+    return RedirectResponse(notify.new_link(fid), status_code=303)
+
+
 # ---------------------------------------------------------------- federation admin actions
 @app.post("/cabinet/admin/qualification/{req_id}")
 async def decide_qualification(request: Request, req_id: int):
@@ -560,6 +599,8 @@ async def decide_qualification(request: Request, req_id: int):
     except ServiceError as exc:
         return back("/cabinet#inbox", "error", humanize(exc.detail))
     done = "присвоено и внесено в профиль" if q["status"] == "APPROVED" else "заявка отклонена"
+    await notify.notify_many({q["person"]["fsp_id"], q["submitted_by"]}, "Решение по заявке на разряд/категорию",
+                             f"{q['code_title']}: {done}", "/cabinet")
     return back("/cabinet#inbox", "ok", f"{q['person']['short_name']}: {q['code_title']} — {done}")
 
 
@@ -573,6 +614,7 @@ async def assign_judge(request: Request, cid: int):
     except ServiceError as exc:
         return back(f"/cabinet#judges-{cid}", "error", humanize(exc.detail))
     j = c["judges"][-1]
+    await notify.notify(j["fsp_id"], "Вас назначили судьёй", f"{c['title']} — {j['position'].lower()}", "/cabinet")
     return back(f"/cabinet#judges-{cid}", "ok", f"{j['full_name']} — {j['position'].lower()} на «{c['title']}». "
                                                  f"Назначение уже в кабинете судьи.")
 
@@ -598,6 +640,8 @@ async def decide_application(request: Request, app_id: int):
             "status": form.get("status"), "actor": user["person"]["fsp_id"], "comment": form.get("comment", "")})
     except ServiceError as exc:
         return back("/cabinet", "error", humanize(exc.detail))
+    await notify.notify_many({a["athlete_fsp_id"], a["submitted_by"]}, f"Заявка: {a['status_label']}",
+                             a["competition_title"] + (f" · {a['comment']}" if a.get("comment") else ""), "/cabinet")
     return back("/cabinet", "ok", f"Заявка #{a['id']} ({a['athlete_name']}): {a['status_label']}")
 
 
@@ -683,6 +727,8 @@ async def publish_protocol(request: Request, cid: int):
         p = await clients["competition"].post(f"/api/v1/competitions/{cid}/protocol/publish", json={"actor": user["person"]["fsp_id"]})
     except ServiceError as exc:
         return back("/cabinet", "error", humanize(exc.detail))
+    await notify.notify_many([e["fsp_id"] for e in p["entries"]], "Опубликован протокол",
+                             p["competition"]["title"], f"/protocols/{cid}")
     return back("/cabinet", "ok", f"Протокол {p['competition']['code']} опубликован: результаты в рейтинге и истории спортсменов")
 
 
@@ -695,6 +741,8 @@ async def create_competition(request: Request):
         c = await clients["competition"].post("/api/v1/competitions", json=data)
     except ServiceError as exc:
         return back("/cabinet#create", "error", humanize(exc.detail))
+    if c["status"] == "REGISTRATION_OPEN":
+        await notify.notify_many(notify.chats.keys(), "Открыта регистрация на соревнование", c["title"], "/calendar")
     return back("/cabinet", "ok", f"Соревнование {c['code']} создано · статус: {c['status_label']}")
 
 

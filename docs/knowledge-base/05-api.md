@@ -58,7 +58,8 @@ Swagger: `http://127.0.0.1:8001/docs` (sportsman), `http://127.0.0.1:8002/docs` 
 | `GET /partials/live/{id}` | все | HTML-фрагмент live-протокола (опрос каждые 2.5 с) |
 | `GET /verify/{number}?c=` | все | Публичная проверка справки |
 | `POST /register` | — | Регистрация, вход и баннер с ФСП ID |
-| `POST /login`, `/logout`, `/role` | — | Сессия и переключение активной роли |
+| `POST /login`, `/logout`, `/role` | — | Сессия и переключение активной роли. `GET /login` и `GET /register` для вошедшего редиректят в `/cabinet`; выход показывает flash «Вы вышли из аккаунта» |
+| `POST /cabinet/telegram` | любая | `action=link` — редирект на `t.me/<бот>?start=<код>`; `action=unlink` — отключить Telegram |
 | `GET /cabinet` | любая | Кабинет по активной роли |
 | `POST /cabinet/links` | тренер | Запрос на привязку |
 | `POST /cabinet/links/{id}/status` | тренер, спортсмен | Смена статуса связи (конфетти при `ACTIVE`) |

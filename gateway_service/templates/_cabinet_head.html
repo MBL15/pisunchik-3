@@ -48,6 +48,16 @@
         </div>
       </div>
       {% endif %}
+      {% if tg.enabled() %}
+      <form method="post" action="/cabinet/telegram" class="flex items-center gap-2" aria-label="Уведомления в Telegram">
+        {% if tg.is_linked(p.fsp_id) %}
+        <span class="text-emerald-400">Telegram подключён</span>
+        <button name="action" value="unlink" class="rounded-md border border-fsp-line2 px-2.5 py-1.5 text-[11px] font-bold uppercase text-fsp-soft hover:border-fsp-blue">Отключить</button>
+        {% else %}
+        <button name="action" value="link" class="rounded-md border border-fsp-blue bg-fsp-blue px-2.5 py-1.5 text-[11px] font-bold uppercase text-white">Подключить Telegram</button>
+        {% endif %}
+      </form>
+      {% endif %}
       {% if p.roles|length > 1 %}
       <form method="post" action="/role" class="flex w-full flex-wrap items-center gap-1.5 md:hidden" aria-label="Переключение роли">
         <span class="text-fsp-muted">роль:</span>

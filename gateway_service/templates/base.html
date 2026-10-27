@@ -78,7 +78,7 @@
             <span class="hidden text-fsp-muted xl:inline">{{ user.person.fsp_id }}</span><span>Кабинет</span>
           </a>
           <form method="post" action="/logout">
-            <button class="flex h-9 w-9 items-center justify-center rounded-md text-fsp-bg transition-colors duration-150 hover:bg-[#D9D9D9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue cursor-pointer" aria-label="Выйти">{{ m.icon("logout", "h-4 w-4") }}</button>
+            <button class="flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2 font-mono text-[12px] font-medium text-fsp-bg transition-colors duration-150 hover:bg-[#D9D9D9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue cursor-pointer" aria-label="Выйти">{{ m.icon("logout", "h-4 w-4") }}<span class="hidden sm:inline">Выйти</span></button>
           </form>
         {% else %}
           <a href="/login" class="hidden rounded-md px-3 py-2 font-mono text-[13px] text-fsp-bg transition-colors duration-150 hover:text-fsp-blue sm:inline">Войти</a>

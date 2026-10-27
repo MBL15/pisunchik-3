@@ -141,6 +141,11 @@ async def calendar_page(request: Request, discipline: str = "", plan: str = "", 
         status=status or None, level=level or None, season=season_no,
         age_group=age_group if age_group in domain.AGE_GROUPS else None), [], degraded)
     athlete = user["person"] if user and Role.ATHLETE in user["person"]["roles"] else None
+    my_apps: dict[int, dict] = {}
+    if user and user["role"] == Role.ATHLETE:  # статус своей заявки и кнопка «Подать заявку» прямо в карточке старта
+        mine_apps = await safe(clients["competition"].get("/api/v1/applications", athlete_fsp_id=athlete["fsp_id"]), [], degraded)
+        for a in sorted(mine_apps, key=lambda a: a["status"] != "REJECTED"):  # живая заявка перекрывает отклонённую
+            my_apps[a["competition_id"]] = a
     for c in comps:  # спортсмену платформа сама показывает, куда он проходит по возрасту на дату старта
         c["age_ok"] = domain.age_group_fit(athlete["birth_date"], c["age_group"], c["start_date"])[1] if athlete else None
     if athlete and mine:
@@ -162,7 +167,7 @@ async def calendar_page(request: Request, discipline: str = "", plan: str = "", 
                      reverse=True)
     return render(request, "calendar.html", user=user, upcoming=upcoming, past=past["items"], past_pg=pages(past),
                   filters=filters, chips=filter_chips, reset_href=reset_href, seasons=seasons, athlete=athlete,
-                  degraded=degraded)
+                  my_apps=my_apps, degraded=degraded)
 
 
 @app.get("/competitions/{cid}/regulation", response_class=HTMLResponse)

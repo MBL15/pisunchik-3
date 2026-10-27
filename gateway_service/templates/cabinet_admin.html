@@ -137,23 +137,23 @@
       {% endfor %}
       {% if dash %}
       {% for c in dash.deadlines %}
-      <li class="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
+      <li><a href="/cabinet?tab=competitions#registration" class="flex items-center justify-between gap-3 px-5 py-2.5 text-sm transition-colors hover:bg-fsp-card/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fsp-violet">
         <span class="min-w-0"><span class="block truncate text-fsp-light">Приём заявок: {{ c.title }}</span><span class="font-mono text-[11px] text-fsp-muted">{{ c.code }}</span></span>
         <span class="shrink-0 font-mono text-xs {% if c.days_to_deadline <= 14 %}text-amber-300{% else %}text-fsp-violet{% endif %}">{{ c.registration_deadline|ru_date }}</span>
-      </li>
+      </a></li>
       {% endfor %}
       {% endif %}
       {% for p in rank_alerts %}
-      <li class="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
+      <li><a href="/registry?q={{ p.fsp_id }}" class="flex items-center justify-between gap-3 px-5 py-2.5 text-sm transition-colors hover:bg-fsp-card/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fsp-violet">
         <span class="min-w-0"><span class="block truncate text-fsp-light">Разряд {{ p.rank.short }}: {{ p.short_name }}</span><span class="font-mono text-[11px] text-fsp-muted">{{ p.fsp_id }} · до {{ p.rank.expires_at|ru_date }}</span></span>
         {{ m.expiry_badge(p.rank.state, p.rank.days_left) }}
-      </li>
+      </a></li>
       {% endfor %}
       {% for p in judge_alerts %}
-      <li class="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
+      <li><a href="/registry?tab=judge&q={{ p.fsp_id }}" class="flex items-center justify-between gap-3 px-5 py-2.5 text-sm transition-colors hover:bg-fsp-card/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fsp-violet">
         <span class="min-w-0"><span class="block truncate text-fsp-light">Суд. категория {{ p.judge_category.code }}: {{ p.short_name }}</span><span class="font-mono text-[11px] text-fsp-muted">{{ p.fsp_id }} · до {{ p.judge_category.expires_at|ru_date }}</span></span>
         {{ m.expiry_badge(p.judge_category.state, p.judge_category.days_left) }}
-      </li>
+      </a></li>
       {% endfor %}
     </ul>
   </div>

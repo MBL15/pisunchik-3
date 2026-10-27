@@ -8,7 +8,7 @@
   <div class="min-w-0">
     <div class="flex flex-wrap gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{{ m.tag(c.format_label) }}</div>
     <p class="mt-2 font-medium text-white">{{ c.title }}</p>
-    <p class="font-mono text-[11px] text-fsp-muted">{{ c.venue }} · <a href="/competitions/{{ c.id }}/panel.pdf" download class="text-fsp-violet hover:underline">состав коллегии (PDF)</a></p>
+    <p class="font-mono text-[11px] text-fsp-muted">{{ c.venue }} · <a href="/competitions/{{ c.id }}/regulation" class="text-fsp-violet hover:underline">положение</a> · <a href="/competitions/{{ c.id }}/panel.pdf" download class="text-fsp-violet hover:underline">состав коллегии (PDF)</a>{% if c.status == "LIVE" %} · <a href="/calendar#live-{{ c.id }}" class="text-emerald-300 hover:underline">живой протокол</a>{% elif c.protocol_published %} · <a href="/protocols/{{ c.id }}" class="text-fsp-violet hover:underline">протокол</a>{% elif c.awaiting_results %} · <span class="text-amber-300">ждёт протокола</span>{% endif %}</p>
   </div>
   <span class="self-start border border-emerald-500/60 bg-emerald-500/10 px-2 py-1 font-mono text-[11px] font-bold uppercase text-emerald-300 rounded-md">{{ c.position }}</span>
 </li>
@@ -18,7 +18,7 @@
 {% set cats = D.JUDGE_CATEGORIES %}
 {% set cat_idx = (cats|map(attribute="code")|list).index(jc.code) if jc else -1 %}
 {% set next_cat = cats[[cat_idx + 1, cats|length - 1]|min].code %}
-{{ m.cabinet_nav([("upcoming", "Назначения", assignments.upcoming|length), ("past", "Мои соревнования", assignments.past|length), ("category", "Категория", 1 if pending_qual else None)]) }}
+{{ m.cabinet_nav([("upcoming", "Назначения", assignments.upcoming|length), ("past", "История судейства", assignments.past|length), ("category", "Категория", 1 if pending_qual else None)]) }}
 <div class="mt-4">{{ m.degraded_notice(degraded) }}</div>
 {% if jc and jc.state in ("expired", "critical", "warning") %}
 <div class="mt-6 flex flex-wrap items-center gap-4 rounded-xl border border-amber-400/60 bg-amber-400/5 p-4 shadow-[0_0_36px_-14px_rgba(251,191,36,0.55)]" role="status" data-reveal="left">
@@ -44,7 +44,7 @@
   <ul class="grid gap-3" data-stagger>{% for c in assignments.upcoming %}{{ assignment(c) }}{% else %}<li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Новых назначений нет — федерация уведомит, когда вас назначат на соревнование.</li>{% endfor %}</ul>
 </section>
 <section id="past" class="mt-14 scroll-mt-36" aria-labelledby="past-title">
-  {{ m.step_head("02", "Мои соревнования", "past-title") }}
+  {{ m.step_head("02", "История судейства", "past-title") }}
   <div class="mb-3">{{ m.export_links("/judges/" ~ user.person.fsp_id ~ "/report", "Отчёт о судействе") }}</div>
   <ul class="grid gap-3" data-stagger>{% for c in assignments.past %}{{ assignment(c, True) }}{% else %}<li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Истории судейства пока нет.</li>{% endfor %}</ul>
 </section>

@@ -51,6 +51,7 @@ gateway_service/    :8000  UI (Jinja2 + Tailwind), сессии, роли, пу�
   infographic.py           геометрия SVG-графиков кабинета министерства (чистые функции)
   notify.py                лента + Telegram: опрос бота, прокси, привязки в томе
   listing_ui.py            адрес списка: qs, страницы, сортировка, чипы
+  cabinet_search.py        каталог функций кабинета по ролям для поля «Найти функцию или параметр»
   templates/               страницы, кабинеты, macros.html
   static/app.css           эффекты и токены
 tests/                     unit (движки, инфографика, файл положения, Telegram-прокси) + e2e smoke через шлюз

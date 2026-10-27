@@ -42,7 +42,7 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
     html = page(c, "/rating?discipline=ALG")
     check("Жуков" in html and "Исключены из рейтинга" in html, "sanctioned athlete excluded with reason")
     check("222.0" in html, "Соколов: (40+0+45+100)×1.2 = 222.0")
-    page(c, "/calendar")
+    check("Войти и подать заявку" in page(c, "/calendar?status=REGISTRATION_OPEN"), "guest calendar leads an open start to login")
     live = page(c, "/partials/live/5")
     check("tail -f" in live, "live protocol partial renders")
     check(c.get("/api/public/competition/api/v1/rating?discipline=AI").status_code == 200, "public proxy: rating allowed")
@@ -61,6 +61,7 @@ for a in DEMO_ACCOUNTS:
         r = c.post("/login", data={"email": a["email"], "password": DEMO_PASSWORD, "role": a["role"], "next": "/cabinet"})
         check(f"кабинет: {ROLE_LABELS[a['role']]}" in r.text and a["check"] in r.text,
               f"{a['email']:<18} → {ROLE_LABELS[a['role']]:<9} «{a['title']}»")
+        check("data-finder-input" in r.text and "Найти функцию или параметр" in r.text, f"{a['email']:<18} → в кабинете есть поиск функции")
 
 print("== 1. register multi-role user")
 with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
@@ -95,7 +96,7 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
     r = c.post("/login", data={"email": "admin@fsp56.ru", "password": "fsp2026"})
     check("кабинет: Федерация" in r.text and 'aria-label="Вкладки кабинета"' in r.text and "Журнал действий" in r.text,
           "admin dashboard opens on the overview tab")
-    check("Автоматические протоколы" not in r.text and "Управление рейтингом" not in r.text, "overview does not render other tabs")
+    check('id="protocols"' not in r.text and 'id="rating-settings"' not in r.text, "overview does not render other tabs")
     tabs = {t: c.get("/cabinet", params={"tab": t}).text for t in ("competitions", "results", "rating", "reports")}
     check('id="create"' in tabs["competitions"] and 'id="registration"' in tabs["competitions"] and 'id="judges"' in tabs["competitions"],
           "competitions tab: new competition, registration, judge panels")
@@ -352,6 +353,12 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
     check("Онлайн-курс РУСАДА пройден" in html and "course.rusada.ru/c/e2e" in html, "athlete saves the RUSADA course mark")
     check("Согласие на обработку персональных данных" in html, "athlete sees the stored PD consent")
     check("вы проходите по возрасту" in c.get("/calendar?mine=1").text, "calendar marks age eligibility for the athlete")
+    check("Ваша заявка: одобрена" in c.get("/calendar?status=REGISTRATION_OPEN").text, "calendar shows the athlete's own application status")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "hasanov@fsp56.ru")
+    html = c.get("/calendar?status=REGISTRATION_OPEN").text
+    check('name="competition_id" value="6"' in html, "calendar offers a one-click application for an open start")
+    check("ждёт вашего ответа" in c.get("/cabinet").text, "pending trainer request is also listed under «Мои тренеры»")
 with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
     login(c, "abramov@fsp56.ru")
     check("Истекает срок разряда" in c.get("/notifications").text, "rank expiry reminder lands in the athlete's feed")

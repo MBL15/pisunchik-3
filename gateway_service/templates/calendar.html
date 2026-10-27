@@ -23,6 +23,24 @@
     {% if c.days_to_deadline is not none and c.days_to_deadline >= 0 %}<span class="{% if c.days_to_deadline <= 14 %}text-amber-300{% else %}text-fsp-violet{% endif %}">заявки: ещё {{ c.days_to_deadline|days_word }}</span>{% endif %}
     {% if c.applications_total %}<span>заявок: {{ c.applications_approved }}/{{ c.applications_total }}</span>{% endif %}
     {% if c.participants %}<span>участников: {{ c.participants }}</span>{% endif %}
+    {% if c.status == "REGISTRATION_OPEN" %}
+      {% if not user %}
+      <a href="/login?next=/calendar" class="{{ m.BTN_SM }} mt-1">Войти и подать заявку {{ m.icon("arrow", "h-3.5 w-3.5") }}</a>
+      {% elif user.role == "athlete" %}
+        {% set mine = my_apps.get(c.id) %}
+        {% if mine and mine.status != "REJECTED" %}
+        <a href="/cabinet#starts" class="mt-1 inline-flex items-center gap-1 rounded-md px-2 py-1 font-bold uppercase {% if mine.status == 'APPROVED' %}bg-emerald-500/15 text-emerald-300{% else %}bg-amber-400/15 text-amber-300{% endif %}">Ваша заявка: {{ mine.status_label|lower }}</a>
+        {% elif c.age_ok is false %}<span class="text-fsp-dim2">подать заявку нельзя: возраст</span>
+        {% elif c.discipline not in user.person.disciplines %}<a href="/cabinet#profile" class="text-fsp-dim2 hover:text-fsp-violet hover:underline" title="Добавьте дисциплину в профиле, чтобы подавать заявки на этот старт">не ваша дисциплина</a>
+        {% else %}
+        <form method="post" action="/cabinet/applications" class="mt-1"><input type="hidden" name="competition_id" value="{{ c.id }}">
+          <button class="{{ m.BTN_SM }}" {% if user.person.is_sanctioned %}disabled title="Подача заявок заблокирована санкцией"{% endif %}>Подать заявку</button></form>
+        {% endif %}
+        {% if mine and mine.status == "REJECTED" %}<span class="text-rose-300">прошлая заявка отклонена</span>{% endif %}
+      {% elif user.role == "trainer" and c.discipline in user.person.disciplines %}
+      <a href="/cabinet#actions" class="{{ m.BTN_SM }} mt-1">Подать за подопечного {{ m.icon("arrow", "h-3.5 w-3.5") }}</a>
+      {% endif %}
+    {% endif %}
   </div>
 </li>
 {% endmacro %}

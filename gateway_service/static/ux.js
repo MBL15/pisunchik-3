@@ -157,6 +157,123 @@
     search.select?.();
   });
 
+  // ---------- поиск функции или параметра в кабинете: [data-finder] ----------
+  // Каталог — скрытый список [data-finder-item] с текстом поиска в data-hay; по набранному показываются подходящие (по основам слов,
+  // чтобы «заявки» находили «заявка»). Переход внутри открытой страницы — прокрутка к разделу с подсветкой, иначе — обычная навигация,
+  // а подсветка срабатывает на новой странице (метка в sessionStorage).
+  document.querySelectorAll('[data-finder]').forEach((box) => {
+    const input = box.querySelector('[data-finder-input]');
+    const list = box.querySelector('[role=listbox]');
+    const items = [...box.querySelectorAll('[data-finder-item]')];
+    const empty = box.querySelector('[data-finder-empty]');
+    const status = box.querySelector('[data-finder-status]');
+    const LIMIT = 8;
+    const FLASH_KEY = 'fsp.finder:flash';
+    const norm = (s) => s.toLowerCase().replace(/ё/g, 'е');
+    const stem = (w) => (w.length > 5 ? w.slice(0, -2) : w.length > 3 ? w.slice(0, -1) : w);
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let shown = [];
+    let active = -1;
+
+    const flash = (el) => {
+      if (!el || !el.animate || calm) return;
+      el.animate([{ boxShadow: '0 0 0 0 rgba(140,128,255,0)' }, { boxShadow: '0 0 0 4px rgba(140,128,255,.85)' },
+        { boxShadow: '0 0 0 0 rgba(140,128,255,0)' }], { duration: 1600, easing: 'ease-out' });
+    };
+    try {
+      const mark = sessionStorage.getItem(FLASH_KEY);
+      sessionStorage.removeItem(FLASH_KEY);
+      if (mark && mark === location.hash) setTimeout(() => flash(document.getElementById(mark.slice(1))), 350);
+    } catch { /* нет sessionStorage */ }
+
+    const setActive = (i) => {
+      active = i;
+      shown.forEach((li, k) => li.setAttribute('aria-selected', String(k === i)));
+      if (i >= 0) {
+        input.setAttribute('aria-activedescendant', shown[i].id);
+        shown[i].scrollIntoView({ block: 'nearest' });
+      } else input.removeAttribute('aria-activedescendant');
+    };
+    const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); setActive(-1); };
+    const search = () => {
+      const tokens = norm(input.value).split(/[^a-zа-я0-9]+/).filter((w) => w.length > 1).map(stem);
+      let rows;
+      if (!tokens.length) rows = items.filter((li) => li.dataset.top === '1');
+      else {
+        rows = items.map((li, i) => {
+          const hay = norm(li.dataset.hay);
+          const title = norm(li.dataset.title);
+          let score = 0;
+          for (const t of tokens) {
+            if (!hay.includes(t)) return null;
+            score += (title.includes(t) ? 3 : 1) + (title.startsWith(t) ? 2 : 0);
+          }
+          return { li, score, i };
+        }).filter(Boolean).sort((a, b) => b.score - a.score || a.i - b.i).map((r) => r.li);
+      }
+      shown = rows.slice(0, LIMIT);
+      items.forEach((li) => { li.hidden = true; li.setAttribute('aria-selected', 'false'); });
+      shown.forEach((li) => { li.hidden = false; list.append(li); });
+      list.append(empty);
+      empty.hidden = !tokens.length || shown.length > 0;
+      list.hidden = !shown.length && empty.hidden;
+      input.setAttribute('aria-expanded', String(!list.hidden));
+      if (status) status.textContent = tokens.length ? (shown.length ? `Найдено: ${rows.length}` : 'Ничего не найдено') : '';
+      setActive(tokens.length && shown.length ? 0 : -1);
+    };
+    const go = (li) => {
+      const link = li.querySelector('a');
+      const url = new URL(link.href, location.href);
+      const tab = (u) => new URLSearchParams(u.search).get('tab') || 'overview';
+      const target = url.hash && document.getElementById(url.hash.slice(1));
+      close();
+      if (target && url.pathname === location.pathname && tab(url) === tab(location)) {
+        target.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+        history.replaceState(null, '', url.hash);
+        target.setAttribute('tabindex', '-1');
+        target.style.outline = 'none';
+        target.focus({ preventScroll: true });
+        flash(target);
+        return;
+      }
+      try { if (url.hash) sessionStorage.setItem(FLASH_KEY, url.hash); } catch { /* приватный режим */ }
+      location.href = link.href;
+    };
+
+    input.addEventListener('input', search);
+    input.addEventListener('focus', search);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (list.hidden) search();
+        if (shown.length) setActive((active + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const li = shown[active] || shown[0];
+        if (li) go(li);
+      } else if (e.key === 'Escape') {
+        if (!list.hidden) { e.preventDefault(); close(); } else if (input.value) { e.preventDefault(); input.value = ''; }
+      }
+    });
+    list.addEventListener('click', (e) => {
+      const li = e.target.closest('[data-finder-item]');
+      if (!li) return;
+      e.preventDefault();
+      go(li);
+    });
+    list.addEventListener('mousedown', (e) => e.preventDefault()); // клик по списку не снимает фокус с поля раньше времени
+    box.addEventListener('focusout', (e) => { if (!box.contains(e.relatedTarget)) close(); });
+    document.addEventListener('click', (e) => { if (!box.contains(e.target)) close(); });
+    document.addEventListener('keydown', (e) => {
+      const slash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !typing(document.activeElement) && !document.querySelector('[data-search]');
+      const palette = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k';
+      if (!slash && !palette) return;
+      e.preventDefault();
+      input.focus();
+      input.select?.();
+    });
+  });
+
   // Выпадающий список-навигация (размер страницы): значение — готовый адрес
   document.addEventListener('change', (e) => {
     if (e.target.matches?.('select[data-nav-select]')) location.href = e.target.value;

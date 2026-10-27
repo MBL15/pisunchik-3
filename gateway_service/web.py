@@ -13,7 +13,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from gateway_service import exports, notify, tours
+from gateway_service import cabinet_search, exports, notify, tours
 from gateway_service.listing_ui import qs
 from gateway_service.session import FLASH_COOKIE, pop_flash, read_session, set_flash
 from shared import config, domain
@@ -64,7 +64,8 @@ def ru_mon(value: Any) -> str:
 templates.env.filters.update(ru_date=ru_date, ru_mon=ru_mon, days_word=days_word,
                              tojson_ru=lambda v: json.dumps(v, ensure_ascii=False),
                              tojson_script=lambda v: json.dumps(v, ensure_ascii=False).replace("<", "\\u003c"))
-templates.env.globals.update(D=domain, plural=plural, DEMO_PASSWORD=DEMO_PASSWORD, qs=qs, PAGE_SIZES=PAGE_SIZES, tg=notify)
+templates.env.globals.update(D=domain, plural=plural, DEMO_PASSWORD=DEMO_PASSWORD, qs=qs, PAGE_SIZES=PAGE_SIZES, tg=notify,
+                             finder_entries=cabinet_search.entries)
 
 
 class Redirect(Exception):

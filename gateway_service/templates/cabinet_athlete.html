@@ -9,7 +9,8 @@
 {% set rank_alert = p.rank and p.rank.state in ("expired", "critical", "warning") %}
 {% set show_apply = can_apply and not p.is_sanctioned and not rank_alert %}
 {% set invites = squads.invites %}
-{% set todo_count = sanctions|length + pending|length + invites|length + (1 if rank_alert else 0) + (1 if show_apply else 0) %}
+{% set no_antidoping = not p.antidoping %}
+{% set todo_count = sanctions|length + pending|length + invites|length + (1 if rank_alert else 0) + (1 if show_apply else 0) + (1 if no_antidoping else 0) %}
 {% set results = perf.results if perf and perf.available else [] %}
 {% set trainers = links|selectattr("status", "in", ["ACTIVE", "SUSPENDED"])|list %}
 {% set active_apps = in_progress|rejectattr("status", "equalto", "REJECTED")|list %}
@@ -18,7 +19,7 @@
 {% set can_request_rank = rank_options and not my_trainers and not rank_pending %}
 {% set next_rank = (D.SPORT_RANKS[[D.RANK_ORDER[p.rank.code] + 1, D.SPORT_RANKS|length - 1]|min].code) if p.rank else "3Ю" %}
 
-{{ m.cabinet_nav([("todo", "Что сделать", todo_count), ("starts", "Мои старты", in_progress|length + can_apply|length), ("history", "Результаты", results|length), ("profile", "Разряд и документы", None)]) }}
+{{ m.cabinet_nav([("todo", "Что сделать", todo_count), ("starts", "Мои старты", in_progress|length + can_apply|length), ("history", "История", results|length), ("profile", "Разряд и тренеры", None)]) }}
 <div class="mt-4">{{ m.degraded_notice(degraded) }}</div>
 
 {# ================= 01 · WHAT TO DO NOW — every alert and request in one prioritised list ================= #}
@@ -100,6 +101,17 @@
         <p class="mt-1 text-sm text-fsp-muted">Ближайший — {{ can_apply[0].title }}, {{ can_apply[0].start_date|ru_date }}.</p>
       </div>
       <a href="#starts" class="{{ m.BTN_GHOST }} !px-4 !py-2">К заявкам {{ m.icon("arrow", "h-4 w-4") }}</a>
+    </li>
+    {% endif %}
+
+    {% if no_antidoping %}
+    <li class="flex flex-wrap items-center gap-4 rounded-xl border border-fsp-line bg-fsp-panel p-4">
+      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-fsp-card text-fsp-violet">{{ m.icon("shield", "h-4 w-4") }}</span>
+      <div class="min-w-0 flex-1">
+        <p class="font-mono text-sm text-white">Внесите отметку об антидопинговом курсе РУСАДА</p>
+        <p class="mt-1 text-sm text-fsp-muted">Курс проходят онлайн, а сертификат спрашивают на очных стартах. Достаточно даты и ссылки.</p>
+      </div>
+      <a href="#antidoping" class="{{ m.BTN_GHOST }} !px-4 !py-2">Внести {{ m.icon("arrow", "h-4 w-4") }}</a>
     </li>
     {% endif %}
   </ol>
@@ -202,7 +214,7 @@
     {{ m.icon("trophy", "h-3.5 w-3.5") }}
     {% if perf.podiums >= 2 %}Коэффициент стабильности ×1.2 применяется к вашему рейтингу{% else %}Ещё {{ 2 - perf.podiums }} {{ plural(2 - perf.podiums, "призовое место", "призовых места", "призовых мест") }} — и рейтинг умножится на ×1.2{% endif %}
   </p>
-  <div class="mb-5">{{ m.export_links("/athletes/" ~ user.person.fsp_id ~ "/report", "Отчёт о соревнованиях") }}</div>
+  {% if results %}<div class="mb-5">{{ m.export_links("/athletes/" ~ user.person.fsp_id ~ "/report", "Отчёт о соревнованиях") }}</div>{% endif %}
   {% endif %}
   {% set max_pts = (results|map(attribute="base_points")|select|list or [1])|max %}
   <div class="overflow-x-auto rounded-xl border border-fsp-line bg-fsp-panel" data-reveal>
@@ -310,14 +322,22 @@
     {% endif %}
   </div>
   <div class="grid gap-4 md:grid-cols-3" data-stagger>
-    <div class="{{ m.CARD }} spotlight p-5">
+    <div id="coaches" class="{{ m.CARD }} spotlight scroll-mt-36 p-5">
       <p class="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fsp-muted">{{ m.icon("users", "h-4 w-4") }}Мои тренеры</p>
       <ul class="mt-3 grid gap-2.5">
         {% for l in trainers %}
         <li class="text-sm"><span class="text-fsp-light">{{ l.trainer_name }}</span><span class="block font-mono text-[11px] {% if l.status == 'ACTIVE' %}text-emerald-300{% else %}text-fsp-muted{% endif %}">{{ l.discipline_label }} · {{ l.status_label }}</span></li>
-        {% else %}
-        <li class="text-sm text-fsp-muted">Пока не привязаны — заявки можно подавать самостоятельно. Чтобы тренер вас нашёл, передайте ему ФСП ID из профиля.</li>
         {% endfor %}
+        {% for l in pending %}
+        <li class="text-sm"><span class="text-fsp-light">{{ l.trainer_name }}</span><span class="block font-mono text-[11px] text-amber-300">{{ l.discipline_label }} · ждёт вашего ответа</span>
+          <form method="post" action="/cabinet/links/{{ l.id }}/status" class="mt-2 flex gap-2">
+            <button name="status" value="ACTIVE" class="{{ m.BTN_OK }}">{{ m.icon("check", "h-3.5 w-3.5") }}Подтвердить</button>
+            <button name="status" value="ENDED" class="{{ m.BTN_NO }}">Отклонить</button>
+          </form></li>
+        {% endfor %}
+        {% if not trainers and not pending %}
+        <li class="text-sm text-fsp-muted">Пока не привязаны — заявки можно подавать самостоятельно. Чтобы тренер вас нашёл, передайте ему ФСП ID из профиля.</li>
+        {% endif %}
       </ul>
     </div>
     {% if p.is_minor and p.guardian %}

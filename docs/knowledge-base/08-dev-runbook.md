@@ -69,7 +69,7 @@ e2e (`tests/e2e_smoke.py`) ходит как браузер (cookie, формы,
   форме массового решения, фильтры вкладок реестра, «прочитано только показанное».
 
 Юнит-тесты по разделам: `test_engines` (ФСП ID, парсер, рейтинг), `test_qualification`, `test_competition_admin`,
-`test_evsk`, `test_headcount`, `test_teams`, `test_exports`, `test_tours`, `test_registry` (реестр, организации, лента,
+`test_evsk`, `test_headcount`, `test_teams`, `test_exports`, `test_tours`, `test_cabinet_search` (якоря и страницы каталога функций кабинета), `test_registry` (реестр, организации, лента,
 сроки и напоминания), `test_listing` (поиск, фасеты, страницы, массовые решения, чипы и вкладки, `FSP_DEMO_SCALE`), `test_infographic` (шкалы, столбцы, кольцо, сборка блоков кабинета министерства), `test_regulation_files` (загрузка, замена, скачивание, проверки файла положения), `test_notify_proxy` (клиент Telegram с прокси, живучесть опроса, файл привязок).
 
 Проверка неиспользуемых и неопределённых имён (не в `requirements.txt`, ставится отдельно):

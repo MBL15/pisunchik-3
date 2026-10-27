@@ -271,63 +271,94 @@ async def cabinet(request: Request):
     }[user["role"]](request, user)
 
 
+# Вкладки кабинета федерации: (ключ, подпись) и разделы (якоря) на каждой — по смыслу работы.
+ADMIN_TABS = {"overview": "Обзор", "competitions": "Соревнования", "results": "Протоколы и результаты",
+              "rating": "Рейтинг и сборные", "reports": "Отчёты и реестр"}
+ADMIN_SECTIONS = {"inbox": "overview", "create": "competitions", "types": "competitions", "registration": "competitions",
+                  "judges": "competitions", "protocols": "results", "results-entry": "results", "ingest-form": "results",
+                  "evsk": "results", "documents": "results", "rating-settings": "rating", "teams": "rating",
+                  "reports": "reports"}
+
+
+def admin_url(section: str) -> str:
+    """Адрес раздела кабинета федерации на его вкладке: `admin_url("judges-5")` → `/cabinet?tab=competitions#judges-5`."""
+    tab = ADMIN_SECTIONS.get(section) or ADMIN_SECTIONS[section.split("-")[0]]
+    return f"/cabinet?tab={tab}#{section}"
+
+
 async def _cabinet_admin(request: Request, user: dict):
+    tab = request.query_params.get("tab", "overview")
+    tab = tab if tab in ADMIN_TABS else "overview"
     degraded: list[str] = []
     sp, co = clients["sportsman"], clients["competition"]
-    dash, stats, rank_alerts, judge_alerts, settings, comps, quals, judges, audit_sp, audit_co, comp_types, teams, evsk, \
-        evsk_table = await asyncio.gather(
+    today = config.today()
+    # всегда: то, из чего считаются метки «ждёт решения» на вкладках
+    dash, comps, quals, evsk = await asyncio.gather(
         safe(co.get("/api/v1/dashboard"), None, degraded),
-        safe(sp.get("/api/v1/stats"), None, degraded),
-        safe(sp.get("/api/v1/alerts/ranks", within_days=90), [], degraded),
-        safe(sp.get("/api/v1/alerts/judge-categories", within_days=90), [], degraded),
-        safe(co.get("/api/v1/rating/settings"), None, degraded),
         safe(co.get("/api/v1/competitions"), [], degraded),
         safe(sp.get("/api/v1/qualification-requests", status="PENDING"), [], degraded),
-        safe(sp.get("/api/v1/persons", role="judge"), [], degraded),
-        safe(sp.get("/api/v1/audit", limit=15), [], degraded),
-        safe(co.get("/api/v1/audit", limit=15), [], degraded),
-        safe(co.get("/api/v1/competition-types"), [], degraded),
-        safe(co.get("/api/v1/teams"), [], degraded),
         safe(co.get("/api/v1/evsk/candidates"), {"rows": [], "ranks_checked": True}, degraded),
-        safe(co.get("/api/v1/evsk/requirements"), [], degraded),
     )
-    today = config.today()
-    # судьи с действующей категорией — первыми (дольше действует — выше), без категории — в конце
-    judges.sort(key=lambda j: (-(j["judge_category"] or {}).get("days_left", -10**6), j["full_name"]))
-    evsk_rows = [r for r in evsk["rows"] if r["state"] != "have"]
-    evsk_map = {f"{r['competition_id']}:{r['fsp_id']}": r for r in evsk_rows}
-    rank_pending = {q["person_fsp_id"] for q in quals if q["kind"] == "RANK"}
-    for q in quals:
-        years = domain.RANK_BY_CODE[q["code"]]["validity_years"] if q["kind"] == "RANK" else JUDGE_CATEGORY_DEFAULT_YEARS
-        q["valid_until"] = _plus_years(today, years).isoformat() if years else None
-    finished = [c for c in comps if c["status"] == "FINISHED"]
     panels = sorted([c for c in comps if c["status"] != "FINISHED"], key=lambda c: c["start_date"])
     for c in panels:
         c["has_chief"] = any(j["position"] == "Главный судья" for j in c["judges"])
+    no_chief = [c for c in panels if c["days_to_start"] <= 90 and not c["has_chief"]]
     awaiting = sorted([c for c in comps if c["awaiting_results"]], key=lambda c: c["start_date"])
-    registrations = sorted([c for c in comps if c["status"] in ("PLANNED", "REGISTRATION_OPEN", "REGISTRATION_CLOSED")
-                            and c["days_to_start"] > 0], key=lambda c: c["start_date"])
-    for c in registrations:
-        keep = c["registration_deadline"] and not c["registration_expired"]
-        c["suggest_deadline"] = c["registration_deadline"] if keep else (
-            today + timedelta(days=min(14, max(c["days_to_start"] - 1, 0)))).isoformat()
-    protocols, sheets = await asyncio.gather(
-        asyncio.gather(*[safe(co.get(f"/api/v1/competitions/{c['id']}/protocol"), None, degraded) for c in finished]),
-        asyncio.gather(*[safe(co.get(f"/api/v1/competitions/{c['id']}/protocol/entry-sheet"), None, degraded) for c in awaiting]),
-    )
-    doc_options = {
-        p["competition"]["id"]: [{"fsp_id": e["fsp_id"], "name": e["full_name"], "place": e["place"], "status": e["status"]}
-                                 for e in p["entries"] if e["fsp_id"].split("-")[1] == domain.REGION_CODE]
-        for p in protocols if p
-    }
-    audit = sorted(audit_sp + audit_co, key=lambda a: a["at"], reverse=True)[:18]
-    return render(request, "cabinet_admin.html", user=user, dash=dash, stats=stats, rank_alerts=rank_alerts,
-                  judge_alerts=judge_alerts, settings=settings, finished=finished, doc_options=doc_options,
-                  sheets=[s for s in sheets if s], audit=audit, sample_log=_sample_log(protocols),
-                  quals=quals, panels=panels, judges=judges, registrations=registrations, comp_types=comp_types,
-                  teams=teams, evsk_rows=evsk_rows, evsk_map=evsk_map, evsk_table=evsk_table,
-                  evsk_checked=evsk["ranks_checked"], rank_pending=rank_pending,
-                  report_deadlines=domain.report_deadlines(today), degraded=sorted(set(degraded)))
+    evsk_rows = [r for r in evsk["rows"] if r["state"] != "have"]
+    comp_apps = dash["applications_pending"] if dash else []
+    inbox_count = len(comp_apps) + len(quals) + len(awaiting) + len(no_chief)
+    counts = {"overview": inbox_count, "competitions": len(no_chief), "results": len(awaiting)}  # метка вкладки — дела к решению
+    ctx = dict(user=user, tab=tab, tabs=ADMIN_TABS, counts=counts, sections=ADMIN_SECTIONS, dash=dash, quals=quals,
+               panels=panels, no_chief=no_chief, awaiting=awaiting, comp_apps=comp_apps, inbox_count=inbox_count,
+               evsk_rows=evsk_rows, rank_pending={q["person_fsp_id"] for q in quals if q["kind"] == "RANK"})
+
+    if tab == "overview":
+        stats, rank_alerts, judge_alerts, audit_sp, audit_co = await asyncio.gather(
+            safe(sp.get("/api/v1/stats"), None, degraded),
+            safe(sp.get("/api/v1/alerts/ranks", within_days=90), [], degraded),
+            safe(sp.get("/api/v1/alerts/judge-categories", within_days=90), [], degraded),
+            safe(sp.get("/api/v1/audit", limit=15), [], degraded),
+            safe(co.get("/api/v1/audit", limit=15), [], degraded),
+        )
+        for q in quals:
+            years = domain.RANK_BY_CODE[q["code"]]["validity_years"] if q["kind"] == "RANK" else JUDGE_CATEGORY_DEFAULT_YEARS
+            q["valid_until"] = _plus_years(today, years).isoformat() if years else None
+        ctx.update(stats=stats, rank_alerts=rank_alerts, judge_alerts=judge_alerts,
+                   audit=sorted(audit_sp + audit_co, key=lambda a: a["at"], reverse=True)[:18],
+                   report_deadlines=domain.report_deadlines(today))
+    elif tab == "competitions":
+        judges, comp_types = await asyncio.gather(safe(sp.get("/api/v1/persons", role="judge"), [], degraded),
+                                                  safe(co.get("/api/v1/competition-types"), [], degraded))
+        # судьи с действующей категорией — первыми (дольше действует — выше), без категории — в конце
+        judges.sort(key=lambda j: (-(j["judge_category"] or {}).get("days_left", -10**6), j["full_name"]))
+        registrations = sorted([c for c in comps if c["status"] in ("PLANNED", "REGISTRATION_OPEN", "REGISTRATION_CLOSED")
+                                and c["days_to_start"] > 0], key=lambda c: c["start_date"])
+        for c in registrations:
+            keep = c["registration_deadline"] and not c["registration_expired"]
+            c["suggest_deadline"] = c["registration_deadline"] if keep else (
+                today + timedelta(days=min(14, max(c["days_to_start"] - 1, 0)))).isoformat()
+        ctx.update(judges=judges, comp_types=comp_types, registrations=registrations)
+    elif tab == "results":
+        finished = [c for c in comps if c["status"] == "FINISHED"]
+        protocols, sheets, evsk_table = await asyncio.gather(
+            asyncio.gather(*[safe(co.get(f"/api/v1/competitions/{c['id']}/protocol"), None, degraded) for c in finished]),
+            asyncio.gather(*[safe(co.get(f"/api/v1/competitions/{c['id']}/protocol/entry-sheet"), None, degraded)
+                             for c in awaiting]),
+            safe(co.get("/api/v1/evsk/requirements"), [], degraded),
+        )
+        doc_options = {
+            p["competition"]["id"]: [{"fsp_id": e["fsp_id"], "name": e["full_name"], "place": e["place"], "status": e["status"]}
+                                     for e in p["entries"] if e["fsp_id"].split("-")[1] == domain.REGION_CODE]
+            for p in protocols if p
+        }
+        ctx.update(finished=finished, doc_options=doc_options, sheets=[s for s in sheets if s], sample_log=_sample_log(protocols),
+                   evsk_map={f"{r['competition_id']}:{r['fsp_id']}": r for r in evsk_rows}, evsk_table=evsk_table,
+                   evsk_checked=evsk["ranks_checked"])
+    elif tab == "rating":
+        settings, teams = await asyncio.gather(safe(co.get("/api/v1/rating/settings"), None, degraded),
+                                               safe(co.get("/api/v1/teams"), [], degraded))
+        ctx.update(settings=settings, teams=teams)
+    return render(request, "cabinet_admin.html", **ctx, degraded=sorted(set(degraded)))
 
 
 def _plus_years(d: date, years: int) -> date:
@@ -539,11 +570,11 @@ async def decide_qualification(request: Request, req_id: int):
             "status": form.get("status"), "actor": user["person"]["fsp_id"], "comment": form.get("comment", ""),
             "order_no": form.get("order_no", ""), "valid_until": form.get("valid_until") or None})
     except ServiceError as exc:
-        return back("/cabinet#inbox", "error", humanize(exc.detail))
+        return back(admin_url("inbox"), "error", humanize(exc.detail))
     done = "присвоено и внесено в профиль" if q["status"] == "APPROVED" else "заявка отклонена"
     await notify.notify_many({q["person"]["fsp_id"], q["submitted_by"]}, "Решение по заявке на разряд/категорию",
                              f"{q['code_title']}: {done}", "/cabinet")
-    return back("/cabinet#inbox", "ok", f"{q['person']['short_name']}: {q['code_title']} — {done}")
+    return back(admin_url("inbox"), "ok", f"{q['person']['short_name']}: {q['code_title']} — {done}")
 
 
 @app.post("/cabinet/admin/competitions/{cid}/judges")
@@ -554,10 +585,10 @@ async def assign_judge(request: Request, cid: int):
         c = await clients["competition"].post(f"/api/v1/competitions/{cid}/judges", json={
             "fsp_id": form.get("fsp_id", ""), "position": form.get("position", ""), "actor": user["person"]["fsp_id"]})
     except ServiceError as exc:
-        return back(f"/cabinet#judges-{cid}", "error", humanize(exc.detail))
+        return back(admin_url(f"judges-{cid}"), "error", humanize(exc.detail))
     j = c["judges"][-1]
     await notify.notify(j["fsp_id"], "Вас назначили судьёй", f"{c['title']} — {j['position'].lower()}", "/cabinet")
-    return back(f"/cabinet#judges-{cid}", "ok", f"{j['full_name']} — {j['position'].lower()} на «{c['title']}». "
+    return back(admin_url(f"judges-{cid}"), "ok", f"{j['full_name']} — {j['position'].lower()} на «{c['title']}». "
                                                  f"Назначение уже в кабинете судьи.")
 
 
@@ -568,8 +599,8 @@ async def remove_judge(request: Request, cid: int, fsp_id: str):
         await clients["competition"].request("DELETE", f"/api/v1/competitions/{cid}/judges/{fsp_id}",
                                              params={"actor": user["person"]["fsp_id"]})
     except ServiceError as exc:
-        return back(f"/cabinet#judges-{cid}", "error", humanize(exc.detail))
-    return back(f"/cabinet#judges-{cid}", "ok", "Судья снят с соревнования")
+        return back(admin_url(f"judges-{cid}"), "error", humanize(exc.detail))
+    return back(admin_url(f"judges-{cid}"), "ok", "Судья снят с соревнования")
 
 
 
@@ -581,10 +612,10 @@ async def decide_application(request: Request, app_id: int):
         a = await clients["competition"].post(f"/api/v1/applications/{app_id}/decision", json={
             "status": form.get("status"), "actor": user["person"]["fsp_id"], "comment": form.get("comment", "")})
     except ServiceError as exc:
-        return back("/cabinet", "error", humanize(exc.detail))
+        return back(admin_url("inbox"), "error", humanize(exc.detail))
     await notify.notify_many({a["athlete_fsp_id"], a["submitted_by"]}, f"Заявка: {a['status_label']}",
                              a["competition_title"] + (f" · {a['comment']}" if a.get("comment") else ""), "/cabinet")
-    return back("/cabinet", "ok", f"Заявка #{a['id']} ({a['athlete_name']}): {a['status_label']}")
+    return back(admin_url("inbox"), "ok", f"Заявка #{a['id']} ({a['athlete_name']}): {a['status_label']}")
 
 
 @app.post("/cabinet/admin/rating-settings")
@@ -597,10 +628,10 @@ async def update_settings(request: Request):
             "points": points, "coefficient": float(str(form.get("coefficient", "1.2")).replace(",", ".")),
             "min_podiums": int(form.get("min_podiums", 2)), "actor": user["person"]["fsp_id"]})
     except ValueError:
-        return back("/cabinet#rating-settings", "error", "Баллы и коэффициент должны быть числами")
+        return back(admin_url("rating-settings"), "error", "Баллы и коэффициент должны быть числами")
     except ServiceError as exc:
-        return back("/cabinet#rating-settings", "error", humanize(exc.detail))
-    return back("/cabinet#rating-settings", "ok", "Настройки рейтинга сохранены — рейтинг пересчитан автоматически")
+        return back(admin_url("rating-settings"), "error", humanize(exc.detail))
+    return back(admin_url("rating-settings"), "ok", "Настройки рейтинга сохранены — рейтинг пересчитан автоматически")
 
 
 @app.post("/cabinet/admin/protocol/{cid}/ingest")
@@ -611,9 +642,9 @@ async def ingest_protocol(request: Request, cid: int):
         p = await clients["competition"].post(f"/api/v1/competitions/{cid}/protocol/ingest",
                                               json={"log": form.get("log", ""), "actor": user["person"]["fsp_id"]})
     except ServiceError as exc:
-        return back("/cabinet#protocols", "error", humanize(exc.detail))
+        return back(admin_url("protocols"), "error", humanize(exc.detail))
     warn = f" · предупреждений парсера: {len(p['warnings'])}" if p["warnings"] else ""
-    return back("/cabinet#protocols", "ok", f"Протокол {p['competition']['code']} пересобран из лога: "
+    return back(admin_url("protocols"), "ok", f"Протокол {p['competition']['code']} пересобран из лога: "
                                             f"{p['events']} событий, {len(p['entries'])} участников{warn}")
 
 
@@ -634,21 +665,21 @@ async def enter_results(request: Request, cid: int):
                             "score": float(num("score", fid)), "dsq": bool(form.get(f"dsq_{fid}")),
                             "dsq_reason": str(form.get(f"reason_{fid}", "")).strip()})
     except ValueError:
-        return back("/cabinet#results-entry", "error", "Результаты должны быть числами: решено и штраф — целые, баллы — число")
+        return back(admin_url("results-entry"), "error", "Результаты должны быть числами: решено и штраф — целые, баллы — число")
     if not results:
-        return back("/cabinet#results-entry", "error", "Внесите результат хотя бы одного участника")
+        return back(admin_url("results-entry"), "error", "Внесите результат хотя бы одного участника")
     publish = form.get("action") == "publish"
     try:
         p = await clients["competition"].post(f"/api/v1/competitions/{cid}/protocol/results", json={
             "results": results, "actor": user["person"]["fsp_id"], "publish": publish})
     except ServiceError as exc:
-        return back("/cabinet#results-entry", "error", humanize(exc.detail))
+        return back(admin_url("results-entry"), "error", humanize(exc.detail))
     if publish:
         await notify.notify_many([e["fsp_id"] for e in p["entries"]], "Опубликован протокол",
                                  p["competition"]["title"], f"/protocols/{cid}")
         return back(f"/protocols/{cid}", "ok", f"Протокол {p['competition']['code']} сформирован и опубликован: "
                                                f"{len(p['entries'])} участников → рейтинг и история спортсменов", celebrate=True)
-    return back("/cabinet#results-entry", "ok", f"Черновик протокола {p['competition']['code']} пересчитан: "
+    return back(admin_url("results-entry"), "ok", f"Черновик протокола {p['competition']['code']} пересчитан: "
                                                 f"{len(p['entries'])} участников ранжированы автоматически")
 
 
@@ -674,10 +705,10 @@ async def publish_protocol(request: Request, cid: int):
     try:
         p = await clients["competition"].post(f"/api/v1/competitions/{cid}/protocol/publish", json={"actor": user["person"]["fsp_id"]})
     except ServiceError as exc:
-        return back("/cabinet", "error", humanize(exc.detail))
+        return back(admin_url("protocols"), "error", humanize(exc.detail))
     await notify.notify_many([e["fsp_id"] for e in p["entries"]], "Опубликован протокол",
                              p["competition"]["title"], f"/protocols/{cid}")
-    return back("/cabinet", "ok", f"Протокол {p['competition']['code']} опубликован: результаты в рейтинге и истории спортсменов")
+    return back(admin_url("protocols"), "ok", f"Протокол {p['competition']['code']} опубликован: результаты в рейтинге и истории спортсменов")
 
 
 @app.post("/cabinet/admin/competitions")
@@ -688,11 +719,11 @@ async def create_competition(request: Request):
     try:
         c = await clients["competition"].post("/api/v1/competitions", json=data)
     except ServiceError as exc:
-        return back("/cabinet#create", "error", humanize(exc.detail))
+        return back(admin_url("create"), "error", humanize(exc.detail))
     if c["status"] == "REGISTRATION_OPEN":
         await notify.notify_many(await discipline_audience(c["discipline"]), "Открыта регистрация на соревнование",
                                  f"{c['title']} · до {ru_date(c['registration_deadline'])}", "/calendar")
-    return back("/cabinet", "ok", f"Соревнование {c['code']} создано · статус: {c['status_label']}")
+    return back(admin_url("registration"), "ok", f"Соревнование {c['code']} создано · статус: {c['status_label']}")
 
 
 @app.post("/cabinet/admin/competitions/{cid}/registration")
@@ -703,12 +734,12 @@ async def toggle_registration(request: Request, cid: int):
         c = await clients["competition"].post(f"/api/v1/competitions/{cid}/registration", json={
             "action": form.get("action", ""), "deadline": form.get("deadline") or None, "actor": user["person"]["fsp_id"]})
     except ServiceError as exc:
-        return back("/cabinet#registration", "error", humanize(exc.detail))
+        return back(admin_url("registration"), "error", humanize(exc.detail))
     if c["status"] == "REGISTRATION_OPEN":
         await notify.notify_many(await discipline_audience(c["discipline"]), "Открыт приём заявок",
                                  f"{c['title']} · до {ru_date(c['registration_deadline'])}", "/calendar")
-        return back("/cabinet#registration", "ok", f"Приём заявок на {c['code']} открыт до {ru_date(c['registration_deadline'])}")
-    return back("/cabinet#registration", "ok", f"Приём заявок на {c['code']} закрыт: заявок {c['applications_total']}, "
+        return back(admin_url("registration"), "ok", f"Приём заявок на {c['code']} открыт до {ru_date(c['registration_deadline'])}")
+    return back(admin_url("registration"), "ok", f"Приём заявок на {c['code']} закрыт: заявок {c['applications_total']}, "
                                                 f"на модерации {c['applications_pending']}")
 
 
@@ -719,8 +750,8 @@ async def add_competition_type(request: Request):
     try:
         await clients["competition"].post("/api/v1/competition-types", json={"title": title, "actor": user["person"]["fsp_id"]})
     except ServiceError as exc:
-        return back("/cabinet#create", "error", humanize(exc.detail))
-    return back("/cabinet#create", "ok", f"Тип «{title}» добавлен в справочник — он доступен при создании соревнования")
+        return back(admin_url("create"), "error", humanize(exc.detail))
+    return back(admin_url("create"), "ok", f"Тип «{title}» добавлен в справочник — он доступен при создании соревнования")
 
 
 @app.post("/cabinet/admin/competition-types/remove")
@@ -731,8 +762,8 @@ async def remove_competition_type(request: Request):
         await clients["competition"].request("DELETE", "/api/v1/competition-types",
                                              params={"title": title, "actor": user["person"]["fsp_id"]})
     except ServiceError as exc:
-        return back("/cabinet#create", "error", humanize(exc.detail))
-    return back("/cabinet#create", "ok", f"Тип «{title}» удалён из справочника")
+        return back(admin_url("create"), "error", humanize(exc.detail))
+    return back(admin_url("create"), "ok", f"Тип «{title}» удалён из справочника")
 
 
 # ---------------------------------------------------------------- выгрузки .xlsx / .docx / .pdf
@@ -920,7 +951,8 @@ async def generate_document(request: Request):
             "fsp_id": fsp_id, "competition_id": int(form.get("competition_id", 0)),
             "issued_by": user["person"]["fsp_id"], "purpose": form.get("purpose") or "для предъявления по месту требования"})
     except (ServiceError, ValueError) as exc:
-        return back("/cabinet", "error", humanize(getattr(exc, "detail", "Выберите соревнование и участника")))
+        return back(admin_url("documents") if user["role"] == Role.ADMIN else "/cabinet", "error",
+                    humanize(getattr(exc, "detail", "Выберите соревнование и участника")))
     return RedirectResponse(f"/documents/{doc['number']}", status_code=303)
 
 

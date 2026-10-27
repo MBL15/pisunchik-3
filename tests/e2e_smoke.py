@@ -86,11 +86,22 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
 print("== 3. federation admin dashboard")
 with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
     r = c.post("/login", data={"email": "admin@fsp56.ru", "password": "fsp2026"})
-    check("кабинет: Федерация" in r.text and "Автоматические протоколы" in r.text, "admin dashboard")
-    check("Управление рейтингом" in r.text and "Журнал действий" in r.text, "rating management + audit log")
+    check("кабинет: Федерация" in r.text and 'aria-label="Вкладки кабинета"' in r.text and "Журнал действий" in r.text,
+          "admin dashboard opens on the overview tab")
+    check("Автоматические протоколы" not in r.text and "Управление рейтингом" not in r.text, "overview does not render other tabs")
+    tabs = {t: c.get("/cabinet", params={"tab": t}).text for t in ("competitions", "results", "rating", "reports")}
+    check('id="create"' in tabs["competitions"] and 'id="registration"' in tabs["competitions"] and 'id="judges"' in tabs["competitions"],
+          "competitions tab: new competition, registration, judge panels")
+    check("Автоматические протоколы" in tabs["results"] and 'id="evsk"' in tabs["results"] and 'id="documents"' in tabs["results"],
+          "results tab: protocols, ЕВСК, certificates")
+    check("Управление рейтингом" in tabs["rating"] and 'id="teams"' in tabs["rating"], "rating tab: settings and teams")
+    check('href="/reports/headcount"' in tabs["reports"] and 'href="/registry"' in tabs["reports"], "reports tab: headcount and registry")
+    check('aria-current="page">Протоколы и результаты' in tabs["results"], "active tab is marked")
+    r = c.get("/cabinet", params={"tab": "results"})
     sample = re.search(r'<textarea id="log"[^>]*>(.*?)</textarea>', r.text, re.S).group(1)
     sample = sample.replace("&#34;", '"').replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
     r = c.post("/cabinet/admin/protocol/20/ingest", data={"log": sample})
+    check(r.url.params.get("tab") == "results", "action redirects back to its tab")
     check("пересобран из лога" in r.text and "предупреждений парсера: 1" in r.text, "log ingested, bad check digit flagged")
     r = c.post("/cabinet/admin/rating-settings", data={**{f"{l}_{i}": v for l, vs in {
         "CHAMP_RU": [100, 80, 60], "FIRST_RU": [80, 60, 40], "INTERREG": [60, 45, 30], "REGIONAL": [40, 30, 20]}.items()
@@ -111,7 +122,8 @@ SEC4 = 22
 HASANOV, ZAITSEVA, ISAEV, VALIEVA, KALININ = (
     "FSP-56-26-00026-8", "FSP-56-25-00013-7", "FSP-56-25-00014-5", "FSP-56-25-00009-5", "FSP-56-25-00015-2")
 with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
-    r = c.post("/login", data={"email": "admin@fsp56.ru", "password": "fsp2026"})
+    c.post("/login", data={"email": "admin@fsp56.ru", "password": "fsp2026"})
+    r = c.get("/cabinet", params={"tab": "results"})
     check('id="results-entry"' in r.text and f"/cabinet/admin/protocol/{SEC4}/results" in r.text
           and HASANOV in r.text and "Калинин" in r.text, "entry sheet lists approved applicants, pending one flagged")
     check(f'name="fid" value="{KALININ}"' not in r.text, "pending application is not in the entry sheet")
@@ -221,7 +233,7 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
     r = c.post("/cabinet/admin/competitions/5/registration", data={"action": "close"})
     check("уже идёт или завершено" in r.text, "live competition cannot be switched")
 
-    cabinet = c.get("/cabinet").text
+    cabinet = c.get("/cabinet", params={"tab": "results"}).text
     check('id="evsk"' in cabinet and "Таблица требований, по которой идёт подсветка" in cabinet, "ЕВСК section with the requirements table")
     m_ev = re.search(r'id="evsk".*?href="/protocols/(\d+)"', cabinet, re.S)
     check(m_ev is not None and "ЕВСК ·" in cabinet, "ЕВСК candidates listed with their target rank")
@@ -293,7 +305,10 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
     login(c, "admin@fsp56.ru")
     cab = c.get("/cabinet").text
     check('data-tour="quick-actions"' in cab and "Внести результаты" in cab and "Кабинет федерации" in cab, "admin cabinet: quick actions + tour")
-    check(cab.count("data-confirm=") >= 4, f"irreversible admin actions ask for confirmation ({cab.count('data-confirm=')} places)")
+    confirms = sum(c.get("/cabinet", params={"tab": t}).text.count("data-confirm=") for t in ("overview", "competitions", "results", "rating"))
+    check(confirms >= 4, f"irreversible admin actions ask for confirmation ({confirms} places)")
+    check('const sections = {"inbox": "overview"' in cab and '"registration": "competitions"' in cab,
+          "old /cabinet#section links are routed to their tab (section map in the page)")
     check('data-dismiss' not in cab or 'aria-label="Закрыть сообщение"' in cab, "flash messages are dismissible")
     rating = c.get("/rating?discipline=ALG").text
     check("data-pick-bar" in rating and 'data-pick-top="5"' in rating and "data-pick-submit" in rating, "rating: quick selection bar for the team")

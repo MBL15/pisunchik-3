@@ -3,13 +3,19 @@
 {% block title %}Кабинет федерации · ФСП Оренбург{% endblock %}
 {% block content %}
 {% include "_cabinet_head.html" %}
-{% set comp_apps = dash.applications_pending if dash else [] %}
 {% set INBOX_APPS = 6 %}
-{% set soon = panels|selectattr("days_to_start", "le", 90)|list %}
-{% set no_chief = soon|rejectattr("has_chief")|list %}
-{% set inbox_count = comp_apps|length + quals|length + sheets|length + no_chief|length %}
-{{ m.cabinet_nav([("inbox", "Входящие", inbox_count), ("protocols", "Протоколы", sheets|length), ("evsk", "ЕВСК", evsk_rows|length), ("judges", "Судейские коллегии", no_chief|length), ("registration", "Приём заявок", None), ("documents", "Справки", None), ("rating-settings", "Рейтинг", None), ("teams", "Сборные", None), ("reports", "Отчёты", None), ("create", "Новое соревнование", None)]) }}
+{% macro inbox_group(title, n) %}<li class="sticky top-0 z-[1] flex items-center gap-2 bg-fsp-panel/95 px-5 py-2 font-mono text-[11px] uppercase tracking-wider text-fsp-muted backdrop-blur">{{ title }}<span class="rounded bg-fsp-card px-1.5 text-fsp-light">{{ n }}</span></li>{% endmacro %}
+
+{# ---------------- TABS: разделы по смыслу работы; на вкладке грузятся только её данные ---------------- #}
+<nav class="no-print mt-6 -mx-1 overflow-x-auto px-1" aria-label="Вкладки кабинета">
+  <ul class="flex w-max gap-1.5 rounded-xl border border-fsp-line bg-fsp-bg/85 p-1.5">
+    {% for key, label in tabs.items() %}
+    <li><a href="/cabinet?tab={{ key }}" class="flex items-center gap-2 rounded-lg px-3.5 py-2.5 font-mono text-xs transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet {% if key == tab %}bg-fsp-blue text-white shadow-[0_0_22px_rgba(64,47,255,0.45)]{% else %}text-fsp-soft hover:bg-fsp-card hover:text-fsp-light{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}{% if counts.get(key) %}<span class="rounded-md px-1.5 py-0.5 text-[10px] font-bold {% if key == tab %}bg-white text-fsp-blue{% else %}bg-amber-400/20 text-amber-300{% endif %}" title="ждёт решения">{{ counts[key] }}</span>{% endif %}</a></li>
+    {% endfor %}
+  </ul>
+</nav>
 <div class="mt-4">{{ m.degraded_notice(degraded) }}</div>
+{% if tab == "overview" %}
 
 {# ---------------- KPIs ---------------- #}
 <section class="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label="Ключевые показатели">
@@ -26,19 +32,18 @@
   <div class="flex flex-wrap items-center gap-2">
     <span class="mr-1 font-mono text-[11px] uppercase tracking-wider text-fsp-muted">Быстро:</span>
     <a href="#inbox" class="{{ m.BTN_SM }}">{{ m.icon("check", "h-3.5 w-3.5") }}Решения{% if inbox_count %}<span class="rounded bg-amber-400/20 px-1.5 text-amber-300">{{ inbox_count }}</span>{% endif %}</a>
-    <a href="#results-entry" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Внести результаты{% if sheets %}<span class="rounded bg-amber-400/20 px-1.5 text-amber-300">{{ sheets|length }}</span>{% endif %}</a>
-    <a href="#registration" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Приём заявок</a>
+    <a href="/cabinet?tab=results#results-entry" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Внести результаты{% if awaiting %}<span class="rounded bg-amber-400/20 px-1.5 text-amber-300">{{ awaiting|length }}</span>{% endif %}</a>
+    <a href="/cabinet?tab=competitions#registration" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Приём заявок</a>
     <a href="/registry" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Реестр</a>
     <a href="/applications" class="{{ m.BTN_SM }}">{{ m.icon("check", "h-3.5 w-3.5") }}Заявки{% if comp_apps %}<span class="rounded bg-amber-400/20 px-1.5 text-amber-300">{{ comp_apps|length }}</span>{% endif %}</a>
     <a href="/audit" class="{{ m.BTN_SM }}">{{ m.icon("terminal", "h-3.5 w-3.5") }}Журнал</a>
     <a href="/rating" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Сборная из рейтинга</a>
     <a href="/reports/headcount" class="{{ m.BTN_SM }}">{{ m.icon("pulse", "h-3.5 w-3.5") }}Отчёт о численности</a>
-    <a href="#create" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Новое соревнование</a>
+    <a href="/cabinet?tab=competitions#create" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Новое соревнование</a>
   </div>
 </section>
 
 {# ---------------- ATTENTION ---------------- #}
-{% macro inbox_group(title, n) %}<li class="sticky top-0 z-[1] flex items-center gap-2 bg-fsp-panel/95 px-5 py-2 font-mono text-[11px] uppercase tracking-wider text-fsp-muted backdrop-blur">{{ title }}<span class="rounded bg-fsp-card px-1.5 text-fsp-light">{{ n }}</span></li>{% endmacro %}
 <section id="inbox" class="mt-10 grid scroll-mt-36 gap-6 lg:grid-cols-2 [&>*]:min-w-0" aria-label="Требует внимания">
   <div class="{{ m.CARD }}">
     <div class="flex items-center justify-between border-b border-fsp-line px-5 py-3">
@@ -46,20 +51,20 @@
       <span class="font-mono text-xs text-fsp-muted">{{ inbox_count }}</span>
     </div>
     <ul class="max-h-[640px] divide-y divide-fsp-line overflow-y-auto">
-      {% if sheets or no_chief %}
-      {{ inbox_group("Соревнования", sheets|length + no_chief|length) }}
-      {% for s in sheets %}
+      {% if awaiting or no_chief %}
+      {{ inbox_group("Соревнования", awaiting|length + no_chief|length) }}
+      {% for c in awaiting %}
       <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-        <div class="min-w-0"><p class="text-sm font-medium text-white">Внести результаты · {{ s.participants|length }} {{ plural(s.participants|length, "участник", "участника", "участников") }}</p>
-          <p class="truncate font-mono text-[11px] text-fsp-muted">{{ s.competition.code }} · {{ s.competition.title }}</p></div>
-        <a href="#results-entry" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}К протоколу</a>
+        <div class="min-w-0"><p class="text-sm font-medium text-white">Внести результаты · {{ c.applications_approved }} {{ plural(c.applications_approved, "участник", "участника", "участников") }}</p>
+          <p class="truncate font-mono text-[11px] text-fsp-muted">{{ c.code }} · {{ c.title }}</p></div>
+        <a href="/cabinet?tab=results#results-entry" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}К протоколу</a>
       </li>
       {% endfor %}
       {% for c in no_chief %}
       <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
         <div class="min-w-0"><p class="text-sm font-medium text-white">Назначить главного судью · {{ "идёт" if c.days_to_start <= 0 else "старт через " ~ (c.days_to_start|days_word) }}</p>
           <p class="truncate font-mono text-[11px] text-fsp-muted">{{ c.code }} · {{ c.title }}</p></div>
-        <a href="#judges-{{ c.id }}" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}К коллегии</a>
+        <a href="/cabinet?tab=competitions#judges-{{ c.id }}" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}К коллегии</a>
       </li>
       {% endfor %}
       {% endif %}
@@ -153,6 +158,172 @@
     </ul>
   </div>
 </section>
+
+{# ---------------- AUDIT LOG ---------------- #}
+<section class="mt-12">
+  {{ m.section_head("tail ./audit.log", "Журнал действий") }}
+  <p class="-mt-3 mb-3"><a href="/audit" class="font-mono text-xs text-fsp-violet hover:underline">весь журнал с поиском и фильтрами →</a></p>
+  <div class="overflow-x-auto border border-fsp-line bg-black/50 rounded-xl">
+    <table class="w-full min-w-[640px] font-mono text-xs">
+      <tbody>
+        {% for a in audit %}
+        <tr class="border-b border-fsp-line/60">
+          <td class="whitespace-nowrap px-3 py-2 text-fsp-dim2">{{ a.at.replace("T", " ") }}</td>
+          <td class="px-3 py-2 {% if a.service == 'competition' %}text-fsp-violet{% else %}text-emerald-300{% endif %}">{{ a.service }}</td>
+          <td class="whitespace-nowrap px-3 py-2 text-fsp-muted">{{ a.actor }}</td>
+          <td class="px-3 py-2 text-fsp-light">{{ a.action }}</td>
+          <td class="px-3 py-2 text-fsp-muted">{{ a.object }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% elif tab == "competitions" %}
+
+{{ m.cabinet_nav([("create", "Новое соревнование", None), ("registration", "Приём заявок", None), ("judges", "Судейские коллегии", no_chief|length)]) }}
+
+{# ---------------- CREATE COMPETITION ---------------- #}
+<section id="create" class="mt-12 scroll-mt-36">
+  <details class="group {{ m.CARD }}">
+    <summary class="flex cursor-pointer list-none items-center justify-between px-5 py-4 font-mono text-sm font-bold text-fsp-light hover:text-fsp-violet">
+      <span>{{ m.icon("calendar", "mr-2 inline h-4 w-4 text-emerald-400") }}Создать соревнование в календаре</span>
+      {{ m.icon("chevron", "h-4 w-4 transition-transform group-open:rotate-180") }}
+    </summary>
+    <form method="post" action="/cabinet/admin/competitions" class="grid gap-4 border-t border-fsp-line p-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="sm:col-span-2 lg:col-span-4"><label for="c-title" class="{{ m.LABEL }}">Название</label><input id="c-title" name="title" required class="{{ m.INPUT }}" value="Открытое первенство г. Орска по спортивному программированию"></div>
+      <div><label for="c-disc" class="{{ m.LABEL }}">Дисциплина</label><select id="c-disc" name="discipline" class="{{ m.INPUT }}">{% for d in D.DISCIPLINES %}<option value="{{ d.code }}">{{ d.short }}</option>{% endfor %}</select></div>
+      <div><label for="c-level" class="{{ m.LABEL }}">Статус (уровень)</label><select id="c-level" name="level" class="{{ m.INPUT }}">{% for k, v in D.LEVEL_LABELS.items() %}<option value="{{ k }}" {% if k == "REGIONAL" %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+      <div><label for="c-type" class="{{ m.LABEL }}">Тип</label><select id="c-type" name="type" class="{{ m.INPUT }}">{% for t in comp_types %}<option>{{ t.title }}</option>{% endfor %}</select></div>
+      <div><label for="c-format" class="{{ m.LABEL }}">Формат</label><select id="c-format" name="format" class="{{ m.INPUT }}">{% for k, v in D.FORMAT_LABELS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div class="sm:col-span-2"><label for="c-note" class="{{ m.LABEL }}">Пояснение к формату</label><input id="c-note" name="format_note" class="{{ m.INPUT }}" placeholder="Разработка — онлайн, защита — очно"></div>
+      <div><label for="c-plan" class="{{ m.LABEL }}">Календарный план</label><select id="c-plan" name="calendar_plan" class="{{ m.INPUT }}">{% for k, v in D.CALENDAR_PLAN_LABELS.items() %}<option value="{{ k }}" {% if k == "REGIONAL" %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+      <div><label for="c-planno" class="{{ m.LABEL }}">Номер в плане</label><input id="c-planno" name="plan_number" required value="№ 56-101" class="{{ m.INPUT }} font-mono"></div>
+      <div><label for="c-start" class="{{ m.LABEL }}">Начало</label><input id="c-start" name="start_date" type="date" required class="{{ m.INPUT }} font-mono [color-scheme:dark]"></div>
+      <div><label for="c-end" class="{{ m.LABEL }}">Окончание</label><input id="c-end" name="end_date" type="date" required class="{{ m.INPUT }} font-mono [color-scheme:dark]"></div>
+      <div><label for="c-dl" class="{{ m.LABEL }}">Приём заявок до</label><input id="c-dl" name="registration_deadline" type="date" required class="{{ m.INPUT }} font-mono [color-scheme:dark]"></div>
+      <div><label for="c-age" class="{{ m.LABEL }}">Возрастная группа</label><select id="c-age" name="age_group" class="{{ m.INPUT }}">{% for g in D.AGE_GROUPS %}<option>{{ g }}</option>{% endfor %}</select></div>
+      <div class="sm:col-span-2 lg:col-span-3"><label for="c-venue" class="{{ m.LABEL }}">Место проведения</label><input id="c-venue" name="venue" required value="г. Орск, ЦЦОД «IT-куб»" class="{{ m.INPUT }}"></div>
+      <div class="flex items-end"><button class="{{ m.BTN }} w-full">Создать</button></div>
+    </form>
+  </details>
+
+  <div id="types" class="{{ m.CARD }} mt-4 scroll-mt-36 p-5">
+    <p class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-soft">// справочник типов соревнований</p>
+    <p class="mt-1 text-xs text-fsp-muted">Типы из справочника доступны в форме создания. Тип, который уже используется в календаре, удалить нельзя.</p>
+    <ul class="mt-3 flex flex-wrap gap-2" aria-label="Типы соревнований">
+      {% for t in comp_types %}
+      <li class="flex items-center gap-2 rounded-md border border-fsp-line2 bg-fsp-bg py-1 pl-2.5 {% if t.used %}pr-2.5{% else %}pr-1{% endif %} text-xs">
+        <span class="text-fsp-light">{{ t.title }}</span><span class="font-mono text-[10px] text-fsp-muted" title="Соревнований этого типа в календаре">{{ t.used }}</span>
+        {% if not t.used %}
+        <form method="post" action="/cabinet/admin/competition-types/remove">
+          <input type="hidden" name="title" value="{{ t.title }}">
+          <button data-confirm="Удалить тип «{{ t.title }}» из справочника?" data-confirm-label="Удалить" class="flex h-6 w-6 items-center justify-center rounded text-fsp-muted hover:bg-fsp-red/20 hover:text-rose-300" aria-label="Удалить тип: {{ t.title }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <form method="post" action="/cabinet/admin/competition-types" class="mt-4 flex flex-wrap items-end gap-2">
+      <div class="min-w-[14rem] flex-1">
+        <label for="type-new" class="{{ m.LABEL }} !mb-1 !text-[10px]">Новый тип</label>
+        <input id="type-new" name="title" required minlength="3" maxlength="40" placeholder="Например: Фестиваль" class="{{ m.INPUT }} !py-2 text-sm">
+      </div>
+      <button class="{{ m.BTN }} !py-2">{{ m.icon("check", "h-4 w-4") }}Добавить в справочник</button>
+    </form>
+  </div>
+</section>
+
+{# ---------------- REGISTRATION CONTROL ---------------- #}
+<section id="registration" class="mt-12 scroll-mt-36">
+  {{ m.section_head("registration --open --close", "Приём заявок", "Откройте или закройте приём заявок вручную. Закрытие останавливает подачу сразу, не дожидаясь срока; для открытия после истёкшего срока укажите новую дату — не позже начала соревнования.") }}
+  <ul class="grid gap-3">
+    {% for c in registrations %}
+    {% set is_open = c.status == "REGISTRATION_OPEN" %}
+    <li class="{{ m.CARD }} p-4 sm:p-5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{% if c.registration_expired %}{{ m.tag("срок подачи вышел", "amber") }}{% endif %}</div>
+          <p class="mt-2 font-medium text-white">{{ c.title }}</p>
+          <p class="font-mono text-[11px] text-fsp-muted">{{ c.code }} · старт {{ c.start_date|ru_date }} · приём до {{ c.registration_deadline|ru_date if c.registration_deadline else "не задан" }} · заявок: {{ c.applications_total }}{% if c.applications_pending %}, на модерации {{ c.applications_pending }}{% endif %}</p>
+        </div>
+      </div>
+      <form method="post" action="/cabinet/admin/competitions/{{ c.id }}/registration" class="mt-3 flex flex-wrap items-end gap-2 border-t border-fsp-line pt-3">
+        <div>
+          <label for="rg-{{ c.id }}" class="{{ m.LABEL }} !mb-1 !text-[10px]">{{ "Продлить приём до" if is_open else "Приём заявок до" }}</label>
+          <input id="rg-{{ c.id }}" type="date" name="deadline" value="{{ c.suggest_deadline }}" min="{{ today.isoformat() }}" max="{{ c.start_date }}" class="{{ m.INPUT }} !py-1.5 font-mono text-xs [color-scheme:dark]">
+        </div>
+        {% if is_open %}
+        <button name="action" value="open" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Продлить</button>
+        <button name="action" value="close" formnovalidate data-confirm="Закрыть приём заявок на «{{ c.title }}»? Новые заявки приниматься не будут, пока вы не откроете приём снова." data-confirm-label="Закрыть приём" class="{{ m.BTN_NO }}">{{ m.icon("x", "h-3.5 w-3.5") }}Закрыть приём</button>
+        {% else %}
+        <button name="action" value="open" class="{{ m.BTN_OK }}">{{ m.icon("check", "h-3.5 w-3.5") }}Открыть приём</button>
+        {% endif %}
+      </form>
+    </li>
+    {% else %}
+    <li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Нет соревнований, для которых можно менять приём заявок.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+{# ---------------- JUDGE PANELS ---------------- #}
+<section id="judges" class="mt-12 scroll-mt-36">
+  {{ m.section_head("judges assign --competition", "Судейские коллегии", "Назначьте судей на предстоящие соревнования. В списке доступны только судьи, чья категория действует до окончания соревнования; назначение сразу появляется в кабинете судьи.") }}
+  <ul class="grid gap-3">
+    {% for c in panels %}
+    {% set taken = c.judges|map(attribute="fsp_id")|list %}
+    {% set busy = c.judges|map(attribute="position")|list %}
+    {% set default_pos = "Главный судья" if "Главный судья" not in busy else ("Главный секретарь" if "Главный секретарь" not in busy else "Судья") %}
+    <li id="judges-{{ c.id }}" class="{{ m.CARD }} scroll-mt-36 p-4 sm:p-5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{% if not c.has_chief %}{{ m.tag("нет главного судьи", "amber") }}{% endif %}</div>
+          <p class="mt-2 font-medium text-white">{{ c.title }}</p>
+          <p class="font-mono text-[11px] text-fsp-muted">{{ c.code }} · {{ c.start_date|ru_date }}{% if c.end_date != c.start_date %}–{{ c.end_date|ru_date }}{% endif %} · {{ c.venue }}</p>
+        </div>
+        <a href="/competitions/{{ c.id }}/regulation" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Положение</a>
+      </div>
+      <ul class="mt-3 flex flex-wrap gap-2" aria-label="Состав коллегии">
+        {% for j in c.judges %}
+        <li class="flex items-center gap-2 rounded-md border border-fsp-line2 bg-fsp-bg py-1 pl-2.5 pr-1 text-xs">
+          <span class="text-fsp-light">{{ j.full_name }}</span><span class="font-mono text-[10px] uppercase text-emerald-300">{{ j.position }}</span>
+          <form method="post" action="/cabinet/admin/competitions/{{ c.id }}/judges/{{ j.fsp_id }}/remove">
+            <button data-confirm="Снять судью {{ j.full_name }} с соревнования?" data-confirm-label="Снять" class="flex h-6 w-6 items-center justify-center rounded text-fsp-muted hover:bg-fsp-red/20 hover:text-rose-300" aria-label="Снять: {{ j.full_name }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
+          </form>
+        </li>
+        {% else %}<li class="text-xs text-fsp-muted">Коллегия не назначена.</li>{% endfor %}
+      </ul>
+      <form method="post" action="/cabinet/admin/competitions/{{ c.id }}/judges" class="mt-3 grid gap-2 border-t border-fsp-line pt-3 sm:grid-cols-[1fr_13rem_auto] sm:items-end">
+        <div>
+          <label for="jf-{{ c.id }}" class="{{ m.LABEL }} !mb-1 !text-[10px]">Судья</label>
+          {% if judges|length > 12 %}<input type="search" data-option-filter="#jf-{{ c.id }}" placeholder="найти судью: ФИО, ФСП ID, категория" aria-label="Найти судью в списке" autocomplete="off" class="{{ m.INPUT }} mb-1.5 !py-1.5 text-xs">{% endif %}
+          <select id="jf-{{ c.id }}" name="fsp_id" class="{{ m.INPUT }} !py-2 text-xs">
+            {% for j in judges if j.fsp_id not in taken %}{% set jc = j.judge_category %}
+            {% set ok = jc and jc.expires_at >= c.end_date %}
+            <option value="{{ j.fsp_id }}" {% if not ok %}disabled{% endif %}>{{ j.short_name }} · {{ jc.code if jc else "без категории" }}{% if not ok %} — категория истекает {{ jc.expires_at|ru_date if jc else "" }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="jp-{{ c.id }}" class="{{ m.LABEL }} !mb-1 !text-[10px]">Должность</label>
+          <select id="jp-{{ c.id }}" name="position" class="{{ m.INPUT }} !py-2 text-xs">
+            {% for pos in D.JUDGE_POSITIONS %}<option {% if pos == default_pos %}selected{% endif %} {% if pos in ("Главный судья", "Главный секретарь") and pos in busy %}disabled{% endif %}>{{ pos }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="{{ m.BTN }} !py-2">{{ m.icon("users", "h-4 w-4") }}Назначить</button>
+      </form>
+    </li>
+    {% else %}
+    <li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Предстоящих соревнований нет — <a href="#create" class="text-fsp-violet hover:underline">создайте соревнование</a> в календаре.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+{% elif tab == "results" %}
+
+{{ m.cabinet_nav([("protocols", "Протоколы", awaiting|length), ("evsk", "ЕВСК", evsk_rows|length), ("documents", "Справки", None)]) }}
 
 {# ---------------- LIVE PROTOCOLS ---------------- #}
 <section id="protocols" class="mt-12 scroll-mt-36">
@@ -337,92 +508,6 @@
   </details>
 </section>
 
-{# ---------------- JUDGE PANELS ---------------- #}
-<section id="judges" class="mt-12 scroll-mt-36">
-  {{ m.section_head("judges assign --competition", "Судейские коллегии", "Назначьте судей на предстоящие соревнования. В списке доступны только судьи, чья категория действует до окончания соревнования; назначение сразу появляется в кабинете судьи.") }}
-  <ul class="grid gap-3">
-    {% for c in panels %}
-    {% set taken = c.judges|map(attribute="fsp_id")|list %}
-    {% set busy = c.judges|map(attribute="position")|list %}
-    {% set default_pos = "Главный судья" if "Главный судья" not in busy else ("Главный секретарь" if "Главный секретарь" not in busy else "Судья") %}
-    <li id="judges-{{ c.id }}" class="{{ m.CARD }} scroll-mt-36 p-4 sm:p-5">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{% if not c.has_chief %}{{ m.tag("нет главного судьи", "amber") }}{% endif %}</div>
-          <p class="mt-2 font-medium text-white">{{ c.title }}</p>
-          <p class="font-mono text-[11px] text-fsp-muted">{{ c.code }} · {{ c.start_date|ru_date }}{% if c.end_date != c.start_date %}–{{ c.end_date|ru_date }}{% endif %} · {{ c.venue }}</p>
-        </div>
-        <a href="/competitions/{{ c.id }}/regulation" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Положение</a>
-      </div>
-      <ul class="mt-3 flex flex-wrap gap-2" aria-label="Состав коллегии">
-        {% for j in c.judges %}
-        <li class="flex items-center gap-2 rounded-md border border-fsp-line2 bg-fsp-bg py-1 pl-2.5 pr-1 text-xs">
-          <span class="text-fsp-light">{{ j.full_name }}</span><span class="font-mono text-[10px] uppercase text-emerald-300">{{ j.position }}</span>
-          <form method="post" action="/cabinet/admin/competitions/{{ c.id }}/judges/{{ j.fsp_id }}/remove">
-            <button data-confirm="Снять судью {{ j.full_name }} с соревнования?" data-confirm-label="Снять" class="flex h-6 w-6 items-center justify-center rounded text-fsp-muted hover:bg-fsp-red/20 hover:text-rose-300" aria-label="Снять: {{ j.full_name }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
-          </form>
-        </li>
-        {% else %}<li class="text-xs text-fsp-muted">Коллегия не назначена.</li>{% endfor %}
-      </ul>
-      <form method="post" action="/cabinet/admin/competitions/{{ c.id }}/judges" class="mt-3 grid gap-2 border-t border-fsp-line pt-3 sm:grid-cols-[1fr_13rem_auto] sm:items-end">
-        <div>
-          <label for="jf-{{ c.id }}" class="{{ m.LABEL }} !mb-1 !text-[10px]">Судья</label>
-          {% if judges|length > 12 %}<input type="search" data-option-filter="#jf-{{ c.id }}" placeholder="найти судью: ФИО, ФСП ID, категория" aria-label="Найти судью в списке" autocomplete="off" class="{{ m.INPUT }} mb-1.5 !py-1.5 text-xs">{% endif %}
-          <select id="jf-{{ c.id }}" name="fsp_id" class="{{ m.INPUT }} !py-2 text-xs">
-            {% for j in judges if j.fsp_id not in taken %}{% set jc = j.judge_category %}
-            {% set ok = jc and jc.expires_at >= c.end_date %}
-            <option value="{{ j.fsp_id }}" {% if not ok %}disabled{% endif %}>{{ j.short_name }} · {{ jc.code if jc else "без категории" }}{% if not ok %} — категория истекает {{ jc.expires_at|ru_date if jc else "" }}{% endif %}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label for="jp-{{ c.id }}" class="{{ m.LABEL }} !mb-1 !text-[10px]">Должность</label>
-          <select id="jp-{{ c.id }}" name="position" class="{{ m.INPUT }} !py-2 text-xs">
-            {% for pos in D.JUDGE_POSITIONS %}<option {% if pos == default_pos %}selected{% endif %} {% if pos in ("Главный судья", "Главный секретарь") and pos in busy %}disabled{% endif %}>{{ pos }}</option>{% endfor %}
-          </select>
-        </div>
-        <button class="{{ m.BTN }} !py-2">{{ m.icon("users", "h-4 w-4") }}Назначить</button>
-      </form>
-    </li>
-    {% else %}
-    <li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Предстоящих соревнований нет — <a href="#create" class="text-fsp-violet hover:underline">создайте соревнование</a> в календаре.</li>
-    {% endfor %}
-  </ul>
-</section>
-
-{# ---------------- REGISTRATION CONTROL ---------------- #}
-<section id="registration" class="mt-12 scroll-mt-36">
-  {{ m.section_head("registration --open --close", "Приём заявок", "Откройте или закройте приём заявок вручную. Закрытие останавливает подачу сразу, не дожидаясь срока; для открытия после истёкшего срока укажите новую дату — не позже начала соревнования.") }}
-  <ul class="grid gap-3">
-    {% for c in registrations %}
-    {% set is_open = c.status == "REGISTRATION_OPEN" %}
-    <li class="{{ m.CARD }} p-4 sm:p-5">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{% if c.registration_expired %}{{ m.tag("срок подачи вышел", "amber") }}{% endif %}</div>
-          <p class="mt-2 font-medium text-white">{{ c.title }}</p>
-          <p class="font-mono text-[11px] text-fsp-muted">{{ c.code }} · старт {{ c.start_date|ru_date }} · приём до {{ c.registration_deadline|ru_date if c.registration_deadline else "не задан" }} · заявок: {{ c.applications_total }}{% if c.applications_pending %}, на модерации {{ c.applications_pending }}{% endif %}</p>
-        </div>
-      </div>
-      <form method="post" action="/cabinet/admin/competitions/{{ c.id }}/registration" class="mt-3 flex flex-wrap items-end gap-2 border-t border-fsp-line pt-3">
-        <div>
-          <label for="rg-{{ c.id }}" class="{{ m.LABEL }} !mb-1 !text-[10px]">{{ "Продлить приём до" if is_open else "Приём заявок до" }}</label>
-          <input id="rg-{{ c.id }}" type="date" name="deadline" value="{{ c.suggest_deadline }}" min="{{ today.isoformat() }}" max="{{ c.start_date }}" class="{{ m.INPUT }} !py-1.5 font-mono text-xs [color-scheme:dark]">
-        </div>
-        {% if is_open %}
-        <button name="action" value="open" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Продлить</button>
-        <button name="action" value="close" formnovalidate data-confirm="Закрыть приём заявок на «{{ c.title }}»? Новые заявки приниматься не будут, пока вы не откроете приём снова." data-confirm-label="Закрыть приём" class="{{ m.BTN_NO }}">{{ m.icon("x", "h-3.5 w-3.5") }}Закрыть приём</button>
-        {% else %}
-        <button name="action" value="open" class="{{ m.BTN_OK }}">{{ m.icon("check", "h-3.5 w-3.5") }}Открыть приём</button>
-        {% endif %}
-      </form>
-    </li>
-    {% else %}
-    <li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Нет соревнований, для которых можно менять приём заявок.</li>
-    {% endfor %}
-  </ul>
-</section>
-
 {# ---------------- DOCUMENT GENERATOR ---------------- #}
 <section id="documents" class="mt-12 grid scroll-mt-36 gap-6 lg:grid-cols-5">
   <div class="lg:col-span-2">
@@ -448,6 +533,10 @@
     <div><button class="{{ m.BTN }}">{{ m.icon("qr", "h-4 w-4") }}Сформировать справку</button></div>
   </form>
 </section>
+
+{% elif tab == "rating" %}
+
+{{ m.cabinet_nav([("rating-settings", "Рейтинг", None), ("teams", "Сборные", None)]) }}
 
 {# ---------------- RATING MANAGEMENT ---------------- #}
 <section id="rating-settings" class="mt-12 scroll-mt-36">
@@ -483,7 +572,7 @@
     <a href="/rating" class="{{ m.BTN }} !py-2 !text-xs">{{ m.icon("users", "h-3.5 w-3.5") }}Набрать из рейтинга</a>
     <a href="/teams" class="{{ m.BTN_GHOST }} !py-2 !text-xs">Все сборные</a>
   </div>
-  <ul class="grid gap-3">
+  <ul class="grid grid-cols-1 gap-3">
     {% for t in teams[:5] %}
     <li class="{{ m.CARD }} flex flex-wrap items-center justify-between gap-3 p-4">
       <div class="min-w-0">
@@ -502,6 +591,8 @@
   </ul>
 </section>
 
+{% elif tab == "reports" %}
+
 <section id="reports" class="mt-12 scroll-mt-36">
   {{ m.section_head("report headcount --export", "Отчёты", "Численность занимающихся с динамикой за несколько лет и разрезами. Отчёт о соревнованиях спортсмена выгружается из кабинета спортсмена и тренера, протокол — со страницы протокола, список сборной и проект приказа — со страницы сборной.") }}
   <div class="{{ m.CARD }} flex flex-wrap items-center justify-between gap-4 p-5">
@@ -516,75 +607,31 @@
   </div>
 </section>
 
-{# ---------------- CREATE COMPETITION ---------------- #}
-<section id="create" class="mt-12 scroll-mt-36">
-  <details class="group {{ m.CARD }}">
-    <summary class="flex cursor-pointer list-none items-center justify-between px-5 py-4 font-mono text-sm font-bold text-fsp-light hover:text-fsp-violet">
-      <span>{{ m.icon("calendar", "mr-2 inline h-4 w-4 text-emerald-400") }}Создать соревнование в календаре</span>
-      {{ m.icon("chevron", "h-4 w-4 transition-transform group-open:rotate-180") }}
-    </summary>
-    <form method="post" action="/cabinet/admin/competitions" class="grid gap-4 border-t border-fsp-line p-5 sm:grid-cols-2 lg:grid-cols-4">
-      <div class="sm:col-span-2 lg:col-span-4"><label for="c-title" class="{{ m.LABEL }}">Название</label><input id="c-title" name="title" required class="{{ m.INPUT }}" value="Открытое первенство г. Орска по спортивному программированию"></div>
-      <div><label for="c-disc" class="{{ m.LABEL }}">Дисциплина</label><select id="c-disc" name="discipline" class="{{ m.INPUT }}">{% for d in D.DISCIPLINES %}<option value="{{ d.code }}">{{ d.short }}</option>{% endfor %}</select></div>
-      <div><label for="c-level" class="{{ m.LABEL }}">Статус (уровень)</label><select id="c-level" name="level" class="{{ m.INPUT }}">{% for k, v in D.LEVEL_LABELS.items() %}<option value="{{ k }}" {% if k == "REGIONAL" %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
-      <div><label for="c-type" class="{{ m.LABEL }}">Тип</label><select id="c-type" name="type" class="{{ m.INPUT }}">{% for t in comp_types %}<option>{{ t.title }}</option>{% endfor %}</select></div>
-      <div><label for="c-format" class="{{ m.LABEL }}">Формат</label><select id="c-format" name="format" class="{{ m.INPUT }}">{% for k, v in D.FORMAT_LABELS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
-      <div class="sm:col-span-2"><label for="c-note" class="{{ m.LABEL }}">Пояснение к формату</label><input id="c-note" name="format_note" class="{{ m.INPUT }}" placeholder="Разработка — онлайн, защита — очно"></div>
-      <div><label for="c-plan" class="{{ m.LABEL }}">Календарный план</label><select id="c-plan" name="calendar_plan" class="{{ m.INPUT }}">{% for k, v in D.CALENDAR_PLAN_LABELS.items() %}<option value="{{ k }}" {% if k == "REGIONAL" %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
-      <div><label for="c-planno" class="{{ m.LABEL }}">Номер в плане</label><input id="c-planno" name="plan_number" required value="№ 56-101" class="{{ m.INPUT }} font-mono"></div>
-      <div><label for="c-start" class="{{ m.LABEL }}">Начало</label><input id="c-start" name="start_date" type="date" required class="{{ m.INPUT }} font-mono [color-scheme:dark]"></div>
-      <div><label for="c-end" class="{{ m.LABEL }}">Окончание</label><input id="c-end" name="end_date" type="date" required class="{{ m.INPUT }} font-mono [color-scheme:dark]"></div>
-      <div><label for="c-dl" class="{{ m.LABEL }}">Приём заявок до</label><input id="c-dl" name="registration_deadline" type="date" required class="{{ m.INPUT }} font-mono [color-scheme:dark]"></div>
-      <div><label for="c-age" class="{{ m.LABEL }}">Возрастная группа</label><select id="c-age" name="age_group" class="{{ m.INPUT }}">{% for g in D.AGE_GROUPS %}<option>{{ g }}</option>{% endfor %}</select></div>
-      <div class="sm:col-span-2 lg:col-span-3"><label for="c-venue" class="{{ m.LABEL }}">Место проведения</label><input id="c-venue" name="venue" required value="г. Орск, ЦЦОД «IT-куб»" class="{{ m.INPUT }}"></div>
-      <div class="flex items-end"><button class="{{ m.BTN }} w-full">Создать</button></div>
-    </form>
-  </details>
-
-  <div id="types" class="{{ m.CARD }} mt-4 scroll-mt-36 p-5">
-    <p class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-soft">// справочник типов соревнований</p>
-    <p class="mt-1 text-xs text-fsp-muted">Типы из справочника доступны в форме создания. Тип, который уже используется в календаре, удалить нельзя.</p>
-    <ul class="mt-3 flex flex-wrap gap-2" aria-label="Типы соревнований">
-      {% for t in comp_types %}
-      <li class="flex items-center gap-2 rounded-md border border-fsp-line2 bg-fsp-bg py-1 pl-2.5 {% if t.used %}pr-2.5{% else %}pr-1{% endif %} text-xs">
-        <span class="text-fsp-light">{{ t.title }}</span><span class="font-mono text-[10px] text-fsp-muted" title="Соревнований этого типа в календаре">{{ t.used }}</span>
-        {% if not t.used %}
-        <form method="post" action="/cabinet/admin/competition-types/remove">
-          <input type="hidden" name="title" value="{{ t.title }}">
-          <button data-confirm="Удалить тип «{{ t.title }}» из справочника?" data-confirm-label="Удалить" class="flex h-6 w-6 items-center justify-center rounded text-fsp-muted hover:bg-fsp-red/20 hover:text-rose-300" aria-label="Удалить тип: {{ t.title }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
-        </form>
-        {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-    <form method="post" action="/cabinet/admin/competition-types" class="mt-4 flex flex-wrap items-end gap-2">
-      <div class="min-w-[14rem] flex-1">
-        <label for="type-new" class="{{ m.LABEL }} !mb-1 !text-[10px]">Новый тип</label>
-        <input id="type-new" name="title" required minlength="3" maxlength="40" placeholder="Например: Фестиваль" class="{{ m.INPUT }} !py-2 text-sm">
-      </div>
-      <button class="{{ m.BTN }} !py-2">{{ m.icon("check", "h-4 w-4") }}Добавить в справочник</button>
-    </form>
-  </div>
+<section id="registry-links" class="mt-12 scroll-mt-36" aria-labelledby="registry-links-title">
+  {{ m.section_head("registry --search", "Реестр и журналы", "Большие списки с поиском, фильтрами и выгрузкой. Состояние фильтров — в адресе: ссылкой на выборку можно поделиться.", "registry-links-title") }}
+  <ul class="grid gap-3 md:grid-cols-3">
+    {% for href, icon, title, hint, n in [
+      ("/registry", "users", "Реестр", "Спортсмены, тренеры, судьи и организации: фильтры по дисциплине, организации, разряду, возрасту, муниципалитету", none),
+      ("/applications", "check", "Заявки на соревнования", "Модерация любого объёма: поиск, фильтры со счётчиками, массовое решение", comp_apps|length),
+      ("/audit", "terminal", "Журнал действий", "Кто, когда и что сделал — поиск, автор, период, выгрузка", none)] %}
+    <li><a href="{{ href }}" class="{{ m.CARD }} group flex h-full flex-col gap-2 p-5 transition-colors duration-150 hover:border-fsp-blue">
+      <span class="flex items-center justify-between gap-2 font-medium text-white">{{ m.icon(icon, "h-4 w-4 text-fsp-violet") }}<span class="flex-1">{{ title }}</span>{% if n %}<span class="rounded bg-amber-400/20 px-1.5 font-mono text-[11px] text-amber-300">{{ n }}</span>{% endif %}<span class="text-fsp-muted transition-transform group-hover:translate-x-0.5" aria-hidden="true">→</span></span>
+      <span class="text-xs text-fsp-muted">{{ hint }}</span>
+    </a></li>
+    {% endfor %}
+  </ul>
 </section>
 
-{# ---------------- AUDIT LOG ---------------- #}
-<section class="mt-12">
-  {{ m.section_head("tail ./audit.log", "Журнал действий") }}
-  <p class="-mt-3 mb-3"><a href="/audit" class="font-mono text-xs text-fsp-violet hover:underline">весь журнал с поиском и фильтрами →</a></p>
-  <div class="overflow-x-auto border border-fsp-line bg-black/50 rounded-xl">
-    <table class="w-full min-w-[640px] font-mono text-xs">
-      <tbody>
-        {% for a in audit %}
-        <tr class="border-b border-fsp-line/60">
-          <td class="whitespace-nowrap px-3 py-2 text-fsp-dim2">{{ a.at.replace("T", " ") }}</td>
-          <td class="px-3 py-2 {% if a.service == 'competition' %}text-fsp-violet{% else %}text-emerald-300{% endif %}">{{ a.service }}</td>
-          <td class="whitespace-nowrap px-3 py-2 text-fsp-muted">{{ a.actor }}</td>
-          <td class="px-3 py-2 text-fsp-light">{{ a.action }}</td>
-          <td class="px-3 py-2 text-fsp-muted">{{ a.object }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
+{% endif %}
+
+{# Старые ссылки вида /cabinet#registration (уведомления, закладки) открывают вкладку, где этот раздел теперь живёт #}
+<script>
+  (() => {
+    const id = decodeURIComponent(location.hash.slice(1));
+    if (!id || document.getElementById(id)) return;
+    const sections = {{ sections|tojson_script|safe }};
+    const tab = sections[id] || sections[id.split('-')[0]];
+    if (tab) location.replace(`/cabinet?tab=${tab}#${id}`);
+  })();
+</script>
 {% endblock %}

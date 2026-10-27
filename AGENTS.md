@@ -5,6 +5,7 @@
 - Unit tests: `py -m unittest -v`. E2E smoke (stack must be running): `py -X utf8 tests/e2e_smoke.py`.
 - Starlette 1.0: use `templates.TemplateResponse(request, name, context)`.
 - Jinja macros used inside a child template must be defined inside a `{% block %}`.
+- Gateway layout: shared plumbing (clients, templates, `render`/`require`) in `gateway_service/web.py`, list URL helpers in `listing_ui.py`, section routers in `gateway_service/routes/`; list filtering/paging lives in services via `shared/listing.py`.
 - Design tokens: Tailwind `fsp-*` colors in `gateway_service/templates/base.html`, effects in `static/app.css`, shared class tokens/icons in `templates/macros.html`.
 - Visual checks: headless Chrome `"/c/Program Files/Google/Chrome/Application/chrome.exe" --headless=new --screenshot=... URL`. In Git Bash set `MSYS_NO_PATHCONV=1` when passing `/paths` as args. Chrome enforces a ~500px minimum window width — test mobile via a 375px `<iframe>` page.
 - Demo data lives in `shared/demo_roster.py` (people) and `competition_service/seed.py` (calendar, synthetic logs).

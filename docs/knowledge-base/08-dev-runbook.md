@@ -63,7 +63,21 @@ e2e (`tests/e2e_smoke.py`) ходит как браузер (cookie, формы,
   справку с QR, проверку VALID/INVALID, публикацию live-протокола;
 - инструменты федерации: справочник типов, ручное закрытие/открытие приёма заявок (в т.ч. отказ в заявке при закрытом приёме),
   подсветку ЕВСК, отчёт о численности и выгрузки .xlsx/.docx/.pdf (по магическим байтам), сборную из рейтинга с утверждением
-  приказом, права на отчёт спортсмена (сам, тренер подопечного, чужой — 403).
+  приказом, права на отчёт спортсмена (сам, тренер подопечного, чужой — 403);
+- реестр (фильтры, организации, выгрузки), ленту уведомлений, антидопинг, сроки отчётов;
+- большие списки: страницы и сортировку, счётчики фильтров, массовую модерацию, поиск по журналу; защиту от Enter в
+  форме массового решения, фильтры вкладок реестра, «прочитано только показанное».
+
+Юнит-тесты по разделам: `test_engines` (ФСП ID, парсер, рейтинг), `test_qualification`, `test_competition_admin`,
+`test_evsk`, `test_headcount`, `test_teams`, `test_exports`, `test_tours`, `test_registry` (реестр, организации, лента,
+сроки и напоминания), `test_listing` (поиск, фасеты, страницы, массовые решения, чипы и вкладки, `FSP_DEMO_SCALE`).
+
+Проверка неиспользуемых и неопределённых имён (не в `requirements.txt`, ставится отдельно):
+
+```powershell
+py -m pip install pyflakes
+py -m pyflakes gateway_service sportsman_service competition_service shared tests
+```
 
 e2e меняет данные (в памяти или в Postgres) — после прогона сбросьте состояние (перезапуск стека; с БД — `docker compose down -v`), если дальше будет демонстрация. Юнит-тесты запускайте без `FSP_DATABASE_URL` (они рассчитаны на in-memory; с включённой БД часть падает).
 
@@ -94,7 +108,9 @@ e2e меняет данные (в памяти или в Postgres) — посл�
 
 ## Как добавить…
 
-**Страницу**: маршрут в `gateway_service/main.py` → `render(request, "x.html", user=…, …)`; шаблон
+**Страницу**: маршрут в `gateway_service/main.py` или — для отдельного раздела — `APIRouter` в `gateway_service/routes/`
+(подключается в `main.py` через `app.include_router`); общий слой (`clients`, `render`, `require`, `back`, `safe`,
+`download`) берите из `gateway_service/web.py`. → `render(request, "x.html", user=…, …)`; шаблон
 `{% extends "base.html" %}{% import "macros.html" as m %}`; данные — через `asyncio.gather(safe(…))`,
 чтобы страница переживала падение сервиса.
 
@@ -104,6 +120,10 @@ e2e меняет данные (в памяти или в Postgres) — посл�
 
 **Демо-сценарий**: человек в `_ROWS`, аккаунт в `DEMO_ACCOUNTS` (с `check`), при необходимости связь
 в `TRAINER_LINKS`, заявка в `seed.APPLICATIONS`; e2e подхватит аккаунт автоматически.
+
+**Большой список**: фильтрация, сортировка и страница — в сервисе через `shared/listing.py` (`tokens`/`matches`, `page`,
+`facets`); в шлюзе — `list_args`, `pages`, `chips` из `listing_ui.py`; в шаблоне — форма `data-autosubmit`, `m.search_box`,
+`m.facet_option`, `m.sort_th`, `m.pager`, `m.filter_chips` ([UI](06-ui-design-system.md#большие-списки)).
 
 **Эффект**: по возможности переиспользуйте data-атрибуты ([UI](06-ui-design-system.md#система-эффектов-data-атрибуты));
 новый — с поддержкой reduced-motion и без скрытия контента при отключённом JS.

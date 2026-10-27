@@ -43,6 +43,10 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
     check("Жуков" in html and "Исключены из рейтинга" in html, "sanctioned athlete excluded with reason")
     check("222.0" in html, "Соколов: (40+0+45+100)×1.2 = 222.0")
     check("Войти и подать заявку" in page(c, "/calendar?status=REGISTRATION_OPEN"), "guest calendar leads an open start to login")
+    for path in ("/", "/login", "/register", "/rating", "/glossary"):
+        html = c.get(path).text
+        check('id="a11y-panel"' in html and "data-a11y-open" in html and "/static/a11y.css" in html, f"{path}: панель специальных возможностей на месте")
+    check(all(c.get(f"/static/{f}").status_code == 200 for f in ("a11y.css", "a11y.js")), "a11y.css и a11y.js отдаются")
     live = page(c, "/partials/live/5")
     check("tail -f" in live, "live protocol partial renders")
     check(c.get("/api/public/competition/api/v1/rating?discipline=AI").status_code == 200, "public proxy: rating allowed")

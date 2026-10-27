@@ -207,7 +207,6 @@ body { overflow-x: clip; }
 .tour-launcher:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #EDEDED; }
 .tour-launcher:focus-visible { outline: 2px solid #EDEDED; outline-offset: 3px; }
 .tour-launcher-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: #EDEDED; color: #402FFF; font-size: 16px; font-weight: 700; }
-@media (max-width: 639px) { .tour-launcher { padding: 0 8px; } .tour-launcher-text { display: none; } }
 
 .tour-layer { position: fixed; inset: 0; z-index: 70; }
 .tour-shield { position: absolute; inset: 0; }
@@ -216,7 +215,6 @@ body { overflow-x: clip; }
 @keyframes tour-pulse { from { transform: scale(.98); opacity: 1; } to { transform: scale(1.04); opacity: 0; } }
 
 .tour-pop { position: absolute; max-width: calc(100vw - 24px); padding: 16px; border: 2px solid #402FFF; border-radius: 12px; background: #202128; color: #EDEDED; box-shadow: 6px 6px 0 #402FFF; outline: none; }
-.tour-pop.tour-sheet { left: 8px; right: 8px; bottom: 8px; top: auto; width: auto; }
 .tour-meta { display: flex; justify-content: space-between; gap: 8px; color: #8C80FF; font: 500 11px "JetBrains Mono", monospace; letter-spacing: .06em; text-transform: uppercase; }
 .tour-tourname { max-width: 55%; overflow: hidden; color: #9B9C9E; text-overflow: ellipsis; white-space: nowrap; }
 .tour-bar { height: 3px; margin: 10px 0 12px; overflow: hidden; border-radius: 99px; background: #3D3E42; }

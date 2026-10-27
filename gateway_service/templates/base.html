@@ -8,6 +8,10 @@
   <meta name="description" content="Единая цифровая платформа Федерации спортивного программирования Оренбургской области: реестр, календарь, протоколы, рейтинг, документы.">
   <meta name="theme-color" content="#1B1C21">
   <script>document.documentElement.classList.add('js');</script>
+  <script>/* настройки доступности применяются до первой отрисовки */
+    try { var a = JSON.parse(localStorage.getItem('fsp.a11y') || 'null'); if (!a && matchMedia('(prefers-contrast: more)').matches) a = { theme: 'wb' };
+      if (a) for (var k in a) if (k !== 'rate') document.documentElement.setAttribute('data-a11y-' + k, a[k]); } catch (e) { /* нет localStorage */ }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -21,21 +25,24 @@
             mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Consolas', 'monospace'],
           },
           colors: {
-            fsp: {
-              bg: '#1B1C21', panel: '#202128', card: '#2D2E37', line: '#3D3E42', line2: '#4E5268',
-              dim: '#5F5F66', dim2: '#838388', muted: '#9B9C9E', soft: '#C7C7C7', light: '#EDEDED',
-              blue: '#402FFF', violet: '#8C80FF', red: '#EC1D35',
-            },
+            // Цвета берутся из переменных --c-* (static/a11y.css): цветовые схемы доступности подменяют их, а не классы
+            fsp: Object.fromEntries(Object.entries({
+              bg: '27 28 33', panel: '32 33 40', card: '45 46 55', line: '61 62 66', line2: '78 82 104',
+              dim: '95 95 102', dim2: '131 131 136', muted: '155 156 158', soft: '199 199 199', light: '237 237 237',
+              blue: '64 47 255', violet: '140 128 255', red: '236 29 53',
+            }).map(([k, v]) => [k, `rgb(var(--c-${k}, ${v}) / <alpha-value>)`])),
           },
         },
       },
     };
   </script>
   <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/a11y.css">
   {% block head %}{% endblock %}
 </head>
 <body class="min-h-screen bg-fsp-bg font-sans text-fsp-light antialiased selection:bg-fsp-blue selection:text-white">
   <a href="#main" class="sr-only z-50 rounded-md bg-fsp-blue px-4 py-2 font-mono text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Перейти к содержимому</a>
+  <button type="button" data-a11y-open class="sr-only z-50 rounded-md bg-fsp-blue px-4 py-2 font-mono text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-16">Настройки специальных возможностей</button>
   <div class="pointer-events-none fixed inset-0 -z-10 bg-blueprint opacity-70" aria-hidden="true"></div>
   <div class="cursor-grid no-print pointer-events-none fixed inset-0 -z-10" aria-hidden="true"></div>
 
@@ -78,6 +85,9 @@
       </nav>
 
       <div class="ml-auto flex items-center gap-2">
+        <button type="button" data-a11y-open aria-haspopup="dialog" accesskey="0" class="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-fsp-bg transition-colors duration-150 hover:bg-[#D9D9D9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue" aria-label="Специальные возможности: размер текста, цвета, озвучивание" title="Специальные возможности (Alt+Shift+A)">
+          <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="1.6" fill="currentColor" stroke="none"/><path d="M4.5 8.5l7.5 1.2 7.5-1.2M12 9.7v4.6M12 14.3l-3.6 6M12 14.3l3.6 6"/></svg>
+        </button>
         {% if user %}
           {% if user.person.roles|length > 1 %}
           <form method="post" action="/role" class="hidden items-center gap-0.5 rounded-lg bg-[#D9D9D9] p-1 md:flex" aria-label="Переключение роли без повторного входа">
@@ -176,6 +186,8 @@
     {% block content %}{% endblock %}
   </main>
 
+  {% include "_a11y_panel.html" %}
+
   {# FSP-style dark footer island #}
   <footer class="no-print px-2.5 pb-2.5">
     <div class="relative mx-auto max-w-[1420px] overflow-hidden rounded-xl border border-fsp-line bg-fsp-panel bg-fsp-grid">
@@ -205,7 +217,7 @@
   </footer>
   <script>
     (() => {
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.getAttribute('data-a11y-calm') === '1';
 
       // Expandable rows (rating breakdown etc.)
       document.addEventListener('click', (e) => {
@@ -236,6 +248,21 @@
             if (!r.ok) return;
             el.innerHTML = await r.text();
             if (el.querySelector('[data-live-done="1"]')) clearInterval(timer);
+            else if (document.documentElement.getAttribute('data-a11y-sr') === '1' && !el.dataset.manual) {
+              // Режим для экранного диктора: таблица не перерисовывается сама (диктор теряет место чтения) — обновляется кнопкой
+              clearInterval(timer); el.dataset.manual = '1';
+              const bar = document.createElement('div');
+              bar.className = 'mt-3 flex flex-wrap items-center gap-3';
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'cursor-pointer rounded-md border border-fsp-line2 bg-fsp-panel px-4 py-2 font-mono text-sm text-fsp-light hover:bg-fsp-card';
+              btn.textContent = 'Обновить таблицу';
+              const note = document.createElement('span');
+              note.className = 'text-xs text-fsp-muted'; note.setAttribute('role', 'status');
+              note.textContent = 'Автообновление отключено режимом для экранного диктора.';
+              btn.addEventListener('click', async () => { await tick(); note.textContent = `Таблица обновлена в ${new Date().toLocaleTimeString('ru-RU')}.`; });
+              bar.append(btn, note); el.after(bar);
+            }
           } catch (_) { /* gateway restarting during live-reload — retry next tick */ }
         };
         tick();
@@ -535,6 +562,7 @@
   {% if tour %}<script id="tour-data" type="application/json">{{ {"tour": tour, "user": tour_user}|tojson_script|safe }}</script>
   <script src="/static/tour.js" defer></script>{% endif %}
   <script src="/static/ux.js" defer></script>
+  <script src="/static/a11y.js" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

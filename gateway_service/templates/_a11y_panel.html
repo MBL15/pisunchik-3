@@ -1,0 +1,103 @@
+{% import "macros.html" as m %}
+{# Панель «Специальные возможности»: открывается кнопкой в шапке или Alt+Shift+A. Логика — static/a11y.js, оформление режимов — static/a11y.css #}
+{% macro choice(group, value, label, hint="", swatch="") -%}
+<label class="a11y-opt flex items-center gap-3 rounded-lg border border-fsp-line2 px-3 py-2.5 transition-colors hover:bg-fsp-card">
+  <input type="radio" name="a11y-{{ group }}" value="{{ value }}" class="sr-only" data-a11y-set="{{ group }}">
+  {% if swatch %}<span class="flex h-8 w-12 shrink-0 items-center justify-center rounded border border-fsp-line2 text-sm font-bold" style="{{ swatch }}" aria-hidden="true">Аа</span>{% endif %}
+  <span class="min-w-0"><span class="block text-sm font-medium text-fsp-light">{{ label }}</span>{% if hint %}<span class="block text-xs text-fsp-muted">{{ hint }}</span>{% endif %}</span>
+</label>
+{%- endmacro %}
+{% macro toggle(key, label, hint="") -%}
+<label class="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-fsp-line2 px-3 py-2.5 hover:bg-fsp-card">
+  <span class="min-w-0"><span class="block text-sm font-medium text-fsp-light">{{ label }}</span>{% if hint %}<span class="block text-xs text-fsp-muted">{{ hint }}</span>{% endif %}</span>
+  <input type="checkbox" class="a11y-sw mt-0.5" data-a11y-toggle="{{ key }}" role="switch">
+</label>
+{%- endmacro %}
+
+<dialog id="a11y-panel" aria-labelledby="a11y-title" class="no-print m-0 ml-auto h-full max-h-none w-full max-w-md flex-col overflow-hidden border-l border-fsp-line2 bg-fsp-panel p-0 text-fsp-light open:flex">
+  <div class="flex items-center justify-between gap-3 border-b border-fsp-line2 px-5 py-4">
+    <div>
+      <h2 id="a11y-title" class="font-mono text-lg font-bold text-fsp-light">Специальные возможности</h2>
+      <p class="mt-0.5 text-xs text-fsp-muted">Настройки сохраняются в этом браузере и действуют на всех страницах.</p>
+    </div>
+    <button type="button" data-a11y-close class="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md border border-fsp-line2 text-fsp-light hover:bg-fsp-card" aria-label="Закрыть настройки">{{ m.icon("x", "h-5 w-5") }}</button>
+  </div>
+
+  <div class="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5">
+    <section aria-labelledby="a11y-h-presets">
+      <h3 id="a11y-h-presets" class="mb-2 font-mono text-xs uppercase tracking-wider text-fsp-violet">Быстрые профили</h3>
+      <div class="grid gap-2">
+        {% for key, title, text in [
+          ("low-vision", "Слабовидящим", "Крупный текст, жёлтое на чёрном, простой шрифт, подчёркнутые ссылки, яркий фокус"),
+          ("screen-reader", "Незрячим: режим для экранного диктора", "Без анимации и автообновлений, подчёркнутые ссылки, яркий фокус; сайт можно слушать кнопкой «Читать страницу»"),
+          ("dyslexia", "Трудно читать: дислексия", "Простой шрифт, увеличенные интервалы, спокойный режим"),
+          ("motor", "Трудно попадать мышью", "Крупные кнопки и поля, крупный курсор, яркий фокус"),
+          ("calm", "Раздражает движение", "Убрать анимацию, мерцание и декоративные эффекты"),
+        ] %}
+        <button type="button" data-a11y-preset="{{ key }}" class="cursor-pointer rounded-lg border border-fsp-line2 px-3 py-2.5 text-left hover:bg-fsp-card">
+          <span class="block text-sm font-medium text-fsp-light">{{ title }}</span><span class="block text-xs text-fsp-muted">{{ text }}</span>
+        </button>
+        {% endfor %}
+      </div>
+    </section>
+
+    <fieldset>
+      <legend class="mb-2 font-mono text-xs uppercase tracking-wider text-fsp-violet">Размер текста</legend>
+      <div class="grid grid-cols-2 gap-2">
+        {{ choice("size", "100", "100%", "обычный") }}{{ choice("size", "125", "125%", "крупнее") }}
+        {{ choice("size", "150", "150%", "крупный") }}{{ choice("size", "175", "175%", "очень крупный") }}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend class="mb-2 font-mono text-xs uppercase tracking-wider text-fsp-violet">Цветовая схема</legend>
+      <div class="grid gap-2">
+        {{ choice("theme", "default", "Обычная", "тёмная фирменная", "background:#1B1C21;color:#EDEDED") }}
+        {{ choice("theme", "bw", "Чёрное на белом", "светлая высококонтрастная", "background:#fff;color:#000") }}
+        {{ choice("theme", "wb", "Белое на чёрном", "тёмная высококонтрастная", "background:#000;color:#fff") }}
+        {{ choice("theme", "yb", "Жёлтое на чёрном", "для низкого зрения", "background:#000;color:#ffeb00") }}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend class="mb-2 font-mono text-xs uppercase tracking-wider text-fsp-violet">Шрифт</legend>
+      <div class="grid grid-cols-2 gap-2">
+        {{ choice("font", "brand", "Фирменный", "моноширинный") }}{{ choice("font", "plain", "Простой", "Verdana, без тонких начертаний") }}
+      </div>
+    </fieldset>
+
+    <section aria-labelledby="a11y-h-more">
+      <h3 id="a11y-h-more" class="mb-2 font-mono text-xs uppercase tracking-wider text-fsp-violet">Чтение и управление</h3>
+      <div class="grid gap-2">
+        {{ toggle("spacing", "Увеличенные интервалы", "между буквами, словами и строками") }}
+        {{ toggle("links", "Подчёркивать все ссылки") }}
+        {{ toggle("focus", "Яркая рамка вокруг выбранного элемента", "видно, где вы находитесь при работе с клавиатуры") }}
+        {{ toggle("cursor", "Крупный курсор мыши") }}
+        {{ toggle("targets", "Крупные кнопки и поля", "легче попасть пальцем или мышью") }}
+        {{ toggle("calm", "Спокойный режим", "без анимации, движения и декора") }}
+        {{ toggle("sr", "Режим для экранного диктора", "таблицы не обновляются сами — вместо этого кнопка «Обновить»; тур-подсказки не навязываются") }}
+      </div>
+    </section>
+
+    <section aria-labelledby="a11y-h-speech" data-a11y-speech>
+      <h3 id="a11y-h-speech" class="mb-2 font-mono text-xs uppercase tracking-wider text-fsp-violet">Озвучивание</h3>
+      <div class="grid gap-2">
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" data-a11y-read="page" class="cursor-pointer rounded-lg border border-fsp-line2 px-2 py-2.5 text-sm hover:bg-fsp-card">Читать страницу</button>
+          <button type="button" data-a11y-read="selection" class="cursor-pointer rounded-lg border border-fsp-line2 px-2 py-2.5 text-sm hover:bg-fsp-card">Читать выделенное</button>
+          <button type="button" data-a11y-read="stop" class="cursor-pointer rounded-lg border border-fsp-line2 px-2 py-2.5 text-sm hover:bg-fsp-card">Остановить</button>
+        </div>
+        {{ toggle("speak", "Называть элемент при выборе клавишей Tab", "голосом прочитается название кнопки или поля") }}
+        <label class="rounded-lg border border-fsp-line2 px-3 py-2.5 text-sm"><span class="block font-medium text-fsp-light">Скорость речи: <output data-a11y-rate-out>1.0×</output></span>
+          <input type="range" min="0.6" max="1.6" step="0.1" value="1" class="mt-2 w-full accent-fsp-blue" data-a11y-rate></label>
+      </div>
+      <p class="mt-2 hidden text-xs text-amber-300" data-a11y-nospeech>Этот браузер не умеет озвучивать текст. Воспользуйтесь программой экранного доступа (NVDA, JAWS, VoiceOver) — страницы размечены для неё.</p>
+    </section>
+
+    <div class="border-t border-fsp-line2 pt-4">
+      <button type="button" data-a11y-reset class="cursor-pointer rounded-lg border border-fsp-line2 px-4 py-2.5 text-sm font-medium hover:bg-fsp-card">Сбросить все настройки</button>
+      <p class="mt-3 text-xs text-fsp-muted">Открыть эту панель с клавиатуры: <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">Alt</kbd> + <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">Shift</kbd> + <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">A</kbd>. Закрыть — <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">Esc</kbd>.</p>
+    </div>
+  </div>
+  <p class="sr-only" role="status" aria-live="polite" data-a11y-status></p>
+</dialog>

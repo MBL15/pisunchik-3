@@ -1,0 +1,127 @@
+/* Специальные возможности: размер текста, цветовые схемы, шрифт, интервалы, курсор, крупные элементы, спокойный режим.
+   Настройки лежат в атрибутах <html data-a11y-*> (их ставит a11y.js и ранний скрипт в <head>), поэтому правила ниже
+   срабатывают до первой отрисовки и не мигают. Цвета интерфейса — переменные --c-* (каналы RGB): Tailwind в base.html
+   берёт fsp-* оттуда, а схемы просто подменяют переменные. */
+
+:root {
+  --c-bg: 27 28 33; --c-panel: 32 33 40; --c-card: 45 46 55; --c-line: 61 62 66; --c-line2: 78 82 104;
+  --c-dim: 95 95 102; --c-dim2: 131 131 136; --c-muted: 155 156 158; --c-soft: 199 199 199; --c-light: 237 237 237;
+  --c-blue: 64 47 255; --c-violet: 140 128 255; --c-red: 236 29 53;
+  --a11y-k: 1;
+}
+
+/* ---------- Размер текста: корень в процентах масштабирует всё в rem, мелкие px-подписи — через --a11y-k ---------- */
+html[data-a11y-size="125"] { font-size: 125%; --a11y-k: 1.25; }
+html[data-a11y-size="150"] { font-size: 150%; --a11y-k: 1.5; }
+html[data-a11y-size="175"] { font-size: 175%; --a11y-k: 1.75; }
+html[data-a11y-size="125"] [class*="text-[10px]"], html[data-a11y-size="150"] [class*="text-[10px]"], html[data-a11y-size="175"] [class*="text-[10px]"] { font-size: calc(10px * var(--a11y-k)) !important; }
+html[data-a11y-size="125"] [class*="text-[11px]"], html[data-a11y-size="150"] [class*="text-[11px]"], html[data-a11y-size="175"] [class*="text-[11px]"] { font-size: calc(11px * var(--a11y-k)) !important; }
+html[data-a11y-size="125"] [class*="text-[12px]"], html[data-a11y-size="150"] [class*="text-[12px]"], html[data-a11y-size="175"] [class*="text-[12px]"] { font-size: calc(12px * var(--a11y-k)) !important; }
+html[data-a11y-size="125"] [class*="text-[13px]"], html[data-a11y-size="150"] [class*="text-[13px]"], html[data-a11y-size="175"] [class*="text-[13px]"] { font-size: calc(13px * var(--a11y-k)) !important; }
+html[data-a11y-size="125"] [class*="text-[15px]"], html[data-a11y-size="150"] [class*="text-[15px]"], html[data-a11y-size="175"] [class*="text-[15px]"] { font-size: calc(15px * var(--a11y-k)) !important; }
+html[data-a11y-size="125"] [class*="text-[17px]"], html[data-a11y-size="150"] [class*="text-[17px]"], html[data-a11y-size="175"] [class*="text-[17px]"] { font-size: calc(17px * var(--a11y-k)) !important; }
+/* Крупный текст не должен уезжать за край: длинные слова переносятся, таблицы прокручиваются */
+html[data-a11y-size="150"] body, html[data-a11y-size="175"] body { overflow-wrap: anywhere; }
+/* Шапка-«остров» при крупном тексте растёт по высоте, а не режет содержимое */
+html[data-a11y-size="150"] header > div, html[data-a11y-size="175"] header > div { height: auto; min-height: 68px; flex-wrap: wrap; padding-top: 0.5rem; padding-bottom: 0.5rem; }
+
+/* ---------- Цветовые схемы ---------- */
+/* Белое на чёрном */
+html[data-a11y-theme="wb"], html[data-a11y-theme="bw"] {
+  --c-bg: 0 0 0; --c-panel: 0 0 0; --c-card: 22 22 22; --c-line: 255 255 255; --c-line2: 255 255 255;
+  --c-dim: 255 255 255; --c-dim2: 255 255 255; --c-muted: 255 255 255; --c-soft: 255 255 255; --c-light: 255 255 255;
+  --c-blue: 0 0 238; --c-violet: 120 200 255; --c-red: 214 0 28;
+  color-scheme: dark;
+}
+/* Жёлтое на чёрном */
+html[data-a11y-theme="yb"] {
+  --c-bg: 0 0 0; --c-panel: 0 0 0; --c-card: 26 26 0; --c-line: 255 235 0; --c-line2: 255 235 0;
+  --c-dim: 255 235 0; --c-dim2: 255 235 0; --c-muted: 255 235 0; --c-soft: 255 235 0; --c-light: 255 235 0;
+  --c-blue: 255 235 0; --c-violet: 255 255 255; --c-red: 255 90 90;
+  color-scheme: dark;
+}
+/* Чёрное на белом — та же белая схема, зеркально перевёрнутая: яркие акценты палитры (amber, emerald, rose) сами становятся тёмными */
+html[data-a11y-theme="bw"] { filter: invert(1) hue-rotate(180deg); background: #fff; }
+html[data-a11y-theme="bw"] img, html[data-a11y-theme="bw"] video { filter: invert(1) hue-rotate(180deg); }
+
+/* В жёлтой схеме белый текст на цветных плашках остаётся читаемым: заливка жёлтая, значит текст на ней чёрный */
+html[data-a11y-theme="yb"] .bg-fsp-blue, html[data-a11y-theme="yb"] .bg-fsp-blue :is([class*="text-fsp-"], [class*="text-white"]),
+html[data-a11y-theme="yb"] .bg-fsp-light:is([class*="text-fsp-"], [class*="text-white"]),
+html[data-a11y-theme="yb"] [data-spy] a[aria-current="true"], html[data-a11y-theme="yb"] .bg-fsp-red { color: #000 !important; }
+html[data-a11y-theme="yb"] [data-spy] a[aria-current="true"] span { color: #000 !important; }
+
+/* Контрастные схемы: сплошные рамки, без декора и полупрозрачности текста, заметный фокус */
+html[data-a11y-theme] :is([data-network], .beam, .fsp-glow, .bg-blueprint, .cursor-grid) { display: none !important; }
+html[data-a11y-theme] .bg-fsp-grid { background-image: none !important; }
+html[data-a11y-theme] ::placeholder { opacity: 1; }
+html[data-a11y-theme] :is(.spotlight)::before, html[data-a11y-theme] :is(.spotlight)::after { display: none; }
+html[data-a11y-theme] a { text-decoration-thickness: 1px; }
+html[data-a11y-theme] body { background-image: none; }
+
+/* ---------- Заметный фокус (всегда в контрастных схемах, по желанию — отдельно) ---------- */
+html[data-a11y-focus="1"] :focus-visible, html[data-a11y-theme] :focus-visible {
+  outline: 4px solid #ffbf00 !important; outline-offset: 3px !important; box-shadow: 0 0 0 7px #000 !important;
+}
+
+/* ---------- Шрифт: простой и крупный вместо тонкого моноширинного ---------- */
+html[data-a11y-font="plain"] body, html[data-a11y-font="plain"] body :not(svg, svg *) {
+  font-family: Verdana, "Segoe UI", Arial, sans-serif !important;
+}
+html[data-a11y-font="plain"] .font-light { font-weight: 400 !important; }
+html[data-a11y-font="plain"] [class*="uppercase"] { text-transform: none !important; }
+
+/* ---------- Интервалы: по рекомендациям WCAG 1.4.12 ---------- */
+html[data-a11y-spacing="1"] body :not(svg, svg *, canvas) { letter-spacing: 0.06em !important; word-spacing: 0.14em !important; }
+html[data-a11y-spacing="1"] :where(p, li, dd, dt, td, th, label, summary, h1, h2, h3, h4, h5, h6, span, a, div, button, input, textarea, select) { line-height: 1.7 !important; }
+html[data-a11y-spacing="1"] :where(p, li) { margin-bottom: 0.4em; }
+
+/* ---------- Ссылки подчёркнуты ---------- */
+html[data-a11y-links="1"] a { text-decoration: underline !important; text-underline-offset: 0.2em; text-decoration-thickness: 2px; }
+
+/* ---------- Крупный курсор ---------- */
+html[data-a11y-cursor="1"], html[data-a11y-cursor="1"] * {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24'><path d='M3 2l7.5 19 2.6-7.9L21 10.5z' fill='black' stroke='white' stroke-width='1.6' stroke-linejoin='round'/></svg>") 4 3, auto !important;
+}
+html[data-a11y-cursor="1"] :is(a, button, summary, label, select, [role="button"], input[type="checkbox"], input[type="radio"], [data-copy], [data-toggle]) {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24'><path d='M3 2l7.5 19 2.6-7.9L21 10.5z' fill='%23ffd400' stroke='black' stroke-width='1.6' stroke-linejoin='round'/></svg>") 4 3, pointer !important;
+}
+
+/* ---------- Крупные элементы управления ---------- */
+html[data-a11y-targets="1"] :is(button, summary, select, textarea, input:not([type="checkbox"], [type="radio"], [type="hidden"]), a[class*="px-"], [role="button"]) {
+  min-height: 3rem; min-width: 3rem;
+}
+html[data-a11y-targets="1"] :is(input[type="checkbox"], input[type="radio"]) { width: 1.6rem; height: 1.6rem; }
+html[data-a11y-targets="1"] :is(ul, ol) > li > :is(a, button) { margin-block: 0.15rem; }
+
+/* ---------- Спокойный режим: без анимации, движения и декоративных эффектов ---------- */
+html[data-a11y-calm="1"] { scroll-behavior: auto !important; }
+html[data-a11y-calm="1"] *, html[data-a11y-calm="1"] *::before, html[data-a11y-calm="1"] *::after {
+  animation: none !important; transition: none !important; scroll-behavior: auto !important;
+}
+html[data-a11y-calm="1"] :is([data-network], .beam, .fsp-glow, .bg-blueprint, .cursor-grid) { display: none !important; }
+html[data-a11y-calm="1"] .js [data-reveal], html[data-a11y-calm="1"] .js [data-bar], html[data-a11y-calm="1"] .js .rail-draw {
+  opacity: 1 !important; transform: none !important; clip-path: none !important;
+}
+/* Элементы, которые «проявляются» анимацией, без неё должны сразу быть видны (как и при prefers-reduced-motion) */
+html[data-a11y-calm="1"] :is(.boot-line, .flash-row, .trace, .ticker, .just-added) { opacity: 1 !important; }
+html[data-a11y-calm="1"] .caret::after { content: none; }
+html[data-a11y-calm="1"] .step-live::after { display: none; }
+html[data-a11y-calm="1"] [data-parallax] { translate: none !important; }
+html[data-a11y-calm="1"] .spotlight::before, html[data-a11y-calm="1"] .spotlight::after { display: none !important; }
+html[data-a11y-calm="1"] .animate-ping, html[data-a11y-calm="1"] .animate-pulse { animation: none !important; }
+html[data-a11y-calm="1"] .animate-ping { display: none !important; }
+html[data-a11y-calm="1"] .scroll-progress { display: none; }
+
+/* ---------- Панель настроек ---------- */
+#a11y-panel::backdrop { background: rgba(0, 0, 0, 0.65); }
+#a11y-panel { margin: 0 0 0 auto; }
+#a11y-panel .a11y-opt { cursor: pointer; }
+#a11y-panel .a11y-opt:has(input:checked) { border-color: rgb(var(--c-violet)); background: rgb(var(--c-card)); box-shadow: inset 0 0 0 1px rgb(var(--c-violet)); }
+#a11y-panel .a11y-opt:has(input:focus-visible) { outline: 3px solid #ffbf00; outline-offset: 2px; }
+#a11y-panel .a11y-sw { appearance: none; width: 2.75rem; height: 1.5rem; border-radius: 999px; border: 2px solid rgb(var(--c-line2)); background: rgb(var(--c-bg)); position: relative; flex-shrink: 0; cursor: pointer; }
+#a11y-panel .a11y-sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 1rem; height: 1rem; border-radius: 50%; background: rgb(var(--c-dim2)); transition: transform .15s; }
+#a11y-panel .a11y-sw:checked { background: rgb(var(--c-blue)); border-color: rgb(var(--c-violet)); }
+#a11y-panel .a11y-sw:checked::after { transform: translateX(1.25rem); background: #fff; }
+#a11y-panel .a11y-sw:focus-visible { outline: 3px solid #ffbf00; outline-offset: 2px; }
+.a11y-skip:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media print { #a11y-panel, [data-a11y-open] { display: none !important; } html[data-a11y-theme="bw"] { filter: none; } }

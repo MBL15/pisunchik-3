@@ -1,4 +1,5 @@
 /* Интерактивный тур: подсвечивает реальные элементы страницы и объясняет их по порядку.
+ * На телефоне (< 640 px) тура нет: ни кнопки «Подсказки», ни предложения, ни клавиши «?» — маленький экран занимает сама страница.
  * Данные — <script id="tour-data" type="application/json"> (см. gateway_service/tours.py).
  * Необязательный: предлагается один раз, пропускается в любой момент (кнопка, Esc), запускается кнопкой «?» или клавишей «?».
  * Прогресс хранится в localStorage отдельно для каждого аккаунта. «Больше не предлагать» действует на весь браузер (localStorage + cookie):
@@ -12,6 +13,7 @@
 
   const tour = data.tour;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const phone = matchMedia('(max-width: 639px)');
   const KEY = `fsp.tour:${data.user || 'guest'}`;
   const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
   const write = (patch) => { try { localStorage.setItem(KEY, JSON.stringify({ ...read(), ...patch })); } catch { /* без хранилища — не страшно */ } };
@@ -44,6 +46,7 @@
   launcher.setAttribute('aria-label', 'Тур по странице: показать, что где находится');
   launcher.title = 'Тур по странице (клавиша «?»)';
   launcher.innerHTML = '<span class="tour-launcher-mark" aria-hidden="true">?</span><span class="tour-launcher-text">Подсказки</span>';
+  launcher.style.display = phone.matches ? 'none' : '';
   document.body.append(launcher);
 
   // ---------- тур ----------
@@ -66,7 +69,7 @@
 
   function start(from) {
     closeOffer();
-    if (layer) return;
+    if (layer || phone.matches) return;
     opener = from || document.activeElement;
     steps = tour.steps.map((s) => ({ ...s, node: resolve(s) })).filter((s) => s.node);
     if (!steps.length) { toast('На этой странице пока нечего подсвечивать.'); return; }
@@ -137,19 +140,17 @@
     reveal(current, () => { place(); pop.focus({ preventScroll: true }); });
   }
 
-  // Прокручиваем цель в «безопасную зону»: ниже липкой шапки и выше нижней панели подсказки (на телефоне).
+  // Прокручиваем цель в «безопасную зону»: ниже липкой шапки.
   function reveal(target, done) {
-    const mobile = innerWidth < 640;
-    const popH = pop.offsetHeight;
     const top = head() + (target.closest('header') || target.closest('[data-spy]') ? 0 : document.querySelector('[data-spy]') ? 64 : 0);
-    const bottom = innerHeight - (mobile ? popH + 24 : 20);
+    const bottom = innerHeight - 20;
     const r = target.getBoundingClientRect();
     const inHeader = !!target.closest('header');
     let dy = 0;
     if (!inHeader) {
       const room = bottom - top;
       if (r.height <= room) {
-        if (r.top < top || r.bottom > bottom) dy = r.top - (top + Math.max(0, (room - r.height) / 2) * (mobile ? 0.4 : 1));
+        if (r.top < top || r.bottom > bottom) dy = r.top - (top + Math.max(0, (room - r.height) / 2));
       } else if (r.top < top || r.top > top + 40) {
         dy = r.top - top;
       }
@@ -181,8 +182,6 @@
     Object.assign(hole.style, { left: `${x}px`, top: `${y}px`, width: `${Math.max(0, w)}px`, height: `${Math.max(0, h)}px` });
     if (first) { hole.getBoundingClientRect(); hole.style.transition = ''; hole.dataset.ready = '1'; }
 
-    if (vw < 640) { pop.style.cssText = ''; pop.classList.add('tour-sheet'); return; }
-    pop.classList.remove('tour-sheet');
     const pw = Math.min(380, vw - 24), ph = pop.offsetHeight, gap = 14;
     let left, top;
     if (y + h + gap + ph <= vh - 8) { top = y + h + gap; left = x; }
@@ -218,7 +217,7 @@
   }
 
   function showOffer() {
-    if (layer || offer) return;
+    if (layer || offer || phone.matches) return;
     offer = el('section', 'tour-offer no-print');
     offer.setAttribute('role', 'region');
     offer.setAttribute('aria-label', 'Предложение пройти тур');
@@ -241,11 +240,19 @@
 
   launcher.addEventListener('click', () => (layer ? stop(false) : start(launcher)));
   document.addEventListener('keydown', (e) => {
-    if (e.key !== '?' || e.ctrlKey || e.metaKey || e.altKey || layer) return;
+    if (e.key !== '?' || e.ctrlKey || e.metaKey || e.altKey || layer || phone.matches) return;
     const a = document.activeElement;
     if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
     e.preventDefault();
     start(launcher);
+  });
+
+  // Окно сузили до телефона (поворот, изменение размера): тур и предложение закрываются, кнопка прячется; на планшете и шире возвращается
+  phone.addEventListener('change', () => {
+    launcher.style.display = phone.matches ? 'none' : '';
+    if (!phone.matches) return;
+    if (layer) stop(false);
+    closeOffer();
   });
 
   // ---------- автозапуск ----------
@@ -253,10 +260,11 @@
   if (params.get('tour') === '1') {
     params.delete('tour');
     history.replaceState(null, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash);
-    setTimeout(() => start(launcher), 400);
+    setTimeout(() => start(launcher), 400);  // на телефоне start() ничего не покажет
     return;
   }
   const state = read();
   const seen = (state.done && state.done[tour.id]) || (state.offered && state.offered[tour.id]);
-  if (!isMuted() && !seen && !document.querySelector('[data-celebrate]')) setTimeout(showOffer, 1200);
+  const quiet = document.documentElement.getAttribute('data-a11y-sr') === '1';  // режим для экранного диктора: окно не всплывает само
+  if (!isMuted() && !seen && !quiet && !document.querySelector('[data-celebrate]')) setTimeout(showOffer, 1200);
 })();

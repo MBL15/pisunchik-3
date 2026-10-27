@@ -3,6 +3,7 @@
 Лента хранится в sportsman_service (`/api/v1/notifications`); шлюз передаёт сюда функцию записи при старте.
 Telegram: привязка аккаунта через бота (/start <код>); привязки (ФСП ID → chat_id) лежат в `.telegram_links.json`
 в корне проекта, чтобы переживать live-reload. Без `FSP_TELEGRAM_TOKEN` работает только лента.
+Если api.telegram.org недоступен с сервера, задайте `FSP_TELEGRAM_PROXY` (например, socks5://host.docker.internal:1080 — обратный SSH-туннель).
 """
 import asyncio
 import html
@@ -32,6 +33,14 @@ _record = None
 
 def enabled() -> bool:
     return bool(config.TELEGRAM_TOKEN)
+
+
+def make_client() -> httpx.AsyncClient:
+    """HTTP-клиент для Bot API; через `FSP_TELEGRAM_PROXY`, если задан. Учётные данные прокси в журнал не попадают."""
+    proxy = config.TELEGRAM_PROXY.strip() or None
+    if proxy:
+        log.info("telegram: через прокси %s", httpx.URL(proxy).copy_with(username=None, password=None))
+    return httpx.AsyncClient(proxy=proxy)
 
 
 def is_linked(fsp_id: str) -> bool:
@@ -191,7 +200,7 @@ async def start(fetch_deadlines, record) -> list[asyncio.Task]:
     tasks = [asyncio.create_task(remind_loop(fetch_deadlines))]
     if enabled():
         _load()
-        _http = httpx.AsyncClient()
+        _http = make_client()
         tasks.append(asyncio.create_task(poll_updates()))
     return tasks
 

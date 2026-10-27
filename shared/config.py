@@ -45,6 +45,8 @@ COOKIE_SECURE = PUBLIC_BASE_URL.startswith("https://") if _cookie_secure is None
 
 TELEGRAM_TOKEN = os.getenv("FSP_TELEGRAM_TOKEN", "")
 TELEGRAM_BOT = os.getenv("FSP_TELEGRAM_BOT", "")
+# Прокси для api.telegram.org, если хостинг его блокирует: socks5://host:port или http://host:port (может содержать логин:пароль)
+TELEGRAM_PROXY = os.getenv("FSP_TELEGRAM_PROXY", "")
 
 # Postgres, например postgresql://fsp:fsp@localhost:5432/fsp. Пусто — состояние только в памяти (как раньше).
 DATABASE_URL = os.getenv("FSP_DATABASE_URL", "")

@@ -139,6 +139,18 @@ e2e меняет данные (в памяти или в Postgres) — посл�
 
 `docker compose up -d postgres` поднимает только Postgres 17 (fsp/fsp, БД fsp). Включение: `FSP_DATABASE_URL=postgresql://fsp:fsp@127.0.0.1:5432/fsp` (можно в .env). Без переменной — in-memory, как раньше. Таблицы `sp_*` (sportsman) и `comp_*` (competition) создаются автоматически; первый запуск засевает демо-данные, дальше состояние берётся из БД и пишется после каждого не-GET запроса (`shared/db.py`). Сброс: `docker compose down -v`.
 
+## Telegram через туннель (если хостинг блокирует api.telegram.org)
+
+Бот ходит по Bot API (HTTPS на `api.telegram.org`). Если сервер до него не достаёт (проверка: `curl -4 -m 8 https://api.telegram.org/`), шлюз можно пустить через SOCKS5 — `FSP_TELEGRAM_PROXY`
+(`shared/config.py`, клиент — `notify.make_client()`; логин и пароль прокси в журнал не пишутся). Бесплатная схема — обратный SSH-туннель со своего компьютера, откуда Telegram открывается:
+
+1. На сервере в `.env`: `COMPOSE_FILE=docker-compose.yml:docker-compose.telegram-tunnel.yml` и `FSP_TELEGRAM_PROXY=socks5://host.docker.internal:1081`, затем `docker compose up -d --build`.
+   Надстройка `docker-compose.telegram-tunnel.yml` добавляет контейнер `tg-relay` (socat в сети хоста): он пробрасывает `127.0.0.1:1080` сервера на `172.17.0.1:1081` (docker0) — единственный адрес, который видят контейнеры; шлюзу в `docker-compose.yml` уже добавлен `host.docker.internal` → хост. Настройки sshd не меняются, порт наружу не открыт.
+2. На своём компьютере держать открытым `scripts/telegram_tunnel.ps1 -Key <ключ.pem> -Server ubuntu@<ip>` (по сути `ssh -N -R 127.0.0.1:1080 …` — динамический SOCKS5-форвард; при обрыве поднимается заново). Пока окно открыто, уведомления идут; без туннеля работает только лента кабинета.
+3. Проверка с сервера: `curl -s --socks5-hostname 127.0.0.1:1080 https://api.telegram.org/` отвечает (404 с JSON тоже ответ), в журнале шлюза — строка «telegram: через прокси socks5://host.docker.internal:1081».
+
+Ограничения: бот работает, только пока компьютер включён и туннель поднят; постоянное решение — обратный прокси на хосте, откуда Telegram доступен (Cloudflare Worker, VPS).
+
 ## Всё в Docker
 
 `docker compose up -d --build` поднимает Postgres, sportsman, competition, market и gateway. Наружу опубликован только шлюз (http://localhost:8000); сервисы доступны по внутренней сети compose и требуют служебный токен (`FSP_SERVICE_TOKEN`), Postgres слушает только `127.0.0.1:5432`. Порты сервисов для отладки открывайте в `docker-compose.override.yml`. Состояние хранится в томе `fsp_pg`; `docker compose down -v` — полный сброс. Переменные (`FSP_SECRET_KEY`, `FSP_PUBLIC_BASE_URL`, `FSP_TELEGRAM_TOKEN`, `FSP_DEMO_TODAY`) берутся из окружения или `.env`. Порты 8000–8003 должны быть свободны (остановите `py run_all.py`).

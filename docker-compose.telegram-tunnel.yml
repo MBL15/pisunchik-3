@@ -1,0 +1,12 @@
+# Необязательная надстройка: Telegram через обратный SSH-туннель (когда хостинг блокирует api.telegram.org).
+# Включение на сервере: в .env добавить
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.telegram-tunnel.yml
+#   FSP_TELEGRAM_PROXY=socks5://host.docker.internal:1081
+# Туннель с вашего компьютера открывает SOCKS5 только на 127.0.0.1:1080 сервера (scripts/telegram_tunnel.ps1), настройки sshd не меняются;
+# ретранслятор пробрасывает его на адрес docker0 (172.17.0.1:1081), единственный, который видят контейнеры. Наружу порт не открыт.
+services:
+  tg-relay:
+    image: alpine/socat
+    restart: unless-stopped
+    network_mode: host
+    command: TCP-LISTEN:1081,bind=172.17.0.1,fork,reuseaddr TCP:127.0.0.1:1080

@@ -15,6 +15,7 @@ x-app: &app
     FSP_SERVICE_TOKEN: ${FSP_SERVICE_TOKEN:-dev-only-service-token}  # служебный токен шлюза для внутренних сервисов
     FSP_TELEGRAM_TOKEN: ${FSP_TELEGRAM_TOKEN:-}
     FSP_TELEGRAM_BOT: ${FSP_TELEGRAM_BOT:-}
+    FSP_TELEGRAM_PROXY: ${FSP_TELEGRAM_PROXY:-}  # если api.telegram.org с сервера недоступен: socks5://host.docker.internal:1080
     FSP_DEMO_TODAY: ${FSP_DEMO_TODAY:-}
   depends_on:
     postgres:
@@ -52,6 +53,8 @@ services:
   gateway:
     <<: *app
     command: uvicorn gateway_service.main:app --host 0.0.0.0 --port 8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # доступ к туннельному прокси на хосте (docs/knowledge-base/08-dev-runbook.md)
     ports:
       - "8000:8000"
     depends_on:

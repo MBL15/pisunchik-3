@@ -57,10 +57,6 @@ class ProxyClientTest(unittest.TestCase):
         self.assertEqual(build("   ")[1], [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class PollingSurvivesFailuresTest(unittest.TestCase):
     def test_call_swallows_any_transport_error(self):
         class Boom:
@@ -98,3 +94,32 @@ class PollingSurvivesFailuresTest(unittest.TestCase):
         self.assertEqual(handled, ["/stop"])
         self.assertEqual(calls.count("deleteWebhook"), 3)  # повторялся, пока не удалось, и больше не вызывался
         self.assertEqual(calls[-1], "getUpdates")
+
+
+class LinksStoreTest(unittest.TestCase):
+    def test_links_survive_a_restart_through_the_configured_file(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp) / "data" / "telegram_links.json"  # каталога ещё нет — как у нового тома
+            with mock.patch.object(notify, "STORE", store), mock.patch.dict(notify.chats, {}, clear=True):
+                notify.chats["FSP-56-25-00008-7"] = 4242
+                notify._save()
+                self.assertTrue(store.exists())
+                notify.chats.clear()  # «перезапуск»: память пуста
+                notify._load()
+                self.assertEqual(notify.chats, {"FSP-56-25-00008-7": 4242})
+                notify.unlink("FSP-56-25-00008-7")
+                notify.chats.clear()
+                notify._load()
+                self.assertEqual(notify.chats, {})
+
+    def test_unwritable_store_does_not_break_linking(self):
+        with mock.patch.object(notify, "STORE", mock.MagicMock(**{"parent.mkdir.side_effect": PermissionError()})), \
+                mock.patch.dict(notify.chats, {}, clear=True):
+            notify._save()  # не бросает
+
+
+if __name__ == "__main__":
+    unittest.main()

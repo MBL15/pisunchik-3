@@ -20,7 +20,7 @@ from shared import config
 log = logging.getLogger("fsp.notify")
 
 API = f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}"
-STORE = Path(__file__).resolve().parent.parent / ".telegram_links.json"
+STORE = Path(config.TELEGRAM_LINKS or Path(__file__).resolve().parent.parent / ".telegram_links.json")
 CODE_TTL = 15 * 60
 REMIND_DAYS = (30, 7, 1)
 
@@ -48,7 +48,11 @@ def is_linked(fsp_id: str) -> bool:
 
 
 def _save() -> None:
-    STORE.write_text(json.dumps(chats, ensure_ascii=False), encoding="utf-8")
+    try:
+        STORE.parent.mkdir(parents=True, exist_ok=True)
+        STORE.write_text(json.dumps(chats, ensure_ascii=False), encoding="utf-8")
+    except OSError as exc:  # привязка живёт в памяти, но после перезапуска пропадёт — это стоит заметить в журнале
+        log.error("telegram links not saved to %s: %s", STORE, type(exc).__name__)
 
 
 def _load() -> None:

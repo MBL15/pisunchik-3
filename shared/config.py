@@ -47,6 +47,8 @@ TELEGRAM_TOKEN = os.getenv("FSP_TELEGRAM_TOKEN", "")
 TELEGRAM_BOT = os.getenv("FSP_TELEGRAM_BOT", "")
 # Прокси для api.telegram.org, если хостинг его блокирует: socks5://host:port или http://host:port (может содержать логин:пароль)
 TELEGRAM_PROXY = os.getenv("FSP_TELEGRAM_PROXY", "")
+# Файл привязок ФСП ID → чат Telegram; в Docker лежит в томе, чтобы переживать пересборку контейнеров (пусто — .telegram_links.json в корне проекта)
+TELEGRAM_LINKS = os.getenv("FSP_TELEGRAM_LINKS", "")
 
 # Postgres, например postgresql://fsp:fsp@localhost:5432/fsp. Пусто — состояние только в памяти (как раньше).
 DATABASE_URL = os.getenv("FSP_DATABASE_URL", "")

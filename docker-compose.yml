@@ -6,6 +6,7 @@ x-app: &app
     FSP_DATABASE_URL: postgresql://fsp:fsp@postgres:5432/fsp
     FSP_SPORTSMAN_URL: http://sportsman:8001
     FSP_COMPETITION_URL: http://competition:8002
+    FSP_MARKET_URL: http://market:8003
     FSP_PUBLIC_BASE_URL: ${FSP_PUBLIC_BASE_URL:-http://localhost:8000}
     FSP_SECRET_KEY: ${FSP_SECRET_KEY:-dev-only-fsp56-change-me}
     FSP_TELEGRAM_TOKEN: ${FSP_TELEGRAM_TOKEN:-}
@@ -44,6 +45,12 @@ services:
     ports:
       - "8002:8002"
 
+  market:
+    <<: *app
+    command: uvicorn market_service.main:app --host 0.0.0.0 --port 8003
+    ports:
+      - "8003:8003"
+
   gateway:
     <<: *app
     command: uvicorn gateway_service.main:app --host 0.0.0.0 --port 8000
@@ -52,6 +59,7 @@ services:
     depends_on:
       - sportsman
       - competition
+      - market
 
 volumes:
   fsp_pg:

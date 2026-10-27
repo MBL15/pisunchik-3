@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Биржа программистов · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="pt-10">
+  {{ m.section_head("market list --open", "Биржа программистов", "Участники федерации публикуют анкеты с навыками и портфолио. Найдите исполнителя и предложите свой проект — ответ придёт в уведомления.") }}
+  {{ m.degraded_notice(degraded) }}
+  <div class="no-print mb-6 flex flex-wrap gap-3">
+    {% if my_profile %}
+    <a href="/market/my" class="{{ m.BTN }} !py-2 !text-xs">{{ m.icon("users", "h-3.5 w-3.5") }}Моя биржа</a>
+    {% else %}
+    <a href="/market/new" class="{{ m.BTN }} !py-2 !text-xs">{{ m.icon("code", "h-3.5 w-3.5") }}Разместить анкету</a>
+    <a href="/market/my" class="{{ m.BTN_GHOST }} !py-2 !text-xs">Мои отклики</a>
+    {% endif %}
+  </div>
+
+  <form method="get" data-autosubmit class="mb-3 grid gap-3 md:grid-cols-[1fr_14rem_14rem_11rem]" aria-label="Фильтры биржи">
+    {{ m.search_box(filters.q, "Поиск по навыкам, портфолио и описанию", "mk-q") }}
+    <label class="sr-only" for="mk-skill">Навык</label>
+    <select id="mk-skill" name="skill" class="{{ m.INPUT }}">
+      <option value="">Любой навык</option>
+      {% for s in facets.skills %}{{ m.facet_option(s, s, filters.skill, facets.skills) }}{% endfor %}
+      {% if filters.skill and filters.skill not in facets.skills %}<option value="{{ filters.skill }}" selected>{{ filters.skill }} · 0</option>{% endif %}
+    </select>
+    <label class="sr-only" for="mk-av">Доступность</label>
+    <select id="mk-av" name="availability" class="{{ m.INPUT }}">
+      <option value="">Любая доступность</option>
+      {% for code, label in availability_labels.items() %}{{ m.facet_option(code, label, filters.availability, facets.availability) }}{% endfor %}
+    </select>
+    <label class="sr-only" for="mk-sort">Сортировка</label>
+    <select id="mk-sort" name="sort" class="{{ m.INPUT }}">
+      <option value="new" {% if sort == "new" %}selected{% endif %}>Сначала новые</option>
+      <option value="offers" {% if sort == "offers" %}selected{% endif %}>Больше откликов</option>
+      <option value="name" {% if sort == "name" %}selected{% endif %}>По имени</option>
+    </select>
+  </form>
+  <div class="mb-4">{{ m.filter_chips(chips, reset_href) }}</div>
+  {% if pg.pages > 1 %}<div class="mb-3">{{ m.pager(pg, request, "анкет") }}</div>{% endif %}
+
+  <ul class="grid gap-3 lg:grid-cols-2" aria-label="Анкеты программистов">
+    {% for p in items %}
+    <li class="spotlight flex flex-col gap-3 rounded-xl border border-fsp-line bg-fsp-panel p-5 transition-all duration-150 hover:border-fsp-blue hover:shadow-[4px_4px_0px_0px_#402FFF]">
+      <div class="flex flex-wrap items-center gap-2">
+        {{ m.tag(p.availability_label, "emerald" if p.availability == "OPEN" else "amber") }}
+        {% if p.rate %}{{ m.tag(p.rate) }}{% endif %}
+        {% if p.owner_fsp_id == user.person.fsp_id %}{{ m.tag("ваша анкета", "blue") }}{% endif %}
+      </div>
+      <div class="min-w-0">
+        <a href="/market/{{ p.id }}" class="block font-medium text-white hover:text-fsp-violet hover:underline">{{ p.headline }}</a>
+        <p class="mt-1 font-mono text-[11px] text-fsp-muted">{{ p.owner_name }}</p>
+      </div>
+      <p class="line-clamp-3 text-sm text-fsp-soft">{{ p.about }}</p>
+      <ul class="flex flex-wrap gap-1.5" aria-label="Навыки">
+        {% for s in p.skills[:6] %}<li>{{ m.tag(s, "blue" if filters.skill and s|lower == filters.skill|lower else "slate") }}</li>{% endfor %}
+        {% if p.skills|length > 6 %}<li>{{ m.tag("+" ~ (p.skills|length - 6)) }}</li>{% endif %}
+      </ul>
+      <div class="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-fsp-line pt-3">
+        <p class="font-mono text-[11px] text-fsp-muted">портфолио: {{ p.portfolio|length }} · откликов: {{ p.offers_total }} · обновлена {{ p.updated_at[:10]|ru_date }}</p>
+        <a href="/market/{{ p.id }}" class="{{ m.BTN_SM }}">Открыть {{ m.icon("arrow", "h-3.5 w-3.5") }}</a>
+      </div>
+    </li>
+    {% else %}
+    <li class="rounded-xl border border-dashed border-fsp-line2 p-6 text-sm text-fsp-muted lg:col-span-2">{% if chips %}По этим условиям анкет нет — {% else %}Анкет пока нет. {% endif %}<a href="/market/new" class="text-fsp-violet hover:underline">разместите свою</a>{% if chips %} или <a href="{{ reset_href }}" class="text-fsp-violet hover:underline">сбросьте фильтры</a>{% endif %}.</li>
+    {% endfor %}
+  </ul>
+  {% if pg.pages > 1 %}<div class="mt-3">{{ m.pager(pg, request, "анкет") }}</div>{% endif %}
+</div>
+{% endblock %}

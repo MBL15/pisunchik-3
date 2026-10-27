@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ p.headline }} · Биржа · ФСП Оренбург{% endblock %}
+{% block content %}
+{% macro offer_state(o) %}{{ m.tag(o.status_label, {"PENDING": "amber", "ACCEPTED": "emerald"}.get(o.status, "slate")) }}{% endmacro %}
+<div class="mx-auto max-w-4xl pt-10">
+  <div class="no-print mb-6 flex flex-wrap gap-3">
+    <a href="/market" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Биржа</a>
+    {% if is_owner %}
+    <a href="/market/{{ p.id }}/edit" class="{{ m.BTN }} !py-2 !text-xs">Редактировать</a>
+    <a href="/market/my" class="{{ m.BTN_GHOST }} !py-2 !text-xs">Моя биржа</a>
+    {% endif %}
+  </div>
+
+  <article class="{{ m.CARD }} p-5 sm:p-7">
+    <div class="flex flex-wrap items-center gap-2">
+      {{ m.tag(p.availability_label, "emerald" if p.availability == "OPEN" else "amber") }}
+      {% if p.rate %}{{ m.tag(p.rate) }}{% endif %}
+      {% if p.status != "ACTIVE" %}{{ m.tag("в архиве") }}{% endif %}
+    </div>
+    <h1 class="mt-3 text-balance font-mono text-2xl leading-tight text-fsp-light sm:text-3xl">{{ p.headline }}</h1>
+    <p class="mt-1 font-mono text-xs text-fsp-muted">{{ p.owner_name }} · {{ p.owner_fsp_id }} · опубликована {{ p.created_at[:10]|ru_date }}</p>
+    <p class="mt-5 whitespace-pre-line text-fsp-soft">{{ p.about }}</p>
+    <ul class="mt-5 flex flex-wrap gap-1.5" aria-label="Навыки">{% for s in p.skills %}<li>{{ m.tag(s, "blue") }}</li>{% endfor %}</ul>
+
+    <h2 class="mt-8 font-mono text-xs uppercase tracking-wider text-fsp-muted">Портфолио</h2>
+    <ul class="mt-3 grid gap-3">
+      {% for i in p.portfolio %}
+      <li class="rounded-lg border border-fsp-line p-4">
+        <a href="{{ i.url }}" target="_blank" rel="noopener noreferrer nofollow" class="inline-flex items-center gap-1.5 font-medium text-white hover:text-fsp-violet hover:underline">{{ m.icon("link", "h-4 w-4") }}{{ i.title }}</a>
+        {% if i.description %}<p class="mt-1 text-sm text-fsp-soft">{{ i.description }}</p>{% endif %}
+        <p class="mt-1 break-all font-mono text-[11px] text-fsp-muted">{{ i.url }}</p>
+      </li>
+      {% else %}
+      <li class="rounded-lg border border-dashed border-fsp-line2 p-4 text-sm text-fsp-muted">Работы пока не добавлены.</li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  {% if is_owner %}
+  <section class="mt-6" id="offers" aria-labelledby="offers-h">
+    <h2 id="offers-h" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">Отклики на анкету · {{ offers|length }}</h2>
+    <p class="mb-3 text-sm text-fsp-muted">Принять или отклонить отклик можно в разделе <a href="/market/my#incoming" class="text-fsp-violet hover:underline">«Моя биржа»</a>.</p>
+    <ul class="grid gap-2">
+      {% for o in offers %}
+      <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-fsp-line bg-fsp-panel px-4 py-3">
+        <span class="min-w-0 text-sm text-fsp-light">{{ o.project_title }} <span class="font-mono text-[11px] text-fsp-muted">· {{ o.from_name }}</span></span>
+        {{ offer_state(o) }}
+      </li>
+      {% else %}
+      <li class="rounded-lg border border-dashed border-fsp-line2 p-4 text-sm text-fsp-muted">Откликов пока нет.</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% else %}
+  <section class="mt-6 {{ m.CARD }} p-5 sm:p-7" id="offer" aria-labelledby="offer-h">
+    <h2 id="offer-h" class="font-mono text-xs uppercase tracking-wider text-fsp-muted">Предложить проект</h2>
+    {% if pending_mine %}
+    <p class="mt-3 text-sm text-fsp-soft">Ваш отклик уже на рассмотрении. Следить за ним и при необходимости отозвать можно в <a href="/market/my#outgoing" class="text-fsp-violet hover:underline">«Моей бирже»</a>.</p>
+    {% else %}
+    <form method="post" action="/market/{{ p.id }}/offer" class="mt-4 grid gap-4">
+      <div>
+        <label for="o-title" class="{{ m.LABEL }}">Название проекта</label>
+        <input id="o-title" name="project_title" required minlength="3" maxlength="120" placeholder="Например: Сайт регистрации на турнир" class="{{ m.INPUT }}">
+      </div>
+      <div>
+        <label for="o-desc" class="{{ m.LABEL }}">Что нужно сделать</label>
+        <textarea id="o-desc" name="description" required minlength="20" maxlength="2000" rows="5" placeholder="Задача, сроки, требования, что считать результатом" class="{{ m.INPUT }}"></textarea>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label for="o-budget" class="{{ m.LABEL }}">Бюджет</label>
+          <input id="o-budget" name="budget" maxlength="80" placeholder="например, до 30 000 ₽ или договорная" class="{{ m.INPUT }}">
+        </div>
+        <div>
+          <label for="o-contact" class="{{ m.LABEL }}">Ваш контакт</label>
+          <input id="o-contact" name="contact" maxlength="120" placeholder="@telegram или e-mail" class="{{ m.INPUT }}">
+        </div>
+      </div>
+      <div><button class="{{ m.BTN }}">Отправить отклик</button></div>
+    </form>
+    {% endif %}
+    {% if mine %}
+    <h3 class="mt-6 font-mono text-xs uppercase tracking-wider text-fsp-muted">Ваши отклики на эту анкету</h3>
+    <ul class="mt-2 grid gap-2">
+      {% for o in mine %}
+      <li class="rounded-lg border border-fsp-line px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2"><span class="text-sm text-fsp-light">{{ o.project_title }}</span>{{ offer_state(o) }}</div>
+        {% if o.owner_contact %}<p class="mt-2 text-sm text-emerald-300">Контакт исполнителя: <span class="select-all font-mono">{{ o.owner_contact }}</span></p>{% endif %}
+        {% if o.note %}<p class="mt-1 text-sm text-fsp-soft">Ответ: {{ o.note }}</p>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

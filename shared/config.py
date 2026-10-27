@@ -19,11 +19,13 @@ _load_dotenv()
 GATEWAY_PORT = int(os.getenv("FSP_GATEWAY_PORT", "8000"))
 SPORTSMAN_PORT = int(os.getenv("FSP_SPORTSMAN_PORT", "8001"))
 COMPETITION_PORT = int(os.getenv("FSP_COMPETITION_PORT", "8002"))
+MARKET_PORT = int(os.getenv("FSP_MARKET_PORT", "8003"))
 
 HOST = os.getenv("FSP_HOST", "127.0.0.1")
 
 SPORTSMAN_URL = os.getenv("FSP_SPORTSMAN_URL", f"http://{HOST}:{SPORTSMAN_PORT}")
 COMPETITION_URL = os.getenv("FSP_COMPETITION_URL", f"http://{HOST}:{COMPETITION_PORT}")
+MARKET_URL = os.getenv("FSP_MARKET_URL", f"http://{HOST}:{MARKET_PORT}")
 PUBLIC_BASE_URL = os.getenv("FSP_PUBLIC_BASE_URL", f"http://localhost:{GATEWAY_PORT}")
 
 # Development-only default. Override FSP_SECRET_KEY in any shared/deployed environment.

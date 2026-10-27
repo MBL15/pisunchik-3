@@ -7,6 +7,7 @@ flowchart LR
   B[Браузер] -->|HTML, формы, cookie| G[gateway_service :8000]
   G -->|httpx| S[sportsman_service :8001]
   G -->|httpx| C[competition_service :8002]
+  G -->|httpx| M[market_service :8003]
   C -->|httpx: ФИО, возраст, санкции, привязки| S
   S -->|httpx: результаты для истории| C
 ```
@@ -15,6 +16,7 @@ flowchart LR
 |---|---|---|
 | `sportsman_service` | Person, TrainerLink, санкции, аудит | Регистрация и **выдача ФСП ID** (только здесь), проверка пароля, связи тренер↔спортсмен и их переходы, алерты сроков, агрегат выступлений (`/performance`) |
 | `competition_service` | Competition, Protocol, Application, Document, настройки рейтинга, аудит | Календарь, парсинг логов, live-поток, публикация, рейтинг, заявки с проверкой допуска, назначения судей, KPI, справки |
+| `market_service` | Profile (анкета), Offer (отклик), аудит | Биржа программистов: анкеты с портфолио, фильтры по навыкам, отклики и их решения. Не зависит от других сервисов: имя и ФСП ID приходят от шлюза — см. [биржа](10-market.md) |
 | `gateway_service` | Ничего не хранит (только подписанные cookie) | UI, сессия и активная роль, ролевые проверки, публичный API-шлюз с allowlist, QR. Код: `main.py` (приложение, кабинеты), `web.py` (общий слой), `routes/` (реестр, модерация, журнал, лента), `listing_ui.py` |
 
 Хранение двухрежимное. **Без `FSP_DATABASE_URL`** сервис держит данные в памяти и засевает их при старте
@@ -31,6 +33,7 @@ flowchart LR
 |---|---|
 | `sportsman_service` | `sp_persons` (+ колонка `email`, уникальный индекс по `lower(email)`), `sp_links`, `sp_requests`, `sp_meta` (счётчики ФСП ID/связей, аудит) |
 | `competition_service` | `comp_competitions`, `comp_protocols`, `comp_applications`, `comp_teams`, `comp_documents`, `comp_meta` (настройки рейтинга, типы, счётчик справок, аудит) |
+| `market_service` | `market_profiles`, `market_offers`, `market_tokens` (хэши токенов API), `market_meta` (счётчики, аудит); без БД и при пустой БД засевается демо-биржей |
 
 Старт: `db.init()` создаёт таблицы; если БД пуста — сид и первичная запись, иначе `restore()` читает состояние из БД.
 В competition сид выполняется всегда (календарь и воспроизводимые live-протоколы транзиентны), сохранённое состояние
@@ -106,9 +109,9 @@ sequenceDiagram
 
 | Переменная | По умолчанию | Назначение |
 |---|---|---|
-| `FSP_GATEWAY_PORT` / `FSP_SPORTSMAN_PORT` / `FSP_COMPETITION_PORT` | 8000 / 8001 / 8002 | Порты |
+| `FSP_GATEWAY_PORT` / `FSP_SPORTSMAN_PORT` / `FSP_COMPETITION_PORT` / `FSP_MARKET_PORT` | 8000 / 8001 / 8002 / 8003 | Порты |
 | `FSP_HOST` | `127.0.0.1` | Хост для всех сервисов |
-| `FSP_SPORTSMAN_URL` / `FSP_COMPETITION_URL` | `http://{HOST}:{PORT}` | Адреса downstream-сервисов |
+| `FSP_SPORTSMAN_URL` / `FSP_COMPETITION_URL` / `FSP_MARKET_URL` | `http://{HOST}:{PORT}` | Адреса downstream-сервисов |
 | `FSP_PUBLIC_BASE_URL` | `http://localhost:8000` | База для QR-ссылок проверки справок |
 | `FSP_SECRET_KEY` | `dev-only-fsp56-change-me` | HMAC для сессий, flash и кодов справок — **обязательно сменить вне dev** |
 | `FSP_SERVICE_TIMEOUT` | `5.0` | Таймаут межсервисных вызовов, с |

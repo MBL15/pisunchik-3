@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Моя биржа · ФСП Оренбург{% endblock %}
+{% block content %}
+{% macro state(o) %}{{ m.tag(o.status_label, {"PENDING": "amber", "ACCEPTED": "emerald"}.get(o.status, "slate")) }}{% endmacro %}
+<div class="mx-auto max-w-4xl pt-10">
+  {{ m.section_head("market me", "Моя биржа", "Ваша анкета, отклики исполнителям и предложения, пришедшие вам.") }}
+  {{ m.degraded_notice(degraded) }}
+  <div class="no-print mb-6 flex flex-wrap gap-3">
+    <a href="/market" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Биржа</a>
+    {% if not active %}<a href="/market/new" class="{{ m.BTN }} !py-2 !text-xs">{{ m.icon("code", "h-3.5 w-3.5") }}Разместить анкету</a>{% endif %}
+  </div>
+
+  <section class="{{ m.CARD }} p-5" aria-labelledby="my-profile-h">
+    <h2 id="my-profile-h" class="font-mono text-xs uppercase tracking-wider text-fsp-muted">Моя анкета</h2>
+    {% if active %}
+    <div class="mt-3 flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0">
+        <a href="/market/{{ active.id }}" class="block font-medium text-white hover:text-fsp-violet hover:underline">{{ active.headline }}</a>
+        <p class="mt-1 font-mono text-[11px] text-fsp-muted">{{ active.availability_label }} · откликов: {{ active.offers_total }}, новых: {{ active.offers_pending }} · обновлена {{ active.updated_at[:10]|ru_date }}</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <a href="/market/{{ active.id }}/edit" class="{{ m.BTN_SM }}">Редактировать</a>
+        <form method="post" action="/market/{{ active.id }}/status"><input type="hidden" name="status" value="ARCHIVED"><button class="{{ m.BTN_NO }}" title="Скрыть анкету из ленты; отклики сохранятся">В архив</button></form>
+      </div>
+    </div>
+    {% else %}
+    <p class="mt-3 text-sm text-fsp-muted">Анкеты нет. <a href="/market/new" class="text-fsp-violet hover:underline">Разместите её</a>, чтобы получать предложения проектов.</p>
+    {% endif %}
+    {% for a in archived %}
+    <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-fsp-line pt-3">
+      <p class="text-sm text-fsp-soft">В архиве: {{ a.headline }}</p>
+      {% if not active %}<form method="post" action="/market/{{ a.id }}/status"><input type="hidden" name="status" value="ACTIVE"><button class="{{ m.BTN_SM }}">Вернуть в ленту</button></form>{% endif %}
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="mt-8" id="incoming" aria-labelledby="incoming-h">
+    <h2 id="incoming-h" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">Входящие отклики · {{ incoming|length }}{% if pending %} · требуют ответа: {{ pending }}{% endif %}</h2>
+    <ul class="grid gap-3">
+      {% for o in incoming %}
+      <li class="{{ m.CARD }} p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p class="font-medium text-white">{{ o.project_title }}</p>{{ state(o) }}
+        </div>
+        <p class="mt-1 font-mono text-[11px] text-fsp-muted">{{ o.from_name }} · {{ o.created_at[:10]|ru_date }}{% if o.budget %} · бюджет: {{ o.budget }}{% endif %}</p>
+        <p class="mt-2 whitespace-pre-line text-sm text-fsp-soft">{{ o.description }}</p>
+        {% if o.contact %}<p class="mt-2 text-sm text-fsp-soft">Контакт заказчика: <span class="select-all font-mono text-fsp-light">{{ o.contact }}</span></p>{% endif %}
+        {% if o.status == "PENDING" %}
+        <form method="post" action="/market/offers/{{ o.id }}/decision" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+          <label class="sr-only" for="note-{{ o.id }}">Комментарий заказчику</label>
+          <input id="note-{{ o.id }}" name="note" maxlength="300" placeholder="Комментарий заказчику (по желанию)" class="{{ m.INPUT }}">
+          <button name="decision" value="accept" class="{{ m.BTN_OK }} justify-center">{{ m.icon("check", "h-3.5 w-3.5") }}Принять</button>
+          <button name="decision" value="decline" class="{{ m.BTN_NO }} justify-center">{{ m.icon("x", "h-3.5 w-3.5") }}Отклонить</button>
+        </form>
+        {% elif o.note %}<p class="mt-2 text-sm text-fsp-soft">Ваш ответ: {{ o.note }}</p>{% endif %}
+      </li>
+      {% else %}
+      <li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Откликов пока нет.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="mt-8" id="outgoing" aria-labelledby="outgoing-h">
+    <h2 id="outgoing-h" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">Мои отклики · {{ outgoing|length }}</h2>
+    <ul class="grid gap-3">
+      {% for o in outgoing %}
+      <li class="{{ m.CARD }} p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p class="font-medium text-white">{{ o.project_title }}</p>{{ state(o) }}
+        </div>
+        <p class="mt-1 font-mono text-[11px] text-fsp-muted">для <a href="/market/{{ o.profile_id }}" class="text-fsp-violet hover:underline">{{ o.owner_name }}</a> · {{ o.created_at[:10]|ru_date }}</p>
+        {% if o.owner_contact %}<p class="mt-2 text-sm text-emerald-300">Контакт исполнителя: <span class="select-all font-mono">{{ o.owner_contact }}</span></p>{% endif %}
+        {% if o.note %}<p class="mt-1 text-sm text-fsp-soft">Ответ: {{ o.note }}</p>{% endif %}
+        {% if o.status == "PENDING" %}<form method="post" action="/market/offers/{{ o.id }}/withdraw" class="mt-3"><button class="{{ m.BTN_SM }}">Отозвать</button></form>{% endif %}
+      </li>
+      {% else %}
+      <li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Вы ещё не откликались. Выберите исполнителя в <a href="/market" class="text-fsp-violet hover:underline">ленте</a>.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="mt-8 {{ m.CARD }} p-5" id="api" aria-labelledby="api-h">
+    <h2 id="api-h" class="font-mono text-xs uppercase tracking-wider text-fsp-muted">API и MCP для моделей</h2>
+    <p class="mt-2 text-sm text-fsp-soft">Личный токен даёт модели или скрипту те же права, что у вас: искать анкеты, публиковать свою, откликаться и отвечать на отклики. Документация API — <a href="{{ api_base }}/docs" class="text-fsp-violet hover:underline">{{ api_base }}/docs</a>, подключение MCP — в статье базы знаний «Биржа программистов».</p>
+    {% if new_token %}
+    <div class="mt-4 rounded-lg border border-emerald-500/60 bg-emerald-500/10 p-4" role="status">
+      <p class="text-sm font-medium text-emerald-300">Токен «{{ new_token.name }}» создан. Скопируйте его сейчас — повторно он не показывается.</p>
+      <p class="mt-2 break-all rounded-md bg-fsp-bg px-3 py-2 font-mono text-sm text-fsp-light select-all" data-token>{{ new_token.token }}</p>
+    </div>
+    {% endif %}
+    <ul class="mt-4 grid gap-2">
+      {% for t in tokens %}
+      <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-fsp-line px-4 py-2.5">
+        <span class="min-w-0 text-sm text-fsp-light">{{ t.name }} <span class="font-mono text-[11px] text-fsp-muted">· {{ t.prefix }}… · создан {{ t.created_at[:10]|ru_date }} · {% if t.last_used_at %}использован {{ t.last_used_at[:10]|ru_date }}{% else %}не использовался{% endif %}</span></span>
+        <form method="post" action="/market/tokens/{{ t.id }}/revoke"><button class="{{ m.BTN_NO }}">Отозвать</button></form>
+      </li>
+      {% else %}
+      <li class="rounded-lg border border-dashed border-fsp-line2 p-4 text-sm text-fsp-muted">Активных токенов нет.</li>
+      {% endfor %}
+    </ul>
+    <form method="post" action="/market/tokens" class="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+      <label class="sr-only" for="tok-name">Название токена</label>
+      <input id="tok-name" name="name" required minlength="2" maxlength="60" placeholder="Название, например «Claude Desktop»" class="{{ m.INPUT }}">
+      <button class="{{ m.BTN }} !py-2 !text-xs">Создать токен</button>
+    </form>
+    <p class="mt-2 text-xs text-fsp-muted">До 5 активных токенов. Токен хранится только в виде хэша; отзыв закрывает доступ сразу.</p>
+  </section>
+</div>
+{% endblock %}

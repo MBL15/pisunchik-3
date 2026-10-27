@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ "Редактирование анкеты" if profile else "Новая анкета" }} · Биржа · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-3xl pt-10">
+  {{ m.section_head("market publish" if not profile else "market edit", "Редактирование анкеты" if profile else "Разместить анкету", "Расскажите, что умеете, и покажите работы. Контакт увидит только заказчик, чей отклик вы примете.") }}
+  {% if error %}<p class="mb-4 rounded-xl border border-fsp-red/60 bg-fsp-red/10 p-4 text-sm text-rose-200" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/market/save" class="grid gap-5 {{ m.CARD }} p-5 sm:p-6">
+    {% if profile %}<input type="hidden" name="id" value="{{ profile.id }}">{% endif %}
+    <div>
+      <label for="f-headline" class="{{ m.LABEL }}">Заголовок</label>
+      <input id="f-headline" name="headline" required minlength="5" maxlength="120" value="{{ v.headline or '' }}" placeholder="Например: Backend на Python, боты и интеграции" class="{{ m.INPUT }}">
+    </div>
+    <div>
+      <label for="f-about" class="{{ m.LABEL }}">О себе и опыте</label>
+      <textarea id="f-about" name="about" required minlength="20" maxlength="2000" rows="5" placeholder="Какие задачи берёте, в каких проектах участвовали" class="{{ m.INPUT }}">{{ v.about or '' }}</textarea>
+    </div>
+    <div>
+      <label for="f-skills" class="{{ m.LABEL }}">Навыки через запятую</label>
+      <input id="f-skills" name="skills" required value="{{ v.skills or '' }}" placeholder="Python, FastAPI, PostgreSQL" class="{{ m.INPUT }}">
+      <p class="mt-1 text-xs text-fsp-muted">До 12 навыков, до 30 символов каждый — по ним вас найдут в ленте.</p>
+    </div>
+    <fieldset class="grid gap-3">
+      <legend class="{{ m.LABEL }}">Портфолио · до 8 работ</legend>
+      {% for r in rows %}
+      <div class="grid gap-2 rounded-lg border border-fsp-line p-3 sm:grid-cols-[1fr_1.4fr]">
+        <input name="pf_title" maxlength="100" value="{{ r.title }}" placeholder="Название работы" aria-label="Название работы {{ loop.index }}" class="{{ m.INPUT }}">
+        <input name="pf_url" type="url" maxlength="300" value="{{ r.url }}" placeholder="https://github.com/…" aria-label="Ссылка на работу {{ loop.index }}" class="{{ m.INPUT }}">
+        <input name="pf_desc" maxlength="300" value="{{ r.description }}" placeholder="Что сделано, результат (по желанию)" aria-label="Описание работы {{ loop.index }}" class="{{ m.INPUT }} sm:col-span-2">
+      </div>
+      {% endfor %}
+      <p class="text-xs text-fsp-muted">Ссылки только http:// и https://. Нужно больше строк — сохраните анкету и откройте редактирование снова.</p>
+    </fieldset>
+    <div class="grid gap-5 sm:grid-cols-2">
+      <div>
+        <label for="f-rate" class="{{ m.LABEL }}">Ставка</label>
+        <input id="f-rate" name="rate" maxlength="80" value="{{ v.rate or '' }}" placeholder="от 1 500 ₽/ч или договорная" class="{{ m.INPUT }}">
+      </div>
+      <div>
+        <label for="f-av" class="{{ m.LABEL }}">Доступность</label>
+        <select id="f-av" name="availability" class="{{ m.INPUT }}">
+          {% for code, label in availability_labels.items() %}<option value="{{ code }}" {% if v.availability == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div>
+      <label for="f-contact" class="{{ m.LABEL }}">Контакт для связи</label>
+      <input id="f-contact" name="contact" required minlength="3" maxlength="120" value="{{ v.contact or '' }}" placeholder="@telegram или e-mail" class="{{ m.INPUT }}">
+      <p class="mt-1 text-xs text-fsp-muted">Не показывается в ленте — открывается автору отклика, который вы приняли.</p>
+    </div>
+    <div class="flex flex-wrap gap-3">
+      <button class="{{ m.BTN }}">{{ "Сохранить" if profile else "Опубликовать" }}</button>
+      <a href="{{ '/market/my' if profile else '/market' }}" class="{{ m.BTN_GHOST }}">Отмена</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

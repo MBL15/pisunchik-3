@@ -22,7 +22,7 @@ py run_all.py --no-reload  # без перезагрузки
 Оркестратор поднимает `sportsman → competition → gateway`, ждёт `/health` каждого, печатает ссылки
 и демо-аккаунты. Если порт занят — сообщает и выходит. Ctrl+C гасит всё дерево процессов.
 
-Адреса: платформа `http://127.0.0.1:8000`, Swagger `:8001/docs` и `:8002/docs`.
+Адреса: платформа `http://127.0.0.1:8000`, Swagger `:8001/docs`, `:8002/docs` и `:8003/docs` (биржа).
 
 ### Запуск в фоне на Windows (без окна)
 
@@ -40,7 +40,7 @@ Start-Process py -ArgumentList '-X','utf8','run_all.py' -WorkingDirectory (Get-L
 ``powershell
 Get-CimInstance Win32_Process -Filter "Name='py.exe'" | Where-Object { $_.CommandLine -match 'run_all' } |
   ForEach-Object { taskkill /PID $_.ProcessId /T /F | Out-Null }
-Get-NetTCPConnection -LocalPort 8000,8001,8002 -State Listen -ErrorAction SilentlyContinue |
+Get-NetTCPConnection -LocalPort 8000,8001,8002,8003 -State Listen -ErrorAction SilentlyContinue |
   ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 ``
 
@@ -100,7 +100,7 @@ e2e меняет данные (в памяти или в Postgres) — посл�
 | Сайт перестал открываться после правки `.py` или `.html` | На Windows перезагрузка gateway зависает, пока открытые вкладки держат соединения (live-опрос `/partials/live`) | Полный перезапуск стека |
 | Страница показывает старое поведение после правки `main.py` | Перезагрузка не произошла (в логе нет новых запросов) | Полный перезапуск |
 | `UnicodeEncodeError` при старте | Консоль cp866 | `py -X utf8`, `PYTHONIOENCODING=utf-8` |
-| «Порты заняты» | Остался прошлый запуск | Остановить процессы на 8000–8002 |
+| «Порты заняты» | Остался прошлый запуск | Остановить процессы на 8000–8003 |
 | `[WARN] … деградированном режиме` | Один из сервисов недоступен | Посмотреть лог `%TEMP%\fsp_stack.log` |
 | Кириллица ломается в однострочниках PowerShell | Кодировка конвейера | Писать скрипт в файл и запускать `py -X utf8 файл.py` |
 | e2e падает на тексте в кабинете | Изменён текст, на который завязан `check` | Обновить `DEMO_ACCOUNTS[].check` в `shared/demo_roster.py` вместе с шаблоном |
@@ -141,4 +141,4 @@ e2e меняет данные (в памяти или в Postgres) — посл�
 
 ## Всё в Docker
 
-`docker compose up -d --build` поднимает Postgres, sportsman, competition и gateway (http://localhost:8000, сервисы 8001/8002). Состояние хранится в томе `fsp_pg`; `docker compose down -v` — полный сброс. Переменные (`FSP_SECRET_KEY`, `FSP_PUBLIC_BASE_URL`, `FSP_TELEGRAM_TOKEN`, `FSP_DEMO_TODAY`) берутся из окружения или `.env`. Порты 8000–8002 должны быть свободны (остановите `py run_all.py`).
+`docker compose up -d --build` поднимает Postgres, sportsman, competition, market и gateway (http://localhost:8000, сервисы 8001/8002/8003). Состояние хранится в томе `fsp_pg`; `docker compose down -v` — полный сброс. Переменные (`FSP_SECRET_KEY`, `FSP_PUBLIC_BASE_URL`, `FSP_TELEGRAM_TOKEN`, `FSP_DEMO_TODAY`) берутся из окружения или `.env`. Порты 8000–8003 должны быть свободны (остановите `py run_all.py`).

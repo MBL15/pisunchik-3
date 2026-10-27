@@ -17,10 +17,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from gateway_service import notify, reports
+from gateway_service import market_api, notify, reports
 from gateway_service.listing_ui import chips, list_args, pages
 from gateway_service.qr import qr_svg
-from gateway_service.routes import audit, moderation, notifications, registry
+from gateway_service.routes import audit, market, moderation, notifications, registry
 from gateway_service.session import clear_session, write_session
 from gateway_service.web import (
     BASE_DIR, Redirect, admin_ids, back, clients, current_user, discipline_audience, download, form_dict, humanize,
@@ -38,6 +38,7 @@ JUDGE_CATEGORY_DEFAULT_YEARS = 2  # подсказка в форме решен�
 async def lifespan(_: FastAPI):
     clients["sportsman"] = ServiceClient("sportsman_service", config.SPORTSMAN_URL, caller="gateway")
     clients["competition"] = ServiceClient("competition_service", config.COMPETITION_URL, caller="gateway")
+    clients["market"] = ServiceClient("market_service", config.MARKET_URL, caller="gateway")
     tg_tasks = await notify.start(notifications.deadline_reminders, notifications.record_notifications)
     yield
     await notify.stop(tg_tasks)
@@ -47,7 +48,8 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="ФСП Оренбург · Gateway", version="1.0.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-for router in (registry.router, moderation.router, audit.router, notifications.router):
+app.mount("/api/market/v1", market_api.api)
+for router in (registry.router, moderation.router, audit.router, notifications.router, market.router):
     app.include_router(router)
 
 
@@ -83,8 +85,8 @@ async def _health(name: str) -> dict:
 
 @app.get("/health")
 async def health():
-    sp, co = await asyncio.gather(_health("sportsman"), _health("competition"))
-    return {"gateway_service": {"ok": True}, "sportsman_service": sp, "competition_service": co}
+    sp, co, mk = await asyncio.gather(_health("sportsman"), _health("competition"), _health("market"))
+    return {"gateway_service": {"ok": True}, "sportsman_service": sp, "competition_service": co, "market_service": mk}
 
 
 @app.get("/", response_class=HTMLResponse)

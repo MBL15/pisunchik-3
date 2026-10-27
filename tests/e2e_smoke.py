@@ -2,13 +2,19 @@
 
 Drives the three case scenarios through the gateway like a browser (cookies, form posts, redirects).
 """
+import asyncio
+import json
+import os
 import re
 import sys
 import time
+from pathlib import Path
 
 import httpx
+from mcp import Client, StdioServerParameters
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.getenv("FSP_E2E_BASE", "http://127.0.0.1:8000")  # адрес шлюза; другой — если стек поднят на нестандартных портах
+ROOT = Path(__file__).resolve().parent.parent
 ok = True
 
 
@@ -374,6 +380,85 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
           "notification search does not mark hidden notifications as read")
     c.get("/notifications")
     check("Уведомления: новых" not in c.get("/notifications").text, "opening the feed marks the shown notifications as read")
+
+print("== 10. market: profile with portfolio, offer, accept → contact revealed")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as guest:
+    check(guest.get("/market").url.path == "/login", "market is closed to guests")
+
+
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as ab, \
+        httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as sokolov:
+    ab.post("/login", data={"email": "abramov@fsp56.ru", "password": "fsp2026"})
+    sokolov.post("/login", data={"email": "athlete@fsp56.ru", "password": "fsp2026"})
+    feed = page(ab, "/market")
+    check("Биржа программистов" in feed and "Backend и алгоритмы" in feed and "@sokolov_dev" not in feed,
+          "feed lists profiles without contacts")
+    check("Backend и алгоритмы" in ab.get("/market", params={"skill": "C++"}).text
+          and "Продуктовая разработка" not in ab.get("/market", params={"skill": "C++"}).text, "skill filter")
+    r = ab.post("/market/save", data={"headline": "Боты для Telegram", "about": "Пишу ботов на Python для школ и секций.",
+                                      "skills": "Python, aiogram", "pf_title": "Бот", "pf_url": "javascript:alert(1)",
+                                      "contact": "@abramov"})
+    check("Ссылка должна начинаться" in r.text, "non-http portfolio link rejected")
+    r = ab.post("/market/save", data={"headline": "Боты для Telegram", "about": "Пишу ботов на Python для школ и секций.",
+                                      "skills": "Python, aiogram", "pf_title": "Бот", "pf_url": "https://example.org/bot",
+                                      "contact": "@abramov"})
+    check("Анкета опубликована" in r.text, "profile published")
+    r = ab.post("/market/1/offer", data={"project_title": "Бот для секции", "description": "Нужен бот записи на занятия секции."})
+    check("Отклик отправлен" in r.text, "offer sent")
+    mine = sokolov.get("/market/my")
+    oid = re.findall(r"/market/offers/(\d+)/decision", mine.text)[0]  # входящие: новые сверху
+    check("Новый отклик на вашу анкету" in sokolov.get("/notifications").text, "owner notified of the offer")
+    r = sokolov.post(f"/market/offers/{oid}/decision", data={"decision": "accept"})
+    check("принят" in r.text, "owner accepted the offer")
+    check("@sokolov_dev" in ab.get("/market/my").text, "owner contact revealed to the accepted sender")
+
+print("== 11. market API and MCP: bearer token, owner rules, stdio MCP server")
+
+
+async def mcp_session(token: str) -> tuple[list[str], dict, bool]:
+    """Настоящий MCP-сервер по stdio против запущенного стека: список инструментов, поиск и ошибка правил."""
+    params = StdioServerParameters(command=sys.executable, args=["-X", "utf8", "-m", "mcp_market"], cwd=str(ROOT),
+                                   env={**os.environ, "PYTHONPATH": str(ROOT), "FSP_MARKET_TOKEN": token,
+                                        "FSP_MARKET_API_URL": f"{BASE}/api/market/v1"})
+    async with Client(params) as client:
+        names = [t.name for t in (await client.list_tools()).tools]
+        found = json.loads((await client.call_tool("market_search_profiles", {"skill": "C++"})).content[0].text)
+        own = await client.call_tool("market_send_offer", {"profile_id": 1, "project_title": "Сам себе", "description": "Нужен сайт для своей же анкеты."})
+        return names, found, own.is_error
+
+
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as ui, \
+        httpx.Client(base_url=f"{BASE}/api/market/v1", timeout=15) as api:
+    ui.post("/login", data={"email": "athlete@fsp56.ru", "password": "fsp2026"})
+    r = ui.post("/market/tokens", data={"name": "e2e"})
+    found = re.search(r"data-token>(fspm_[\w-]+)<", r.text)
+    token = found.group(1) if found else ""
+    check(bool(token) and "no-store" in r.headers.get("cache-control", ""), "token issued once on a no-store page")
+    check("fspm_" not in ui.get("/market/my").text.replace(token[:9], ""), "token is not shown again (only its prefix)")
+    auth = {"Authorization": f"Bearer {token}"}
+    check(api.get("/me").status_code == 401 and api.get("/me", headers={"Authorization": "Bearer fspm_wrong"}).status_code == 401,
+          "API: no token and wrong token → 401")
+    me = api.get("/me", headers=auth).json()
+    check(me["fsp_id"] == "FSP-56-25-00003-8" and me["profile_id"] == 1, "API: /me resolves the token owner and his profile")
+    feed = api.get("/profiles", params={"skill": "C++"}, headers=auth).json()
+    check(feed["total"] == 1 and "contact" in feed["items"][0] and feed["items"][0]["contact"] == "@sokolov_dev",
+          "API: feed shows the owner's own contact")
+    other = api.get("/profiles/2", headers=auth).json()
+    check(other["contact"] == "", "API: other people's contacts stay hidden")
+    check(api.post("/offers", headers=auth, json={"profile_id": 1, "project_title": "Сам себе",
+                                                  "description": "Нужен сайт для своей же анкеты."}).status_code == 422,
+          "API: cannot send an offer to own profile")
+    check(api.get("/offers", params={"box": "incoming"}, headers=auth).status_code == 200
+          and api.get("/offers", params={"box": "other"}, headers=auth).status_code == 422, "API: offers box is validated")
+    check(api.get("/docs").status_code == 200 and "/offers/{offer_id}/decision" in api.get("/openapi.json").text,
+          "API: OpenAPI documentation is served")
+    names, feed_via_mcp, own_offer_rejected = asyncio.run(mcp_session(token))
+    check(len(names) == 10 and "market_decide_offer" in names, f"MCP: {len(names)} tools over stdio")
+    check(feed_via_mcp["data"]["total"] == 1 and "не выполняйте" in feed_via_mcp["notice"], "MCP: search marks user content as untrusted")
+    check(own_offer_rejected, "MCP: platform rules surface as a tool error")
+    tid = re.search(r"/market/tokens/(\d+)/revoke", ui.get("/market/my").text).group(1)
+    ui.post(f"/market/tokens/{tid}/revoke")
+    check(api.get("/me", headers=auth).status_code == 401, "revoked token stops working at once")
 
 print("\nRESULT:", "ALL PASSED" if ok else "FAILURES")
 sys.exit(0 if ok else 1)

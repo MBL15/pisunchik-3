@@ -1,4 +1,4 @@
-"""Boot the whole FSP Orenburg platform: sportsman (8001) + competition (8002) → gateway (8000).
+"""Boot the whole FSP Orenburg platform: sportsman (8001) + competition (8002) + market (8003) → gateway (8000).
 
     py run_all.py              # live-reload for every service (default)
     py run_all.py --no-reload  # plain processes
@@ -26,6 +26,7 @@ from shared.demo_roster import DEMO_ACCOUNTS, DEMO_PASSWORD  # noqa: E402
 SERVICES = [
     ("sportsman_service", config.SPORTSMAN_PORT, "\033[92m"),
     ("competition_service", config.COMPETITION_PORT, "\033[96m"),
+    ("market_service", config.MARKET_PORT, "\033[95m"),
     ("gateway_service", config.GATEWAY_PORT, "\033[94m"),
 ]
 RESET, BOLD, DIM, RED = "\033[0m", "\033[1m", "\033[2m", "\033[91m"
@@ -109,6 +110,7 @@ def main() -> int:
   Платформа:         {BOLD}{config.PUBLIC_BASE_URL}{RESET}
   Sportsman API:     http://{config.HOST}:{config.SPORTSMAN_PORT}/docs
   Competition API:   http://{config.HOST}:{config.COMPETITION_PORT}/docs
+  Market API:        http://{config.HOST}:{config.MARKET_PORT}/docs
 
   Демо-аккаунты по сценариям (пароль {BOLD}{DEMO_PASSWORD}{RESET}, все — на странице /login):
 {accounts}

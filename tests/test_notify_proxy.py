@@ -59,3 +59,42 @@ class ProxyClientTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PollingSurvivesFailuresTest(unittest.TestCase):
+    def test_call_swallows_any_transport_error(self):
+        class Boom:
+            async def post(self, *a, **kw):
+                raise RuntimeError("socks protocol error")
+
+        with mock.patch.object(notify, "_http", Boom()):
+            self.assertIsNone(asyncio.run(notify._call("getMe")))
+
+    def test_poll_loop_keeps_going_after_errors_and_retries_webhook_reset(self):
+        calls: list[str] = []
+        script = iter([None, None,                      # deleteWebhook и getUpdates недоступны (туннель не поднят)
+                       RuntimeError("boom"),            # неожиданный сбой
+                       True, [{"update_id": 7, "message": {"chat": {"id": 1}, "text": "/stop"}}],  # Telegram вернулся
+                       asyncio.CancelledError()])       # завершение теста
+
+        async def fake_call(method, **params):
+            calls.append(method)
+            item = next(script)
+            if isinstance(item, BaseException):
+                raise item
+            return item
+
+        handled = []
+
+        async def fake_handle(message):
+            handled.append(message["text"])
+
+        async def no_sleep(_):
+            return None
+
+        with mock.patch.object(notify, "_call", fake_call), mock.patch.object(notify, "_handle", fake_handle), \
+                mock.patch.object(notify.asyncio, "sleep", no_sleep), self.assertRaises(asyncio.CancelledError):
+            asyncio.run(notify.poll_updates())
+        self.assertEqual(handled, ["/stop"])
+        self.assertEqual(calls.count("deleteWebhook"), 3)  # повторялся, пока не удалось, и больше не вызывался
+        self.assertEqual(calls[-1], "getUpdates")

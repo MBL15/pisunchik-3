@@ -77,7 +77,7 @@ async def _call(method: str, **params) -> dict | None:
     try:
         r = await _http.post(f"{API}/{method}", json=params, timeout=40)
         data = r.json()
-    except (httpx.HTTPError, ValueError) as exc:
+    except Exception as exc:  # noqa: BLE001 — любой сбой сети или прокси (в т. ч. не из httpx) не должен убивать опрос бота
         log.warning("telegram %s: %s", method, type(exc).__name__)
         return None
     if not data.get("ok"):
@@ -146,10 +146,15 @@ async def _handle(message: dict) -> None:
 
 async def poll_updates() -> None:
     """Long polling getUpdates: бот принимает /start <код> и /stop."""
-    await _call("deleteWebhook")
-    offset = 0
+    offset, webhook_cleared = 0, False
     while True:
-        updates = await _call("getUpdates", offset=offset, timeout=25, allowed_updates=["message"])
+        try:
+            if not webhook_cleared:  # пока Telegram недоступен, повторяем — без снятого вебхука getUpdates не работает
+                webhook_cleared = await _call("deleteWebhook") is not None
+            updates = await _call("getUpdates", offset=offset, timeout=25, allowed_updates=["message"])
+        except Exception:  # noqa: BLE001 — опрос живёт, пока работает шлюз
+            log.exception("telegram polling failed")
+            updates = None
         if updates is None:
             await asyncio.sleep(5)
             continue

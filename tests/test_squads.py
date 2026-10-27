@@ -9,7 +9,7 @@ from sportsman_service import main as sportsman
 from sportsman_service.store import seed
 
 ADMIN = ROSTER_BY_SEQ[1]["fsp_id"]
-SOKOLOV = ROSTER_BY_SEQ[3]["fsp_id"]  # ALG, AI — командных дисциплин нет
+SOKOLOV = ROSTER_BY_SEQ[3]["fsp_id"]  # ALG, AI — оба командные, но команд у него нет
 VALIEVA = ROSTER_BY_SEQ[9]["fsp_id"]  # ALG, SEC — приглашена в «Null Pointers»
 ZAYTSEVA = ROSTER_BY_SEQ[13]["fsp_id"]  # SEC, ALG — капитан «Null Pointers»
 ISAEV = ROSTER_BY_SEQ[14]["fsp_id"]  # SEC — участник «Null Pointers»
@@ -79,9 +79,15 @@ class SquadsTest(_Base):
         self.assertEqual((s["title"], s["captain"], s["size"], s["max_size"]), ("Red Team", KALININ, 1, TEAM_MAX_SIZE))
 
     def test_only_team_disciplines_the_athlete_has(self):
-        self.assertEqual(self.create(KALININ, "Алгоритмисты", "ALG").status_code, 422)
+        self.assertEqual(self.create(KALININ, "Алгоритмисты", "ALG").status_code, 422)  # ALG нет в профиле
         self.assertEqual(self.create(SOKOLOV, "Продуктовые", "PRD").status_code, 422)  # PRD нет в профиле
         self.assertEqual(self.create(KUZNETSOV, "Тренерская", "SEC").status_code, 403)  # не спортсмен
+
+    def test_algorithmic_and_ai_squads_work_like_the_others(self):
+        for who, title, disc in ((SOKOLOV, "Алго-Дрим", "ALG"), (LEBEDEVA, "Нейросеть", "AI")):
+            r = self.create(who, title, disc)
+            self.assertEqual((r.status_code, r.json()["discipline"], r.json()["captain"]), (201, disc, who))
+        self.assertEqual(self.create(SOKOLOV, "Второй состав", "ALG").status_code, 409)  # одна команда на дисциплину
 
     def test_one_squad_per_discipline_and_unique_title(self):
         self.assertEqual(self.create(ZAYTSEVA, "Вторая команда", "SEC").status_code, 409)
@@ -160,10 +166,10 @@ class SquadsTest(_Base):
         self.assertEqual([s["title"] for s in self.api.get("/api/v1/squads", params={"discipline": "PRD"}).json()], ["Квант-Продукт"])
         self.assertEqual([s["title"] for s in self.api.get("/api/v1/squads", params={"member": ISAEV}).json()], ["Null Pointers"])
         self.assertEqual([s["title"] for s in self.api.get("/api/v1/squads", params={"q": "null point"}).json()], ["Null Pointers"])
-        self.assertEqual(self.api.get("/api/v1/squads", params={"discipline": "ALG"}).status_code, 422)
+        self.assertEqual(self.api.get("/api/v1/squads", params={"discipline": "XXX"}).status_code, 422)
         mine = self.api.get(f"/api/v1/athletes/{KALININ}/squads").json()
         self.assertEqual((mine["squads"], mine["can_create"], mine["team_disciplines"]), ([], ["SEC"], ["SEC"]))
-        self.assertEqual(self.api.get(f"/api/v1/athletes/{SOKOLOV}/squads").json()["team_disciplines"], [])
+        self.assertEqual(self.api.get(f"/api/v1/athletes/{SOKOLOV}/squads").json()["team_disciplines"], ["ALG", "AI"])
 
 
 if __name__ == "__main__":

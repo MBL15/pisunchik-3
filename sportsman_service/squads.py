@@ -1,4 +1,4 @@
-"""Команды участников командных дисциплин (продуктовое программирование и CTF): капитан создаёт команду и приглашает спортсменов
+"""Команды участников командных дисциплин (алгоритмика, продуктовое программирование, CTF и ИИ): капитан создаёт команду и приглашает спортсменов
 по ФСП ID, приглашённый принимает или отклоняет, участник может выйти, капитан — исключить или распустить команду.
 
 Не путать со сборной (`competition_service`, «Team»): сборную формирует федерация приказом, команду — сами спортсмены.
@@ -129,7 +129,7 @@ def on_disciplines_changed(fid: str, removed: set[str]) -> None:
 @router.get("/squads")
 async def list_squads(discipline: str | None = None, member: str | None = None, q: str | None = None):
     if discipline and discipline not in TEAM_DISCIPLINES:
-        raise HTTPException(422, "Команды есть в продуктовом программировании и кибербезопасности (CTF)")
+        raise HTTPException(422, "Команды есть в алгоритмике, продуктовом программировании, CTF и ИИ")
     words = (q or "").casefold().split()
     out = [s for s in store.ext.table(SQUADS).values()
            if (not discipline or s["discipline"] == discipline) and (not member or member in s["members"])
@@ -159,7 +159,7 @@ async def athlete_squads(fid: str):
 @router.post("/squads", status_code=201)
 async def create_squad(data: SquadIn):
     if data.discipline not in TEAM_DISCIPLINES:
-        raise HTTPException(422, "Команды собирают в продуктовом программировании и кибербезопасности (CTF)")
+        raise HTTPException(422, "Команды собирают в алгоритмике, продуктовом программировании, CTF и ИИ")
     p = _athlete(data.actor)
     if data.discipline not in p.disciplines:
         raise HTTPException(422, f"Сначала выберите дисциплину «{DISCIPLINE_BY_CODE[data.discipline]['short']}» в профиле")

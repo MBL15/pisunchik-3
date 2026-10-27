@@ -246,7 +246,7 @@
       <p class="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fsp-muted">{{ m.icon("code", "h-4 w-4") }}Мои дисциплины</p>
       <a href="/squads" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Команды{% if squads.squads %} · {{ squads.squads|length }}{% endif %}</a>
     </div>
-    <p class="mt-2 text-sm text-fsp-muted">От дисциплин зависят календарь, заявки и рейтинг. В продуктовом программировании и CTF можно собрать команду.</p>
+    <p class="mt-2 text-sm text-fsp-muted">От дисциплин зависят календарь, заявки и рейтинг. В алгоритмике, продуктовом программировании, CTF и ИИ можно собрать команду.</p>
     <form method="post" action="/cabinet/disciplines" class="mt-4">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {% for d in D.DISCIPLINES %}

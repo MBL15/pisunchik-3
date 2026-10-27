@@ -1,4 +1,4 @@
-"""Команды в продуктовом программировании и CTF: страница «Команды» (список, создание, приглашения) и выбор дисциплин спортсменом."""
+"""Команды в алгоритмике, продуктовом программировании, CTF и ИИ: страница «Команды» (список, создание, приглашения) и выбор дисциплин спортсменом."""
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
@@ -17,7 +17,7 @@ ACTIONS = {"invite": "Приглашение отправлено", "respond": N
 async def squads_page(request: Request, discipline: str = "", q: str = ""):
     user = await require(request, *VIEW_ROLES)
     if discipline and discipline not in TEAM_DISCIPLINES:
-        raise HTTPException(422, "Команды есть в продуктовом программировании и кибербезопасности (CTF)")
+        raise HTTPException(422, "Команды есть в алгоритмике, продуктовом программировании, CTF и ИИ")
     degraded: list[str] = []
     fid = user["person"]["fsp_id"]
     athlete = user["role"] == Role.ATHLETE

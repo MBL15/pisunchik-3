@@ -1,16 +1,18 @@
 """In-memory repository (mock database) for the sportsman service, seeded from the shared demo roster."""
 from datetime import date, datetime, timedelta
 
-from shared import config
+from shared import config, demo_scale
 from shared.demo_roster import DEMO_PASSWORD, ROSTER, ROSTER_BY_SEQ, TRAINER_LINKS
 from shared.domain import (
-    DISCIPLINE_BY_CODE, JUDGE_CATEGORY_BY_CODE, LINK_STATUS_LABELS, QUALIFICATION_KIND_LABELS,
-    QUALIFICATION_PURPOSE_LABELS, QUALIFICATION_STATUS_LABELS, RANK_BY_CODE, ROLE_LABELS, SANCTION_LABELS,
-    ApplicationStatus, LinkStatus, expiry_state,
+    NO_ORGANIZATION, DISCIPLINE_BY_CODE, JUDGE_CATEGORY_BY_CODE, LINK_STATUS_LABELS, QUALIFICATION_KIND_LABELS,
+    QUALIFICATION_PURPOSE_LABELS, QUALIFICATION_STATUS_LABELS, RANK_BY_CODE, RANK_ORDER, ROLE_LABELS, SANCTION_LABELS,
+    TRAINING_STAGES, ApplicationStatus, LinkStatus, expiry_state,
 )
 from shared.fsp_id import make_fsp_id
+from shared.listing import AUDIT_LIMIT
 from sportsman_service.models import (
-    Guardian, JudgeCategoryRecord, LinkEvent, PersonRecord, QualificationRequest, RankRecord, Sanction, TrainerLink,
+    Antidoping, Guardian, JudgeCategoryRecord, LinkEvent, Notification, PersonRecord, QualificationRequest, RankRecord,
+    Sanction, TrainerLink,
 )
 from sportsman_service.security import hash_password
 
@@ -31,9 +33,11 @@ class Store:
         self.persons: dict[str, PersonRecord] = {}
         self.links: list[TrainerLink] = []
         self.requests: list[QualificationRequest] = []
+        self.notifications: list[Notification] = []
         self.audit: list[dict] = []
         self._next_seq = 1
         self._next_link_id = 1
+        self._next_notification_id = 1
 
     # ---------- identity ----------
     def issue_fsp_id(self, year: int) -> tuple[str, int]:
@@ -47,7 +51,22 @@ class Store:
     def log(self, actor: str, action: str, obj: str) -> None:
         self.audit.insert(0, {"at": datetime.now().isoformat(timespec="seconds"), "service": "sportsman",
                               "actor": actor, "action": action, "object": obj})
-        del self.audit[200:]
+        del self.audit[AUDIT_LIMIT:]
+
+    # ---------- notifications (лента в кабинете) ----------
+    def notify(self, fsp_ids: list[str], title: str, text: str = "", link: str = "", key: str = "",
+               at: datetime | None = None, read: bool = False) -> list[str]:
+        """Добавляет уведомление каждому адресату; с `key` — не чаще одного раза на (адресат, ключ). Возвращает адресатов."""
+        sent = {(n.fsp_id, n.key) for n in self.notifications if n.key} if key else set()
+        out = []
+        for fid in dict.fromkeys(fsp_ids):
+            if fid not in self.persons or (fid, key) in sent:
+                continue
+            self.notifications.append(Notification(id=self._next_notification_id, fsp_id=fid, title=title, text=text,
+                                                   link=link, key=key, at=at or datetime.now(), read=read))
+            self._next_notification_id += 1
+            out.append(fid)
+        return out
 
     # ---------- links ----------
     def add_link(self, trainer: str, athlete: str, discipline: str, status: LinkStatus, by: str, note: str) -> TrainerLink:
@@ -91,6 +110,9 @@ class Store:
             "disciplines": p.disciplines,
             "discipline_labels": [DISCIPLINE_BY_CODE[d]["short"] for d in p.disciplines],
             "start_year": p.start_year, "email": p.email,
+            "training_stage": p.training_stage,
+            "training_stage_label": TRAINING_STAGES.get(p.training_stage, "") if p.training_stage else "",
+            "antidoping": p.antidoping.model_dump(mode="json") if p.antidoping else None,
             "rank": rank, "judge_category": judge,
             "sanctions": [{**s.model_dump(mode="json"), "label": SANCTION_LABELS[s.type],
                            "active": s in active} for s in p.sanctions],
@@ -127,6 +149,41 @@ class Store:
 
 store = Store()
 
+DDL = """
+CREATE TABLE IF NOT EXISTS sp_persons (key TEXT PRIMARY KEY, data JSONB NOT NULL, email TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS sp_persons_email_uq ON sp_persons (lower(email)) WHERE email IS NOT NULL;
+CREATE TABLE IF NOT EXISTS sp_links (key TEXT PRIMARY KEY, data JSONB NOT NULL);
+CREATE TABLE IF NOT EXISTS sp_requests (key TEXT PRIMARY KEY, data JSONB NOT NULL);
+CREATE TABLE IF NOT EXISTS sp_notifications (key TEXT PRIMARY KEY, data JSONB NOT NULL);
+CREATE TABLE IF NOT EXISTS sp_meta (key TEXT PRIMARY KEY, data JSONB NOT NULL);
+"""
+
+
+def snapshot(s: Store) -> dict:
+    dump = lambda m: m.model_dump(mode="json")  # noqa: E731
+    return {
+        "sp_persons": {k: (dump(p), {"email": p.email}) for k, p in s.persons.items()},
+        "sp_links": {str(x.id): (dump(x), {}) for x in s.links},
+        "sp_requests": {str(x.id): (dump(x), {}) for x in s.requests},
+        "sp_notifications": {str(x.id): (dump(x), {}) for x in s.notifications},
+        "sp_meta": {"counters": ({"next_seq": s._next_seq, "next_link_id": s._next_link_id,
+                                  "next_notification_id": s._next_notification_id}, {}),
+                    "audit": ({"items": s.audit}, {})},
+    }
+
+
+def restore(s: Store, rows: dict[str, dict[str, dict]]) -> None:
+    s.persons = {k: PersonRecord.model_validate(d) for k, d in rows["sp_persons"].items()}
+    s.links = sorted((TrainerLink.model_validate(d) for d in rows["sp_links"].values()), key=lambda x: x.id)
+    s.requests = sorted((QualificationRequest.model_validate(d) for d in rows["sp_requests"].values()), key=lambda x: x.id)
+    s.notifications = sorted((Notification.model_validate(d) for d in rows.get("sp_notifications", {}).values()),
+                             key=lambda x: x.id)
+    meta = rows["sp_meta"]
+    s._next_seq = meta["counters"]["next_seq"]
+    s._next_link_id = meta["counters"]["next_link_id"]
+    s._next_notification_id = meta["counters"].get("next_notification_id", len(s.notifications) + 1)
+    s.audit = meta.get("audit", {}).get("items", [])
+
 
 def seed(s: Store) -> None:
     today = config.today()
@@ -151,6 +208,12 @@ def seed(s: Store) -> None:
             sanctions.append(Sanction(type=sc["type"], date_from=today + timedelta(days=sc["from_offset"]),
                                       date_to=today + timedelta(days=sc["to_offset"]), reason=sc["reason"]))
         birth = date.fromisoformat(r["birth_date"])
+        stage = antidoping = None
+        if "athlete" in r["roles"]:
+            stage = _demo_stage(r["rank_code"], r["organization"])
+            if r["seq"] % 3:
+                antidoping = Antidoping(course_date=today - timedelta(days=40 + r["seq"] * 9),
+                                        certificate_url=f"https://course.rusada.ru/certificate/demo-{r['seq']:05d}")
         guardian = None
         if age_on(birth, today) < 18:
             guardian = Guardian(full_name=f"{r['last_name']} (родитель)", consent_at=now)
@@ -159,10 +222,12 @@ def seed(s: Store) -> None:
             middle_name=r["middle_name"], gender=r["gender"], birth_date=birth, municipality=r["municipality"],
             organization=r["organization"], roles=r["roles"], disciplines=r["disciplines"],
             start_year=max(birth.year + 10, 2000 + int(r["fsp_id"].split("-")[2]) - r["seq"] % 3), email=r["email"],
+            training_stage=stage, antidoping=antidoping,
             password_hash=demo_hash if r["email"] else None, rank=rank, judge_category=judge,
             sanctions=sanctions, guardian=guardian, pd_consent_at=now, created_at=now,
         )
     s._next_seq = max(r["seq"] for r in ROSTER) + 1
+    _seed_scale(s, today, now)
     for trainer_seq, athlete_seq, disc, status in TRAINER_LINKS:
         trainer, athlete = ROSTER_BY_SEQ[trainer_seq]["fsp_id"], ROSTER_BY_SEQ[athlete_seq]["fsp_id"]
         note = "Связь приостановлена: пропуск сборов" if status == "SUSPENDED" else "Подтверждено спортсменом"
@@ -174,4 +239,53 @@ def seed(s: Store) -> None:
                "refereed": 3},
         status=ApplicationStatus.PENDING, created_at=now - timedelta(days=2),
     ))
+    _seed_notifications(s, now)
     s.log("system", "seed", f"{len(s.persons)} персон, {len(s.links)} связей тренер–спортсмен")
+
+
+def _seed_scale(s: Store, today: date, now: datetime) -> None:
+    """FSP_DEMO_SCALE: синтетические люди для проверки больших списков (без входа, вне протоколов)."""
+    for r in demo_scale.generate():
+        rank = None
+        if r["rank_code"]:
+            expires = today + timedelta(days=r["rank_expiry_offset"])
+            rank = RankRecord(code=r["rank_code"], assigned_at=_years_before(expires, 2), expires_at=expires,
+                              order_no=f"Приказ МФКиС Оренбургской обл. № {r['seq']}-р", basis="Синтетические данные")
+        judge = None
+        if r["judge_category"]:
+            judge = JudgeCategoryRecord(code=r["judge_category"], expires_at=today + timedelta(days=r["judge_expiry_offset"]))
+        birth = date.fromisoformat(r["birth_date"])
+        athlete = "athlete" in r["roles"]
+        s.persons[r["fsp_id"]] = PersonRecord(
+            fsp_id=r["fsp_id"], seq=r["seq"], last_name=r["last_name"], first_name=r["first_name"],
+            middle_name=r["middle_name"], gender=r["gender"], birth_date=birth, municipality=r["municipality"],
+            organization=r["organization"], roles=r["roles"], disciplines=r["disciplines"], start_year=r["start_year"],
+            training_stage=_demo_stage(r["rank_code"], r["organization"]) if athlete else None,
+            antidoping=Antidoping(course_date=today - timedelta(days=30 + r["seq"] % 300),
+                                  certificate_url=f"https://course.rusada.ru/certificate/demo-{r['seq']:05d}")
+            if athlete and r["seq"] % 3 else None,
+            rank=rank, judge_category=judge,
+            guardian=Guardian(full_name=f"{r['last_name']} (родитель)", consent_at=now) if age_on(birth, today) < 18 else None,
+            pd_consent_at=now, created_at=now + timedelta(days=r["created_offset"]),
+        )
+
+
+def _demo_stage(rank_code: str | None, organization: str) -> str | None:
+    """Этап подготовки демо-спортсмена по разряду; без организации спортивной подготовки этапа нет."""
+    if organization == NO_ORGANIZATION:
+        return None
+    order = RANK_ORDER[rank_code] if rank_code else -1
+    return "ССМ" if order >= 5 else "УТ" if order >= 2 else "НП"
+
+
+def _seed_notifications(s: Store, now: datetime) -> None:
+    """Несколько прочитанных событий в ленте демо-аккаунтов, чтобы лента не была пустой при первом входе."""
+    admin, trainer, athlete = ROSTER_BY_SEQ[1]["fsp_id"], ROSTER_BY_SEQ[2]["fsp_id"], ROSTER_BY_SEQ[3]["fsp_id"]
+    timofeev = ROSTER_BY_SEQ[5]["fsp_id"]
+    s.notify([admin], "Заявка на судейскую категорию", "Тимофеев И. — 2К, на рассмотрении", "/cabinet#inbox",
+             at=now - timedelta(days=2))
+    s.notify([timofeev], "Заявка на категорию отправлена", "2К — на рассмотрении в федерации", "/cabinet#category",
+             at=now - timedelta(days=2), read=True)
+    s.notify([trainer, athlete], "Добро пожаловать на платформу ФСП",
+             "Здесь появляются уведомления о заявках, протоколах, назначениях и сроках.", "/cabinet",
+             at=now - timedelta(days=7), read=True)

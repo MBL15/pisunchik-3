@@ -28,6 +28,8 @@ from shared import config, domain
 from shared.demo_roster import DEMO_ACCOUNTS, DEMO_PASSWORD
 from shared.domain import Role
 from shared.http import ServiceClient, ServiceError
+from shared import listing
+from shared.listing import PAGE_SIZES
 
 BASE_DIR = Path(__file__).parent
 clients: dict[str, ServiceClient] = {}
@@ -38,23 +40,65 @@ JUDGE_CATEGORY_DEFAULT_YEARS = 2  # подсказка в форме решен�
 async def lifespan(_: FastAPI):
     clients["sportsman"] = ServiceClient("sportsman_service", config.SPORTSMAN_URL, caller="gateway")
     clients["competition"] = ServiceClient("competition_service", config.COMPETITION_URL, caller="gateway")
-    tg_tasks = await notify.start(_deadline_reminders)
+    tg_tasks = await notify.start(_deadline_reminders, _record_notifications)
     yield
     await notify.stop(tg_tasks)
     for c in clients.values():
         await c.aclose()
 
 
+async def _record_notifications(fsp_ids: list[str], title: str, text: str, link: str, key: str) -> list[str]:
+    res = await clients["sportsman"].post("/api/v1/notifications", json={
+        "fsp_ids": fsp_ids, "title": title, "text": text, "link": link, "key": key})
+    return res["delivered"]
+
+
+REG_REMIND_DAYS = 7  # за сколько дней до конца приёма заявок напоминать спортсменам, ещё не подавшим заявку
+
+
 async def _deadline_reminders() -> list[tuple]:
-    """Истекающие разряды и судейские категории → (fsp_id, ключ, заголовок, текст, дней до окончания)."""
+    """Сроки для напоминаний → (fsp_id, ключ, заголовок, текст, дней до срока, ссылка).
+
+    Спортсмену — конец приёма заявок по его дисциплинам и срок разряда; судье — срок категории; федерации — отчёты.
+    """
+    sp, co = clients["sportsman"], clients["competition"]
+    ranks, judges, admins, open_comps = await asyncio.gather(
+        sp.get("/api/v1/alerts/ranks", within_days=30), sp.get("/api/v1/alerts/judge-categories", within_days=30),
+        sp.get("/api/v1/persons", role="admin"), co.get("/api/v1/competitions", status="REGISTRATION_OPEN"))
     out = []
-    for p in await clients["sportsman"].get("/api/v1/alerts/ranks", within_days=30):
-        out.append((p["fsp_id"], "rank", "Истекает срок разряда",
-                    f"{p['rank']['title']}: до {ru_date(p['rank']['expires_at'])}", p["rank"]["days_left"]))
-    for p in await clients["sportsman"].get("/api/v1/alerts/judge-categories", within_days=30):
-        out.append((p["fsp_id"], "judge", "Истекает судейская категория",
-                    f"до {ru_date(p['judge_category']['expires_at'])}", p["judge_category"]["days_left"]))
+    for p in ranks:
+        out.append((p["fsp_id"], f"rank:{p['rank']['expires_at']}", "Истекает срок разряда",
+                    f"{p['rank']['title']}: до {ru_date(p['rank']['expires_at'])}", p["rank"]["days_left"], "/cabinet#rank"))
+    for p in judges:
+        out.append((p["fsp_id"], f"judge:{p['judge_category']['expires_at']}", "Истекает судейская категория",
+                    f"до {ru_date(p['judge_category']['expires_at'])}", p["judge_category"]["days_left"], "/cabinet#category"))
+    for d in domain.report_deadlines(config.today()):
+        for a in admins:
+            out.append((a["fsp_id"], f"report:{d['title']}:{d['date']}", f"Срок отчёта: {d['title']}",
+                        f"до {ru_date(d['date'])} · {d['note']}", d["days_left"], "/cabinet#inbox"))
+    soon = [c for c in open_comps if c["days_to_deadline"] is not None and 0 <= c["days_to_deadline"] <= REG_REMIND_DAYS]
+    lists = await asyncio.gather(*(asyncio.gather(sp.get("/api/v1/persons", role="athlete", discipline=c["discipline"]),
+                                                  co.get("/api/v1/applications", competition_id=c["id"])) for c in soon))
+    for c, (athletes, apps) in zip(soon, lists):
+        applied = {a["athlete_fsp_id"] for a in apps if a["status"] != "REJECTED"}
+        lo, hi = domain.AGE_GROUPS[c["age_group"]]
+        for p in athletes:
+            if p["fsp_id"] not in applied and lo <= p["age"] <= hi and not p["is_sanctioned"]:
+                out.append((p["fsp_id"], f"registration:{c['id']}:{c['registration_deadline']}", "Заканчивается приём заявок",
+                            f"{c['title']} · до {ru_date(c['registration_deadline'])}", c["days_to_deadline"], "/cabinet#starts"))
     return out
+
+
+async def _admin_ids() -> list[str]:
+    return [p["fsp_id"] for p in await safe(clients["sportsman"].get("/api/v1/persons", role="admin"), [], [])]
+
+
+async def _discipline_audience(discipline: str) -> list[str]:
+    """Спортсмены и тренеры дисциплины — адресаты новостей об открытии приёма заявок."""
+    athletes, trainers = await asyncio.gather(
+        safe(clients["sportsman"].get("/api/v1/persons", role="athlete", discipline=discipline), [], []),
+        safe(clients["sportsman"].get("/api/v1/persons", role="trainer", discipline=discipline), [], []))
+    return [p["fsp_id"] for p in athletes + trainers]
 
 
 app = FastAPI(title="ФСП Оренбург · Gateway", version="1.0.0", lifespan=lifespan)
@@ -101,7 +145,40 @@ def ru_mon(value: Any) -> str:
 templates.env.filters.update(ru_date=ru_date, ru_mon=ru_mon, days_word=days_word,
                              tojson_ru=lambda v: json.dumps(v, ensure_ascii=False),
                              tojson_script=lambda v: json.dumps(v, ensure_ascii=False).replace("<", "\\u003c"))
-templates.env.globals.update(D=domain, plural=plural, DEMO_PASSWORD=DEMO_PASSWORD)
+def qs(request: Request, **changes) -> str:
+    """Текущий адрес с изменёнными параметрами: пустое значение убирает параметр; любой фильтр, кроме страницы, сбрасывает её."""
+    params = dict(request.query_params)
+    if any(k != "page" for k in changes):
+        params.pop("page", None)
+    for k, v in changes.items():
+        if v in (None, "", False):
+            params.pop(k, None)
+        else:
+            params[k] = str(v)
+    return f"{request.url.path}?{urlencode(params)}" if params else request.url.path
+
+
+def pages(result: dict) -> dict:
+    """Пагинатор для шаблона: номер страницы, всего страниц, диапазон показанных записей и окно номеров."""
+    total, limit, offset = result["total"], result["limit"], result["offset"]
+    count = max(1, -(-total // limit))
+    current = min(offset // limit + 1, count)
+    window = sorted({1, count, *range(max(1, current - 2), min(count, current + 2) + 1)})
+    return {"total": total, "limit": limit, "page": current, "pages": count, "window": window,
+            "first": offset + 1 if total else 0, "last": min(offset + limit, total)}
+
+
+def list_args(request: Request, sorts: tuple[str, ...], default_sort: str, default_order: str = "asc") -> dict:
+    """Страница, размер, сортировка из адреса; размер страницы ограничен `PAGE_SIZES`."""
+    p = request.query_params
+    per = int(p["per"]) if p.get("per", "").isdigit() and int(p["per"]) in PAGE_SIZES else PAGE_SIZES[1]
+    page_no = int(p["page"]) if p.get("page", "").isdigit() and int(p["page"]) > 0 else 1
+    sort = p.get("sort") if p.get("sort") in sorts else default_sort
+    order = p.get("order") if p.get("order") in ("asc", "desc") else default_order
+    return {"sort": sort, "order": order, "limit": per, "offset": (page_no - 1) * per}
+
+
+templates.env.globals.update(D=domain, plural=plural, DEMO_PASSWORD=DEMO_PASSWORD, qs=qs, PAGE_SIZES=PAGE_SIZES)
 
 
 # ---------------------------------------------------------------- plumbing
@@ -146,9 +223,11 @@ async def current_user(request: Request) -> dict | None:
     user = None
     if s := read_session(request):
         try:
-            person = await clients["sportsman"].get(f"/api/v1/persons/{s['fid']}")
+            person, feed = await asyncio.gather(
+                clients["sportsman"].get(f"/api/v1/persons/{s['fid']}"),
+                safe(clients["sportsman"].get("/api/v1/notifications", fsp_id=s["fid"], limit=1), {"unread": 0}, []))
             role = s["role"] if s["role"] in person["roles"] else person["roles"][0]
-            user = {"person": person, "role": role, "role_label": domain.ROLE_LABELS[role]}
+            user = {"person": person, "role": role, "role_label": domain.ROLE_LABELS[role], "unread": feed["unread"]}
         except ServiceError as exc:
             if exc.status != 404:
                 raise
@@ -245,16 +324,40 @@ async def rating_page(request: Request, discipline: str = "ALG", season: int | N
 
 
 @app.get("/calendar", response_class=HTMLResponse)
-async def calendar_page(request: Request, discipline: str = "", plan: str = "", format: str = ""):
+async def calendar_page(request: Request, discipline: str = "", plan: str = "", format: str = "", age_group: str = "",
+                        mine: bool = False, q: str = "", status: str = "", level: str = "", season: str = ""):
     degraded: list[str] = []
     user = await safe(current_user(request), None, degraded)
-    comps = await safe(clients["competition"].get("/api/v1/competitions", discipline=discipline or None,
-                                                  plan=plan or None, format=format or None), [], degraded)
+    season_no = int(season) if season.isdigit() else None
+    comps = await safe(clients["competition"].get(
+        "/api/v1/competitions", discipline=discipline or None, plan=plan or None, format=format or None, q=q or None,
+        status=status or None, level=level or None, season=season_no,
+        age_group=age_group if age_group in domain.AGE_GROUPS else None), [], degraded)
+    athlete = user["person"] if user and Role.ATHLETE in user["person"]["roles"] else None
+    for c in comps:  # спортсмену платформа сама показывает, куда он проходит по возрасту
+        lo, hi = domain.AGE_GROUPS[c["age_group"]]
+        c["age_ok"] = lo <= athlete["age"] <= hi if athlete else None
+    if athlete and mine:
+        comps = [c for c in comps if c["age_ok"] and c["discipline"] in athlete["disciplines"]]
     today = config.today().isoformat()
     upcoming = sorted([c for c in comps if c["end_date"] >= today or c["status"] == "LIVE"], key=lambda c: c["start_date"])
-    past = [c for c in comps if c not in upcoming]
-    return render(request, "calendar.html", user=user, upcoming=upcoming, past=past,
-                  filters={"discipline": discipline, "plan": plan, "format": format}, degraded=degraded)
+    past_all = sorted([c for c in comps if c not in upcoming], key=lambda c: c["start_date"], reverse=True)
+    args = list_args(request, ("start",), "start", "desc")
+    past = listing.page(past_all, args["offset"], args["limit"])
+    if not past["items"] and past["total"]:
+        past = listing.page(past_all, (past["total"] - 1) // args["limit"] * args["limit"], args["limit"])
+    filters = {"discipline": discipline, "plan": plan, "format": format, "age_group": age_group, "mine": mine, "q": q,
+               "status": status, "level": level, "season": season}
+    names = {"discipline": lambda v: domain.DISCIPLINE_BY_CODE.get(v, {}).get("short", v),
+             "plan": lambda v: domain.CALENDAR_PLAN_LABELS.get(v, v), "format": lambda v: domain.FORMAT_LABELS.get(v, v),
+             "age_group": lambda v: v, "mine": lambda v: "только мои", "q": lambda v: f"«{v}»",
+             "status": lambda v: domain.COMPETITION_STATUS_LABELS.get(v, v), "level": lambda v: domain.LEVEL_LABELS.get(v, v),
+             "season": lambda v: f"сезон {v}"}
+    chips = [(names[k](v), qs(request, **{k: None})) for k, v in filters.items() if v]
+    seasons = sorted({c["season"] for c in await safe(clients["competition"].get("/api/v1/competitions"), [], degraded)},
+                     reverse=True)
+    return render(request, "calendar.html", user=user, upcoming=upcoming, past=past["items"], past_pg=pages(past),
+                  filters=filters, chips=chips, seasons=seasons, athlete=athlete, degraded=degraded)
 
 
 @app.get("/competitions/{cid}/regulation", response_class=HTMLResponse)
@@ -394,6 +497,8 @@ async def _cabinet_admin(request: Request, user: dict):
         safe(co.get("/api/v1/evsk/requirements"), [], degraded),
     )
     today = config.today()
+    # судьи с действующей категорией — первыми (дольше действует — выше), без категории — в конце
+    judges.sort(key=lambda j: (-(j["judge_category"] or {}).get("days_left", -10**6), j["full_name"]))
     evsk_rows = [r for r in evsk["rows"] if r["state"] != "have"]
     evsk_map = {f"{r['competition_id']}:{r['fsp_id']}": r for r in evsk_rows}
     rank_pending = {q["person_fsp_id"] for q in quals if q["kind"] == "RANK"}
@@ -426,7 +531,8 @@ async def _cabinet_admin(request: Request, user: dict):
                   sheets=[s for s in sheets if s], audit=audit, sample_log=_sample_log(protocols),
                   quals=quals, panels=panels, judges=judges, registrations=registrations, comp_types=comp_types,
                   teams=teams, evsk_rows=evsk_rows, evsk_map=evsk_map, evsk_table=evsk_table,
-                  evsk_checked=evsk["ranks_checked"], rank_pending=rank_pending, degraded=sorted(set(degraded)))
+                  evsk_checked=evsk["ranks_checked"], rank_pending=rank_pending,
+                  report_deadlines=domain.report_deadlines(today), degraded=sorted(set(degraded)))
 
 
 def _plus_years(d: date, years: int) -> date:
@@ -567,6 +673,8 @@ async def submit_application(request: Request):
         return back("/cabinet", "error", humanize(exc.detail))
     if app_["athlete_fsp_id"] != user["person"]["fsp_id"]:
         await notify.notify(app_["athlete_fsp_id"], "Тренер подал заявку за вас", app_["competition_title"], "/cabinet")
+    await notify.notify_many(await _admin_ids(), "Новая заявка на соревнование",
+                             f"{app_['athlete_name']} → {app_['competition_title']}", "/cabinet#inbox")
     anchor = "#starts" if user["role"] == Role.ATHLETE else "#apps"
     return back(f"/cabinet{anchor}", "ok", f"Заявка #{app_['id']} подана: {app_['athlete_name']} → {app_['competition_title']}",
                 celebrate=True, app_id=app_["id"])
@@ -592,6 +700,10 @@ async def submit_qualification(request: Request):
         q = await clients["sportsman"].post("/api/v1/qualification-requests", json=payload)
     except ServiceError as exc:
         return back(f"/cabinet{anchor}", "error", humanize(exc.detail))
+    await notify.notify_many(await _admin_ids(), "Заявка на разряд" if q["kind"] == "RANK" else "Заявка на судейскую категорию",
+                             f"{q['person']['short_name']} — {q['code_title']} ({q['purpose_label']})", "/cabinet#inbox")
+    if q["person"]["fsp_id"] != me:
+        await notify.notify(q["person"]["fsp_id"], "Тренер подал заявку на разряд", q["code_title"], "/cabinet#rank")
     return back(f"/cabinet{anchor}", "ok", f"Заявка №{q['id']} на {q['purpose_label']}: {q['code_title']} — "
                                            f"{q['person']['short_name']}. Отправлена в федерацию, статус — в кабинете.",
                 celebrate=True)
@@ -608,6 +720,32 @@ async def telegram_link(request: Request):
         notify.unlink(fid)
         return back("/cabinet", "ok", "Telegram отключён")
     return RedirectResponse(notify.new_link(fid), status_code=303)
+
+
+@app.get("/notifications", response_class=HTMLResponse)
+async def notifications_page(request: Request, q: str = "", unread: bool = False):
+    user = await require(request)
+    fid = user["person"]["fsp_id"]
+    args = list_args(request, ("at",), "at", "desc")
+    feed = await clients["sportsman"].get("/api/v1/notifications", fsp_id=fid, limit=min(args["limit"], 200),
+                                          offset=args["offset"], unread_only=unread, q=q or None)
+    if feed["unread"] and not unread:  # открыл ленту — прочитал; новые остаются подсвеченными на этом экране
+        await safe(clients["sportsman"].request("POST", "/api/v1/notifications/read", params={"fsp_id": fid}), None, [])
+        user["unread"] = 0
+    return render(request, "notifications.html", user=user, items=feed["items"], pg=pages(feed), feed=feed,
+                  filters={"q": q, "unread": unread})
+
+
+@app.post("/cabinet/antidoping")
+async def save_antidoping(request: Request):
+    user = await require(request, Role.ATHLETE)
+    form = await request.form()
+    try:
+        await clients["sportsman"].post(f"/api/v1/persons/{user['person']['fsp_id']}/antidoping", json={
+            "course_date": form.get("course_date") or None, "certificate_url": str(form.get("certificate_url", "")).strip()})
+    except ServiceError as exc:
+        return back("/cabinet#antidoping", "error", humanize(exc.detail))
+    return back("/cabinet#antidoping", "ok", "Отметка о курсе РУСАДА сохранена в профиле")
 
 
 # ---------------------------------------------------------------- federation admin actions
@@ -725,6 +863,8 @@ async def enter_results(request: Request, cid: int):
     except ServiceError as exc:
         return back("/cabinet#results-entry", "error", humanize(exc.detail))
     if publish:
+        await notify.notify_many([e["fsp_id"] for e in p["entries"]], "Опубликован протокол",
+                                 p["competition"]["title"], f"/protocols/{cid}")
         return back(f"/protocols/{cid}", "ok", f"Протокол {p['competition']['code']} сформирован и опубликован: "
                                                f"{len(p['entries'])} участников → рейтинг и история спортсменов", celebrate=True)
     return back("/cabinet#results-entry", "ok", f"Черновик протокола {p['competition']['code']} пересчитан: "
@@ -769,7 +909,8 @@ async def create_competition(request: Request):
     except ServiceError as exc:
         return back("/cabinet#create", "error", humanize(exc.detail))
     if c["status"] == "REGISTRATION_OPEN":
-        await notify.notify_many(notify.chats.keys(), "Открыта регистрация на соревнование", c["title"], "/calendar")
+        await notify.notify_many(await _discipline_audience(c["discipline"]), "Открыта регистрация на соревнование",
+                                 f"{c['title']} · до {ru_date(c['registration_deadline'])}", "/calendar")
     return back("/cabinet", "ok", f"Соревнование {c['code']} создано · статус: {c['status_label']}")
 
 
@@ -783,7 +924,7 @@ async def toggle_registration(request: Request, cid: int):
     except ServiceError as exc:
         return back("/cabinet#registration", "error", humanize(exc.detail))
     if c["status"] == "REGISTRATION_OPEN":
-        await notify.notify_many(notify.chats.keys(), "Открыт приём заявок",
+        await notify.notify_many(await _discipline_audience(c["discipline"]), "Открыт приём заявок",
                                  f"{c['title']} · до {ru_date(c['registration_deadline'])}", "/calendar")
         return back("/cabinet#registration", "ok", f"Приём заявок на {c['code']} открыт до {ru_date(c['registration_deadline'])}")
     return back("/cabinet#registration", "ok", f"Приём заявок на {c['code']} закрыт: заявок {c['applications_total']}, "
@@ -891,6 +1032,211 @@ async def export_headcount(request: Request, fmt: str, years: int = 3, disciplin
     chosen = [f"{label}: {value}" for label, value in (("дисциплина", domain.DISCIPLINE_BY_CODE.get(discipline, {}).get("short")),
                                                        ("муниципалитет", municipality), ("организация", organization)) if value]
     return await download(reports.headcount_doc(report, "; ".join(chosen) or "без фильтров"), fmt)
+
+
+# ---------------------------------------------------------------- реестр
+REGISTRY_TABS = {"athlete": "Спортсмены", "trainer": "Тренеры", "judge": "Судьи", "org": "Организации"}
+REGISTRY_FILTERS = ("q", "discipline", "organization", "rank", "age_group", "municipality", "stage")
+REGISTRY_SORTS = ("name", "age", "rank", "organization", "municipality", "start_year", "created")
+EXPORT_MAX_ROWS = 20000
+
+
+def _registry_args(request: Request) -> tuple[str, dict]:
+    tab = request.query_params.get("tab", "athlete")
+    tab = tab if tab in REGISTRY_TABS else "athlete"
+    return tab, {k: request.query_params.get(k, "").strip() for k in REGISTRY_FILTERS}
+
+
+def _filter_orgs(orgs: list[dict], filters: dict) -> list[dict]:
+    words = listing.tokens(filters["q"])
+    return [o for o in orgs if (not filters["discipline"] or filters["discipline"] in o["disciplines"])
+            and (not filters["municipality"] or o["municipality"] == filters["municipality"])
+            and listing.matches(words, o["name"], o["type"], o["municipality"])]
+
+
+async def _registry_people(tab: str, filters: dict, args: dict) -> dict:
+    """Страница реестра; если номер страницы больше последней (сузили фильтр) — последняя страница."""
+    query = {k: v for k, v in filters.items() if v}
+    try:
+        res = await clients["sportsman"].get("/api/v1/registry/persons", role=tab, **query, **args)
+        if not res["items"] and res["total"] and args["offset"]:
+            last = (res["total"] - 1) // args["limit"] * args["limit"]
+            res = await clients["sportsman"].get("/api/v1/registry/persons", role=tab, **query, **{**args, "offset": last})
+    except ServiceError as exc:
+        if exc.unavailable:
+            raise
+        raise HTTPException(422, humanize(exc.detail)) from exc
+    return res
+
+
+def _registry_chips(request: Request, filters: dict) -> list[tuple[str, str]]:
+    labels = {
+        "q": lambda v: f"«{v}»", "discipline": lambda v: domain.DISCIPLINE_BY_CODE.get(v, {}).get("short", v),
+        "organization": lambda v: v, "municipality": lambda v: v, "age_group": lambda v: v,
+        "rank": lambda v: "без разряда" if v == "none" else f"разряд {domain.RANK_BY_CODE.get(v, {}).get('short', v)}",
+        "stage": lambda v: "этап не указан" if v == "none" else f"этап {v}",
+    }
+    return [(labels[k](v), qs(request, **{k: None})) for k, v in filters.items() if v]
+
+
+@app.get("/registry", response_class=HTMLResponse)
+async def registry_page(request: Request):
+    user = await require(request, Role.ADMIN)
+    tab, filters = _registry_args(request)
+    args = list_args(request, REGISTRY_SORTS, "name")
+    if tab == "org":
+        orgs = await clients["sportsman"].get("/api/v1/organizations")
+        res, rows = None, _filter_orgs(orgs, filters)
+    else:
+        res, orgs = await asyncio.gather(_registry_people(tab, filters, args), clients["sportsman"].get("/api/v1/organizations"))
+        rows = res["items"]
+    export_qs = urlencode({"tab": tab, **{k: v for k, v in filters.items() if v}, "sort": args["sort"], "order": args["order"]})
+    return render(request, "registry.html", user=user, tab=tab, tabs=REGISTRY_TABS, rows=rows, orgs=orgs,
+                  filters=filters, export_qs=export_qs, facets=res["facets"] if res else {},
+                  pg=pages(res) if res else None, sort=args["sort"], order=args["order"],
+                  chips=_registry_chips(request, filters))
+
+
+@app.get("/registry/export.{fmt}")
+async def export_registry(request: Request, fmt: str):
+    _known_format(fmt)
+    await require(request, Role.ADMIN)
+    tab, filters = _registry_args(request)
+    if tab == "org":
+        rows = _filter_orgs(await clients["sportsman"].get("/api/v1/organizations"), filters)
+    else:  # выгружается весь отфильтрованный список, а не текущая страница
+        args = {**list_args(request, REGISTRY_SORTS, "name"), "offset": 0, "limit": listing.MAX_LIMIT}
+        first = await _registry_people(tab, filters, args)
+        rows = first["items"]
+        if first["total"] > EXPORT_MAX_ROWS:
+            raise HTTPException(422, f"Слишком много записей для выгрузки ({first['total']}) — сузьте фильтр до {EXPORT_MAX_ROWS}")
+        rest = await asyncio.gather(*(_registry_people(tab, filters, {**args, "offset": off})
+                                      for off in range(listing.MAX_LIMIT, first["total"], listing.MAX_LIMIT)))
+        for chunk in rest:
+            rows += chunk["items"]
+    labels = {"discipline": "дисциплина", "organization": "организация", "rank": "разряд", "age_group": "возрастная группа",
+              "municipality": "муниципалитет", "stage": "этап подготовки", "q": "поиск"}
+    shown = {**filters, "discipline": domain.DISCIPLINE_BY_CODE.get(filters["discipline"], {}).get("short", ""),
+             "rank": "без разряда" if filters["rank"] == "none" else filters["rank"],
+             "stage": "не указан" if filters["stage"] == "none" else filters["stage"]}
+    chosen = "; ".join(f"{labels[k]}: {v}" for k, v in shown.items() if v)
+    return await download(reports.registry_doc(tab, REGISTRY_TABS[tab], rows, chosen or "без фильтров", config.today()), fmt)
+
+
+# ---------------------------------------------------------------- модерация заявок (большие объёмы)
+APP_SORTS = ("created", "athlete", "start", "deadline")
+APP_FILTERS = ("q", "status", "competition_id", "discipline", "by")
+
+
+def _app_filters(request: Request) -> dict:
+    p = request.query_params
+    f = {k: p.get(k, "").strip() for k in APP_FILTERS}
+    if "status" not in p:  # по умолчанию — то, что ждёт решения; «all» — все статусы
+        f["status"] = "PENDING"
+    return f
+
+
+def _safe_back(url: str, default: str) -> str:
+    return url if url.startswith("/") and not url.startswith("//") else default
+
+
+@app.get("/applications", response_class=HTMLResponse)
+async def applications_page(request: Request):
+    user = await require(request, Role.ADMIN)
+    f = _app_filters(request)
+    args = list_args(request, APP_SORTS, "created", "desc")
+    query = {k: v for k, v in f.items() if v and v != "all"}
+    co = clients["competition"]
+    res, comps = await asyncio.gather(co.get("/api/v1/applications/search", **query, **args), co.get("/api/v1/competitions"))
+    if not res["items"] and res["total"] and args["offset"]:
+        args["offset"] = (res["total"] - 1) // args["limit"] * args["limit"]
+        res = await co.get("/api/v1/applications/search", **query, **args)
+    comp_by_id = {str(c["id"]): c for c in comps}
+    names = {"status": lambda v: "все статусы" if v == "all" else domain.APPLICATION_STATUS_LABELS.get(v, v).lower(),
+             "competition_id": lambda v: comp_by_id[v]["code"] if v in comp_by_id else f"#{v}",
+             "discipline": lambda v: domain.DISCIPLINE_BY_CODE.get(v, {}).get("short", v),
+             "by": lambda v: "подал тренер" if v == "trainer" else "подал сам", "q": lambda v: f"«{v}»"}
+    chips = [(names[k](v), qs(request, **{k: "all" if k == "status" else None})) for k, v in f.items()
+             if v and not (k == "status" and v == "all")]
+    with_apps = sorted((c for c in comps if str(c["id"]) in res["facets"]["competition"] or str(c["id"]) == f["competition_id"]),
+                       key=lambda c: c["start_date"], reverse=True)
+    return render(request, "applications.html", user=user, res=res, pg=pages(res), f=f, sort=args["sort"], order=args["order"],
+                  chips=chips, comps=with_apps, back_url=str(request.url.path) + (f"?{request.url.query}" if request.url.query else ""))
+
+
+@app.post("/applications/decide")
+async def decide_applications(request: Request):
+    """Решение по отмеченным заявкам или по одной (кнопка в строке: `single=СТАТУС:id`)."""
+    user = await require(request, Role.ADMIN)
+    form = await request.form()
+    back_url = _safe_back(str(form.get("back", "")), "/applications")
+    if single := str(form.get("single", "")):
+        status, _, one = single.partition(":")
+        ids = [int(one)] if one.isdigit() else []
+    else:
+        status, ids = str(form.get("status", "")), [int(x) for x in form.getlist("ids") if str(x).isdigit()]
+    if not ids:
+        return back(back_url, "error", "Отметьте хотя бы одну заявку")
+    try:
+        res = await clients["competition"].post("/api/v1/applications/decisions", json={
+            "ids": ids, "status": status, "actor": user["person"]["fsp_id"], "comment": str(form.get("comment", "")).strip()})
+    except ServiceError as exc:
+        return back(back_url, "error", humanize(exc.detail))
+    groups: dict[tuple[str, str], set[str]] = {}
+    for a in res["done"]:
+        groups.setdefault((a["status_label"], a["competition_title"] + (f" · {a['comment']}" if a.get("comment") else "")),
+                          set()).update({a["athlete_fsp_id"], a["submitted_by"]})
+    await asyncio.gather(*(notify.notify_many(ids_, f"Заявка: {label}", text, "/cabinet") for (label, text), ids_ in groups.items()))
+    verdict = "одобрено" if status == "APPROVED" else "отклонено"
+    msg = f"{verdict.capitalize()}: {len(res['done'])}"
+    if res["failed"]:
+        msg += f"; пропущено {len(res['failed'])} (решение уже принято или заявка не найдена)"
+    return back(back_url, "ok" if res["done"] else "error", msg)
+
+
+# ---------------------------------------------------------------- журнал действий
+AUDIT_FILTERS = ("q", "service", "actor", "date_from", "date_to")
+
+
+async def _audit_rows(f: dict) -> list[dict]:
+    query = {k: f[k] for k in ("q", "actor", "date_from", "date_to") if f[k]}
+    services = [s for s in ("sportsman", "competition") if not f["service"] or f["service"] == s]
+    try:
+        chunks = await asyncio.gather(*(clients[s].get("/api/v1/audit", limit=listing.AUDIT_LIMIT, **query) for s in services))
+    except ServiceError as exc:
+        if exc.unavailable:
+            raise
+        raise HTTPException(422, humanize(exc.detail)) from exc
+    return sorted((a for chunk in chunks for a in chunk), key=lambda a: a["at"], reverse=True)
+
+
+@app.get("/audit", response_class=HTMLResponse)
+async def audit_page(request: Request):
+    user = await require(request, Role.ADMIN)
+    f = {k: request.query_params.get(k, "").strip() for k in AUDIT_FILTERS}
+    args = list_args(request, ("at",), "at", "desc")
+    rows = await _audit_rows(f)
+    if args["order"] == "asc":
+        rows.reverse()
+    res = listing.page(rows, args["offset"], args["limit"])
+    if not res["items"] and res["total"]:
+        res = listing.page(rows, (res["total"] - 1) // args["limit"] * args["limit"], args["limit"])
+    names = {"q": lambda v: f"«{v}»", "service": lambda v: v, "actor": lambda v: f"автор {v}",
+             "date_from": lambda v: f"с {ru_date(v)}", "date_to": lambda v: f"по {ru_date(v)}"}
+    chips = [(names[k](v), qs(request, **{k: None})) for k, v in f.items() if v]
+    export_qs = urlencode({k: v for k, v in f.items() if v})
+    return render(request, "audit.html", user=user, rows=res["items"], pg=pages(res), f=f, order=args["order"],
+                  chips=chips, export_qs=export_qs)
+
+
+@app.get("/audit/export.{fmt}")
+async def export_audit(request: Request, fmt: str):
+    _known_format(fmt)
+    await require(request, Role.ADMIN)
+    f = {k: request.query_params.get(k, "").strip() for k in AUDIT_FILTERS}
+    rows = await _audit_rows(f)
+    chosen = "; ".join(f"{k}: {v}" for k, v in f.items() if v)
+    return await download(reports.audit_doc(rows, chosen or "без фильтров", config.today()), fmt)
 
 
 # ---------------------------------------------------------------- сборные команды и проект приказа

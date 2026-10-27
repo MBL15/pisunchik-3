@@ -12,7 +12,7 @@
   <div class="min-w-0">
     <div class="flex flex-wrap items-center gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{{ m.tag(c.level_status) }}{{ m.tag(c.type) }}{{ m.tag(c.format_label, "amber" if c.format == "HYBRID" else "slate") }}</div>
     <p class="mt-2 font-medium text-white">{{ c.title }}</p>
-    <p class="mt-1 text-xs text-fsp-muted">{{ c.venue }} · {{ c.age_group }}{% if c.format_note %} · <span class="text-amber-200">{{ c.format_note }}</span>{% endif %}</p>
+    <p class="mt-1 text-xs text-fsp-muted">{{ c.venue }} · {{ c.age_group }}{% if c.age_ok is true %} <span class="font-mono text-emerald-300">· вы проходите по возрасту</span>{% elif c.age_ok is false %} <span class="font-mono text-fsp-dim2">· не ваш возраст</span>{% endif %}{% if c.format_note %} · <span class="text-amber-200">{{ c.format_note }}</span>{% endif %}</p>
     <p class="mt-1 font-mono text-[11px] text-fsp-muted">{{ c.plan_label }} {{ c.plan_number }}</p>
   </div>
   <div class="flex flex-col items-start gap-1 font-mono text-[11px] text-fsp-muted sm:items-end">
@@ -29,21 +29,43 @@
 <div class="pt-10">
   {{ m.section_head("cal --season", "Календарь соревнований", "Очные, онлайн и смешанные соревнования региона. У каждого старта указан календарный план (ЕКП Минспорта России или план Оренбургской области) и номер в нём.") }}
   {{ m.degraded_notice(degraded) }}
-  <form method="get" class="mb-8 grid gap-3 border border-fsp-line bg-fsp-panel p-4 sm:grid-cols-4 rounded-xl">
-    <div>
-      <label for="f-d" class="{{ m.LABEL }}">Дисциплина</label>
-      <select id="f-d" name="discipline" class="{{ m.INPUT }}"><option value="">Все</option>{% for d in D.DISCIPLINES %}<option value="{{ d.code }}" {% if filters.discipline == d.code %}selected{% endif %}>{{ d.short }}</option>{% endfor %}</select>
+  <form method="get" data-autosubmit class="mb-4 grid gap-3 rounded-xl border border-fsp-line bg-fsp-panel p-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6" aria-label="Фильтры календаря">
+    <div class="sm:col-span-2">{{ m.search_box(filters.q, "Название, код, место, номер в плане", "f-q") }}</div>
+    <div class="fsp-more">
+      <label for="f-d" class="sr-only">Дисциплина</label>
+      <select id="f-d" name="discipline" class="{{ m.INPUT }}"><option value="">Все дисциплины</option>{% for d in D.DISCIPLINES %}<option value="{{ d.code }}" {% if filters.discipline == d.code %}selected{% endif %}>{{ d.short }}</option>{% endfor %}</select>
     </div>
-    <div>
-      <label for="f-p" class="{{ m.LABEL }}">Календарный план</label>
-      <select id="f-p" name="plan" class="{{ m.INPUT }}"><option value="">Все</option>{% for k, v in D.CALENDAR_PLAN_LABELS.items() %}<option value="{{ k }}" {% if filters.plan == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+    <div class="fsp-more">
+      <label for="f-s" class="sr-only">Статус соревнования</label>
+      <select id="f-s" name="status" class="{{ m.INPUT }}"><option value="">Любой статус</option>{% for k, v in D.COMPETITION_STATUS_LABELS.items() %}<option value="{{ k }}" {% if filters.status == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
     </div>
-    <div>
-      <label for="f-f" class="{{ m.LABEL }}">Формат</label>
-      <select id="f-f" name="format" class="{{ m.INPUT }}"><option value="">Все</option>{% for k, v in D.FORMAT_LABELS.items() %}<option value="{{ k }}" {% if filters.format == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+    <div class="fsp-more">
+      <label for="f-l" class="sr-only">Уровень</label>
+      <select id="f-l" name="level" class="{{ m.INPUT }}"><option value="">Любой уровень</option>{% for k, v in D.LEVEL_LABELS.items() %}<option value="{{ k }}" {% if filters.level == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
     </div>
-    <div class="flex items-end"><button class="{{ m.BTN }} w-full">Фильтр</button></div>
+    <div class="fsp-more">
+      <label for="f-y" class="sr-only">Сезон</label>
+      <select id="f-y" name="season" class="{{ m.INPUT }}"><option value="">Все сезоны</option>{% for y in seasons %}<option {% if filters.season == y|string %}selected{% endif %}>{{ y }}</option>{% endfor %}</select>
+    </div>
+    <div class="fsp-more">
+      <label for="f-p" class="sr-only">Календарный план</label>
+      <select id="f-p" name="plan" class="{{ m.INPUT }}"><option value="">Любой план</option>{% for k, v in D.CALENDAR_PLAN_LABELS.items() %}<option value="{{ k }}" {% if filters.plan == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+    </div>
+    <div class="fsp-more">
+      <label for="f-f" class="sr-only">Формат</label>
+      <select id="f-f" name="format" class="{{ m.INPUT }}"><option value="">Любой формат</option>{% for k, v in D.FORMAT_LABELS.items() %}<option value="{{ k }}" {% if filters.format == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+    </div>
+    <div class="fsp-more sm:col-span-2">
+      <label for="f-a" class="sr-only">Возрастная группа</label>
+      <select id="f-a" name="age_group" class="{{ m.INPUT }}"><option value="">Любая возрастная группа</option>{% for g in D.AGE_GROUPS %}<option {% if filters.age_group == g %}selected{% endif %}>{{ g }}</option>{% endfor %}</select>
+    </div>
+    {% if athlete %}
+    <label class="fsp-more flex items-center gap-2 text-sm text-fsp-soft sm:col-span-2"><input type="checkbox" name="mine" value="1" {% if filters.mine %}checked{% endif %} class="h-4 w-4 accent-fsp-blue">Только мои: дисциплины и возраст ({{ athlete.age }})</label>
+    {% endif %}
+    <button type="button" data-filters-toggle aria-expanded="false" class="{{ m.BTN_SM }} justify-center sm:hidden">Фильтры{% if chips %} · {{ chips|length }}{% endif %} <span aria-hidden="true">▾</span></button>
+    <noscript><button class="{{ m.BTN }} w-full">Фильтр</button></noscript>
   </form>
+  <div class="mb-8">{{ m.filter_chips(chips, qs(request, q=None, discipline=None, status=None, level=None, season=None, plan=None, format=None, age_group=None, mine=None)) }}</div>
 
   <h2 class="mb-3 font-mono text-xs font-bold uppercase tracking-wider text-fsp-violet">// предстоящие и идущие · {{ upcoming|length }}</h2>
   <ul class="grid gap-3" data-stagger>{% for c in upcoming %}{{ comp_row(c) }}{% else %}<li class="font-mono text-sm text-fsp-muted">// нет</li>{% endfor %}</ul>
@@ -55,7 +77,8 @@
   </section>
   {% endfor %}
 
-  <h2 class="mb-3 mt-12 font-mono text-xs font-bold uppercase tracking-wider text-fsp-muted">// завершённые · {{ past|length }}</h2>
+  <h2 id="past" class="mb-3 mt-12 scroll-mt-24 font-mono text-xs font-bold uppercase tracking-wider text-fsp-muted">// завершённые · {{ past_pg.total }}</h2>
   <ul class="grid gap-3">{% for c in past %}{{ comp_row(c) }}{% else %}<li class="font-mono text-sm text-fsp-muted">// нет</li>{% endfor %}</ul>
+  {% if past_pg.pages > 1 %}<div class="mt-4">{{ m.pager(past_pg, request, "завершённых") }}</div>{% endif %}
 </div>
 {% endblock %}

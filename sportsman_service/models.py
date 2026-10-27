@@ -77,6 +77,44 @@ class Guardian(BaseModel):
     consent_at: datetime
 
 
+class Antidoping(BaseModel):
+    """Отметка о прохождении онлайн-курса РУСАДА."""
+    course_date: date
+    certificate_url: str
+
+
+class AntidopingIn(BaseModel):
+    course_date: date
+    certificate_url: str = Field(min_length=8, max_length=300)
+
+    @field_validator("certificate_url")
+    @classmethod
+    def _url(cls, v: str) -> str:
+        v = v.strip()
+        if not v.startswith(("https://", "http://")):
+            raise ValueError("Ссылка на сертификат должна начинаться с https://")
+        return v
+
+
+class Notification(BaseModel):
+    id: int
+    fsp_id: str
+    title: str
+    text: str = ""
+    link: str = ""
+    key: str = ""  # для напоминаний: одно уведомление на ключ
+    at: datetime
+    read: bool = False
+
+
+class NotificationIn(BaseModel):
+    fsp_ids: list[str] = Field(min_length=1, max_length=1000)
+    title: str = Field(min_length=1, max_length=200)
+    text: str = Field(default="", max_length=600)
+    link: str = Field(default="", max_length=300)
+    key: str = Field(default="", max_length=200)
+
+
 class PersonRecord(BaseModel):
     """Internal storage model. Never returned directly (holds password hash)."""
     fsp_id: str
@@ -91,6 +129,8 @@ class PersonRecord(BaseModel):
     roles: list[str]
     disciplines: list[str]
     start_year: int
+    training_stage: str | None = None  # код из TRAINING_STAGES
+    antidoping: Antidoping | None = None
     email: str | None = None
     password_hash: str | None = None
     rank: RankRecord | None = None

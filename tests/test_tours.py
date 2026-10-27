@@ -5,7 +5,8 @@ import unittest
 from gateway_service import tours
 
 TEMPLATES = ["landing.html", "calendar.html", "rating.html", "register.html", "cabinet_athlete.html", "cabinet_trainer.html",
-             "cabinet_judge.html", "cabinet_admin.html", "teams.html", "team.html", "report_headcount.html", "protocol.html"]
+             "cabinet_judge.html", "cabinet_admin.html", "teams.html", "team.html", "report_headcount.html", "protocol.html",
+             "registry.html", "applications.html", "audit.html"]
 
 
 def user(role="admin", roles=("admin", "judge")):

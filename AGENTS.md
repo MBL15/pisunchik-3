@@ -1,7 +1,7 @@
 # AGENTS.md
 
 - Python interpreter: use `py` (Windows launcher, Python 3.14). Plain `python` resolves to the Microsoft Store stub.
-- Run the stack: `py run_all.py` (ports 8000/8001/8002, live-reload; state is in-memory and reseeds on reload).
+- Run the stack: `py run_all.py` (ports 8000/8001/8002, live-reload; state is in-memory and reseeds on reload). On cp1251 consoles use `py -X utf8 run_all.py` — the banner/box-drawing output crashes on cp1251.
 - Unit tests: `py -m unittest -v`. E2E smoke (stack must be running): `py -X utf8 tests/e2e_smoke.py`.
 - Starlette 1.0: use `templates.TemplateResponse(request, name, context)`.
 - Jinja macros used inside a child template must be defined inside a `{% block %}`.

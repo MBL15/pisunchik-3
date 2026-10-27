@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Реестр · ФСП Оренбург{% endblock %}
+{% block content %}
+{% set people = tab != "org" %}
+{# Вариант списка с числом найденных записей при выборе этого значения (фасет считается без собственного фильтра) #}
+{% macro opt(value, label, current, facet) -%}
+{% set n = facet.get(value, 0) if facet is not none else none %}
+<option value="{{ value }}" {% if current == value %}selected{% endif %}{% if n == 0 and current != value %} class="text-fsp-dim2"{% endif %}>{{ label }}{% if n is not none %} · {{ n }}{% endif %}</option>
+{%- endmacro %}
+<div class="pt-10">
+  {{ m.section_head("registry --search --filter", "Реестр", "Спортсмены, тренеры, судьи и организации по всем шести дисциплинам. Поиск по словам (ФИО, ФСП ID, организация, муниципалитет), фильтры применяются сразу, рядом с каждым значением — сколько записей найдётся. «/» — к поиску, Esc — очистить.") }}
+
+  <nav class="mb-4 flex flex-wrap gap-1.5" aria-label="Разделы реестра">
+    {% for key, label in tabs.items() %}
+    {% set n = facets.role.get(key) if facets and key != "org" else none %}
+    <a href="{{ qs(request, tab=key) }}" class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 font-mono text-xs {% if key == tab %}border-fsp-blue bg-fsp-blue text-white{% else %}border-fsp-line2 text-fsp-soft hover:border-fsp-blue hover:text-fsp-light{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}{% if n is not none %}<span class="rounded bg-black/25 px-1.5 text-[10px] tabular-nums">{{ n }}</span>{% endif %}</a>
+    {% endfor %}
+  </nav>
+
+  <form method="get" data-autosubmit class="z-20 mb-4 lg:sticky lg:top-[84px] grid gap-3 rounded-xl border border-fsp-line bg-fsp-panel/95 p-4 shadow-[0_12px_32px_-16px_rgba(0,0,0,0.8)] backdrop-blur sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6" aria-label="Фильтры реестра">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    {% if request.query_params.per %}<input type="hidden" name="per" value="{{ request.query_params.per }}">{% endif %}
+    {% if people %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="order" value="{{ order }}">{% endif %}
+    <div class="sm:col-span-2 lg:col-span-4 xl:col-span-2">{{ m.search_box(filters.q, "ФИО, ФСП ID, организация, город" if people else "Название, тип, город", "r-q") }}</div>
+    <div class="fsp-more">
+      <label for="r-d" class="sr-only">Дисциплина</label>
+      <select id="r-d" name="discipline" class="{{ m.INPUT }}"><option value="">Все дисциплины</option>{% for d in D.DISCIPLINES %}{{ opt(d.code, d.short, filters.discipline, facets.discipline if people else none) }}{% endfor %}</select>
+    </div>
+    <div class="fsp-more">
+      <label for="r-m" class="sr-only">Муниципалитет</label>
+      <select id="r-m" name="municipality" class="{{ m.INPUT }}"><option value="">Все муниципалитеты</option>{% for x in D.MUNICIPALITIES %}{{ opt(x, x, filters.municipality, facets.municipality if people else none) }}{% endfor %}</select>
+    </div>
+    {% if people %}
+    <div class="fsp-more sm:col-span-2 xl:col-span-2">
+      <label for="r-o" class="sr-only">Организация</label>
+      <select id="r-o" name="organization" class="{{ m.INPUT }}"><option value="">Все организации</option>{% for o in orgs %}{{ opt(o.name, o.name, filters.organization, facets.organization) }}{% endfor %}{{ opt(D.NO_ORGANIZATION, D.NO_ORGANIZATION, filters.organization, facets.organization) }}</select>
+    </div>
+    <div class="fsp-more">
+      <label for="r-a" class="sr-only">Возрастная группа</label>
+      <select id="r-a" name="age_group" class="{{ m.INPUT }}"><option value="">Любой возраст</option>{% for g in D.AGE_GROUPS %}{{ opt(g, g, filters.age_group, facets.age_group) }}{% endfor %}</select>
+    </div>
+    {% if tab == "athlete" %}
+    <div class="fsp-more">
+      <label for="r-r" class="sr-only">Разряд</label>
+      <select id="r-r" name="rank" class="{{ m.INPUT }}"><option value="">Любой разряд</option>{{ opt("none", "Без разряда", filters.rank, facets.rank) }}{% for r in D.SPORT_RANKS %}{{ opt(r.code, r.short, filters.rank, facets.rank) }}{% endfor %}</select>
+    </div>
+    <div class="fsp-more">
+      <label for="r-s" class="sr-only">Этап подготовки</label>
+      <select id="r-s" name="stage" class="{{ m.INPUT }}"><option value="">Любой этап</option>{% for k, v in D.TRAINING_STAGES.items() %}{{ opt(k, k ~ " — " ~ v|replace("Этап ", "")|replace(" этап", ""), filters.stage, facets.stage) }}{% endfor %}{{ opt("none", "Этап не указан", filters.stage, facets.stage) }}</select>
+    </div>
+    {% endif %}
+    {% endif %}
+    <button type="button" data-filters-toggle aria-expanded="false" class="{{ m.BTN_SM }} justify-center sm:hidden">Фильтры{% if chips %} · {{ chips|length }}{% endif %} <span aria-hidden="true">▾</span></button>
+    <noscript><button class="{{ m.BTN }} w-full">Найти</button></noscript>
+  </form>
+
+  <div class="no-print mb-3 flex flex-wrap items-center justify-between gap-3">
+    {{ m.filter_chips(chips, qs(request, q=None, discipline=None, organization=None, rank=None, age_group=None, municipality=None, stage=None)) }}
+    <span class="ml-auto">{{ m.export_links("/registry/export", "Выгрузить всё найденное", export_qs) }}</span>
+  </div>
+
+  {% if people %}
+  <div class="mb-3">{{ m.pager(pg, request, "записей") }}</div>
+  <div class="max-h-[72vh] overflow-auto rounded-xl border border-fsp-line bg-fsp-panel">
+    <table class="w-full min-w-[880px] border-collapse text-sm">
+      <caption class="sr-only">{{ tabs[tab] }}: {{ pg.total }}</caption>
+      <thead class="sticky top-0 z-10 border-b border-fsp-line bg-fsp-bg"><tr>
+        {{ m.sort_th("Участник", "name", request, sort, order) }}
+        {{ m.sort_th("Возраст", "age", request, sort, order) }}
+        {{ m.sort_th("Организация · муниципалитет", "organization", request, sort, order) }}
+        <th scope="col" class="{{ m.TH }}">Дисциплины</th>
+        {{ m.sort_th("С года", "start_year", request, sort, order, default_order="desc") }}
+        {% if tab == "athlete" %}<th scope="col" class="{{ m.TH }}">Этап</th>{{ m.sort_th("Разряд", "rank", request, sort, order, default_order="desc") }}<th scope="col" class="{{ m.TH }}">РУСАДА</th>
+        {% elif tab == "judge" %}<th scope="col" class="{{ m.TH }}">Категория</th>{% endif %}
+      </tr></thead>
+      <tbody>
+        {% for p in rows %}
+        <tr class="border-b border-fsp-line/60 align-top hover:bg-fsp-card/50 {% if p.is_sanctioned %}bg-fsp-red/5{% endif %}">
+          <td class="px-3 py-2.5">
+            <p class="text-fsp-light">{{ p.full_name }}</p>
+            <p class="font-mono text-[11px] text-fsp-muted"><button type="button" data-copy="{{ p.fsp_id }}" class="hover:text-fsp-violet" title="Скопировать ФСП ID">{{ p.fsp_id }}</button>{% if p.roles|length > 1 %} · {{ p.role_labels|join(" + ") }}{% endif %}</p>
+            {% for s in p.sanctions if s.active %}<p class="font-mono text-[11px] text-rose-300">{{ s.label }} до {{ s.date_to|ru_date }}</p>{% endfor %}
+          </td>
+          <td class="px-3 py-2.5 font-mono text-xs text-fsp-soft">{{ p.age }}<span class="block text-[11px] text-fsp-dim2">{{ p.birth_date|ru_date }}</span>{% if p.is_minor and p.guardian %}<span class="block text-[11px] text-emerald-300">согласие представителя</span>{% endif %}</td>
+          <td class="px-3 py-2.5 text-xs"><a href="{{ qs(request, organization=p.organization) }}" class="text-fsp-light hover:text-fsp-violet hover:underline" title="Показать только эту организацию">{{ p.organization }}</a><a href="{{ qs(request, municipality=p.municipality) }}" class="block text-fsp-muted hover:text-fsp-violet hover:underline">{{ p.municipality }}</a></td>
+          <td class="px-3 py-2.5"><div class="flex flex-wrap gap-1">{% for d in p.disciplines %}<a href="{{ qs(request, discipline=d) }}" title="Показать только эту дисциплину">{{ m.tag(D.DISCIPLINE_BY_CODE[d].short, "blue") }}</a>{% else %}<span class="text-fsp-dim2">—</span>{% endfor %}</div></td>
+          <td class="px-3 py-2.5 font-mono text-xs text-fsp-soft">{{ p.start_year }}</td>
+          {% if tab == "athlete" %}
+          <td class="px-3 py-2.5 font-mono text-xs text-fsp-soft" title="{{ p.training_stage_label }}">{{ p.training_stage or "—" }}</td>
+          <td class="px-3 py-2.5"><div class="grid justify-items-start gap-1">{{ m.rank_pill(p.rank) }}{% if p.rank and p.rank.expires_at %}{{ m.expiry_badge(p.rank.state, p.rank.days_left) }}{% endif %}</div></td>
+          <td class="px-3 py-2.5 font-mono text-[11px]">{% if p.antidoping %}<a href="{{ p.antidoping.certificate_url }}" target="_blank" rel="noopener" class="text-emerald-300 hover:underline">{{ p.antidoping.course_date|ru_date }}</a>{% else %}<span class="text-amber-300">нет отметки</span>{% endif %}</td>
+          {% elif tab == "judge" %}
+          <td class="px-3 py-2.5">{% if p.judge_category %}<div class="grid justify-items-start gap-1"><span class="rounded-md border border-fsp-dim bg-fsp-card px-1.5 py-0.5 font-mono text-xs font-bold text-fsp-light" title="{{ p.judge_category.title }}">{{ p.judge_category.code }}</span>{{ m.expiry_badge(p.judge_category.state, p.judge_category.days_left) }}</div>{% else %}<span class="text-fsp-dim2">—</span>{% endif %}</td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="px-3 py-10 text-center font-mono text-sm text-fsp-muted">// никого не найдено — уберите часть фильтров{% if chips %} или <a href="{{ qs(request, q=None, discipline=None, organization=None, rank=None, age_group=None, municipality=None, stage=None) }}" class="text-fsp-violet underline">сбросьте всё</a>{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="mt-3">{{ m.pager(pg, request, "записей") }}</div>
+  {% else %}
+  <p class="mb-3 font-mono text-xs text-fsp-muted">найдено: <span class="font-bold text-fsp-light">{{ rows|length }}</span></p>
+  <ul class="grid gap-3 md:grid-cols-2" aria-label="Организации">
+    {% for o in rows %}
+    <li class="{{ m.CARD }} p-5">
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        <p class="min-w-0 font-medium text-white">{{ o.name }}</p>
+        {{ m.tag(o.type) }}
+      </div>
+      <p class="mt-1 font-mono text-[11px] text-fsp-muted">{{ o.municipality }}</p>
+      <dl class="mt-4 grid grid-cols-4 gap-2 text-center font-mono">
+        <div><dt class="text-[10px] uppercase text-fsp-muted">спортсм.</dt><dd class="text-lg font-bold text-fsp-violet">{{ o.athletes }}</dd></div>
+        <div><dt class="text-[10px] uppercase text-fsp-muted">с разрядом</dt><dd class="text-lg font-bold text-emerald-300">{{ o.with_rank }}</dd></div>
+        <div><dt class="text-[10px] uppercase text-fsp-muted">тренеров</dt><dd class="text-lg font-bold text-fsp-light">{{ o.trainers }}</dd></div>
+        <div><dt class="text-[10px] uppercase text-fsp-muted">судей</dt><dd class="text-lg font-bold text-fsp-light">{{ o.judges }}</dd></div>
+      </dl>
+      <div class="mt-4 flex flex-wrap gap-1">{% for d in o.discipline_labels %}{{ m.tag(d, "blue") }}{% endfor %}</div>
+      {% if o.athletes %}<p class="mt-3 font-mono text-[11px] text-fsp-muted">этапы: {% for k, n in o.stages.items() if n %}{{ k }} — {{ n }}{% if not loop.last %} · {% endif %}{% else %}не указаны{% endfor %}</p>{% endif %}
+      <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px]">
+        <a href="/registry?tab=athlete&amp;organization={{ o.name|urlencode }}" class="text-fsp-violet hover:underline">спортсмены →</a>
+        <a href="/registry?tab=trainer&amp;organization={{ o.name|urlencode }}" class="text-fsp-violet hover:underline">тренеры →</a>
+      </div>
+    </li>
+    {% else %}
+    <li class="font-mono text-sm text-fsp-muted">// нет организаций по фильтру</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endblock %}

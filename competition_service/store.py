@@ -5,6 +5,7 @@ from competition_service.log_parser import parse_log, rank_manual
 from competition_service.models import Application, Competition, Protocol, Team
 from competition_service.rating import RatingSettings, base_points
 from shared import config
+from shared.listing import AUDIT_LIMIT
 from shared.domain import (
     APPLICATION_STATUS_LABELS, CALENDAR_PLAN_LABELS, COMPETITION_STATUS_LABELS, DEFAULT_COMPETITION_TYPES,
     DISCIPLINE_BY_CODE, FORMAT_LABELS, LEVEL_LABELS, LEVEL_STATUS_LABELS, REGION_CODE, TEAM_ROLE_LABELS,
@@ -30,7 +31,7 @@ class Store:
     def log(self, actor: str, action: str, obj: str) -> None:
         self.audit.insert(0, {"at": datetime.now().isoformat(timespec="seconds"), "service": "competition",
                               "actor": actor, "action": action, "object": obj})
-        del self.audit[200:]
+        del self.audit[AUDIT_LIMIT:]
 
     def approved(self, cid: int) -> dict[str, Application]:
         return {a.athlete_fsp_id: a for a in self.applications
@@ -126,3 +127,46 @@ class Store:
 
 
 store = Store()
+
+DDL = """
+CREATE TABLE IF NOT EXISTS comp_competitions (key TEXT PRIMARY KEY, data JSONB NOT NULL);
+CREATE TABLE IF NOT EXISTS comp_protocols (key TEXT PRIMARY KEY, data JSONB NOT NULL);
+CREATE TABLE IF NOT EXISTS comp_applications (key TEXT PRIMARY KEY, data JSONB NOT NULL);
+CREATE TABLE IF NOT EXISTS comp_teams (key TEXT PRIMARY KEY, data JSONB NOT NULL);
+CREATE TABLE IF NOT EXISTS comp_documents (key TEXT PRIMARY KEY, data JSONB NOT NULL);
+CREATE TABLE IF NOT EXISTS comp_meta (key TEXT PRIMARY KEY, data JSONB NOT NULL);
+"""
+
+
+def snapshot(s: Store) -> dict:
+    dump = lambda m: m.model_dump(mode="json")  # noqa: E731
+    return {
+        "comp_competitions": {str(k): (dump(v), {}) for k, v in s.competitions.items()},
+        "comp_protocols": {str(k): (dump(v), {}) for k, v in s.protocols.items()},
+        "comp_applications": {str(a.id): (dump(a), {}) for a in s.applications},
+        "comp_teams": {str(k): (dump(v), {}) for k, v in s.teams.items()},
+        "comp_documents": {k: (v, {}) for k, v in s.documents.items()},
+        "comp_meta": {
+            "settings": ({"points": s.settings.points, "coefficient": s.settings.coefficient,
+                          "min_podiums": s.settings.min_podiums}, {}),
+            "types": ({"items": s.competition_types}, {}),
+            "counters": ({"doc_seq": s.doc_seq}, {}),
+            "audit": ({"items": s.audit}, {}),
+        },
+    }
+
+
+def restore(s: Store, rows: dict[str, dict[str, dict]]) -> None:
+    """Накладывает сохранённое состояние на засеянное; живые (воспроизводимые) протоколы остаются из seed."""
+    s.competitions = {int(k): Competition.model_validate(d) for k, d in rows["comp_competitions"].items()}
+    live = set(s.live_queue) | set(s.live_replay)
+    s.protocols = {**{int(k): Protocol.model_validate(d) for k, d in rows["comp_protocols"].items() if int(k) not in live},
+                   **{k: v for k, v in s.protocols.items() if k in live}}
+    s.applications = sorted((Application.model_validate(d) for d in rows["comp_applications"].values()), key=lambda a: a.id)
+    s.teams = {int(k): Team.model_validate(d) for k, d in rows["comp_teams"].items()}
+    s.documents = dict(rows["comp_documents"])
+    meta = rows["comp_meta"]
+    s.settings = RatingSettings(**meta["settings"])
+    s.competition_types = meta["types"]["items"]
+    s.doc_seq = meta["counters"]["doc_seq"]
+    s.audit = meta["audit"]["items"]

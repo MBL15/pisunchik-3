@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Заявки на соревнования · ФСП Оренбург{% endblock %}
+{% block content %}
+{% macro opt(value, label, current, facet) -%}
+{% set n = facet.get(value, 0) %}
+<option value="{{ value }}" {% if current == value %}selected{% endif %}>{{ label }} · {{ n }}</option>
+{%- endmacro %}
+{% set fc = res.facets %}
+<div class="pt-10">
+  {{ m.section_head("applications --moderate --bulk", "Заявки на соревнования", "Модерация любого объёма: поиск по спортсмену и соревнованию, фильтры со счётчиками, сортировка. Отметьте заявки флажками (Shift — диапазон) и примите решение сразу по всем — каждый получит уведомление.") }}
+  <div class="mb-4"><a href="/cabinet#inbox" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a></div>
+
+  <form method="get" data-autosubmit class="z-20 mb-4 grid gap-3 rounded-xl border border-fsp-line bg-fsp-panel/95 p-4 backdrop-blur sm:grid-cols-2 lg:sticky lg:top-[84px] lg:grid-cols-6" aria-label="Фильтры заявок">
+    {% if request.query_params.per %}<input type="hidden" name="per" value="{{ request.query_params.per }}">{% endif %}
+    <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="order" value="{{ order }}">
+    <div class="sm:col-span-2">{{ m.search_box(f.q, "Спортсмен, ФСП ID, соревнование, код", "a-q") }}</div>
+    <div class="fsp-more">
+      <label for="a-s" class="sr-only">Статус</label>
+      <select id="a-s" name="status" class="{{ m.INPUT }}">
+        <option value="all" {% if f.status == "all" %}selected{% endif %}>Все статусы · {{ fc.status.values()|sum }}</option>
+        {% for k, v in D.APPLICATION_STATUS_LABELS.items() %}{{ opt(k, v, f.status, fc.status) }}{% endfor %}
+      </select>
+    </div>
+    <div class="fsp-more sm:col-span-2 lg:col-span-1">
+      <label for="a-c" class="sr-only">Соревнование</label>
+      <select id="a-c" name="competition_id" class="{{ m.INPUT }}"><option value="">Все соревнования</option>{% for c in comps %}{{ opt(c.id|string, c.code ~ " · " ~ c.title, f.competition_id, fc.competition) }}{% endfor %}</select>
+    </div>
+    <div class="fsp-more">
+      <label for="a-d" class="sr-only">Дисциплина</label>
+      <select id="a-d" name="discipline" class="{{ m.INPUT }}"><option value="">Все дисциплины</option>{% for d in D.DISCIPLINES %}{{ opt(d.code, d.short, f.discipline, fc.discipline) }}{% endfor %}</select>
+    </div>
+    <div class="fsp-more">
+      <label for="a-b" class="sr-only">Кто подал</label>
+      <select id="a-b" name="by" class="{{ m.INPUT }}"><option value="">Подал кто угодно</option><option value="trainer" {% if f.by == "trainer" %}selected{% endif %}>Подал тренер</option><option value="self" {% if f.by == "self" %}selected{% endif %}>Подал сам спортсмен</option></select>
+    </div>
+    <button type="button" data-filters-toggle aria-expanded="false" class="{{ m.BTN_SM }} justify-center sm:hidden">Фильтры{% if chips %} · {{ chips|length }}{% endif %} <span aria-hidden="true">▾</span></button>
+    <noscript><button class="{{ m.BTN }} w-full">Найти</button></noscript>
+  </form>
+
+  <div class="mb-3">{{ m.filter_chips(chips, qs(request, q=None, status="all", competition_id=None, discipline=None, by=None)) }}</div>
+
+  <form method="post" action="/applications/decide" data-bulk>
+    <input type="hidden" name="back" value="{{ back_url }}">
+    <div class="z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-fsp-line bg-fsp-panel px-4 py-3 transition-colors [&.is-selecting]:border-fsp-blue" aria-label="Решение по отмеченным">
+      <span class="font-mono text-xs text-fsp-muted">отмечено: <span data-bulk-count class="font-bold text-fsp-light">0</span></span>
+      <label for="bulk-comment" class="sr-only">Комментарий к решению</label>
+      <input id="bulk-comment" name="comment" maxlength="300" placeholder="комментарий (при отказе — причина)" class="{{ m.INPUT }} !w-auto min-w-[12rem] flex-1 !py-1.5 text-xs">
+      <button name="status" value="APPROVED" data-bulk-action class="{{ m.BTN_OK }} disabled:cursor-not-allowed disabled:opacity-40">{{ m.icon("check", "h-3.5 w-3.5") }}Одобрить отмеченные</button>
+      <button name="status" value="REJECTED" data-bulk-action data-confirm="Отклонить все отмеченные заявки? Решение нельзя изменить, спортсмены получат отказ." data-confirm-label="Отклонить" class="{{ m.BTN_NO }} disabled:cursor-not-allowed disabled:opacity-40">{{ m.icon("x", "h-3.5 w-3.5") }}Отклонить</button>
+    </div>
+
+    <div class="mb-3">{{ m.pager(pg, request, "заявок") }}</div>
+    <div class="max-h-[70vh] overflow-auto rounded-xl border border-fsp-line bg-fsp-panel">
+      <table class="w-full min-w-[960px] border-collapse text-sm">
+        <caption class="sr-only">Заявки: {{ pg.total }}</caption>
+        <thead class="sticky top-0 z-10 border-b border-fsp-line bg-fsp-bg"><tr>
+          <th scope="col" class="{{ m.TH }} w-10"><input type="checkbox" data-bulk-all aria-label="Отметить все на странице" class="h-4 w-4 cursor-pointer accent-[#402FFF]"></th>
+          {{ m.sort_th("Спортсмен", "athlete", request, sort, order) }}
+          {{ m.sort_th("Соревнование", "start", request, sort, order) }}
+          {{ m.sort_th("Приём до", "deadline", request, sort, order) }}
+          {{ m.sort_th("Подана", "created", request, sort, order, default_order="desc") }}
+          <th scope="col" class="{{ m.TH }}">Статус</th>
+          <th scope="col" class="{{ m.TH }} text-right">Решение</th>
+        </tr></thead>
+        <tbody>
+          {% for a in res["items"] %}
+          {% set pending = a.status == "PENDING" %}
+          <tr class="border-b border-fsp-line/60 align-top hover:bg-fsp-card/50 has-[:checked]:bg-fsp-blue/10">
+            <td class="px-3 py-2.5">{% if pending %}<input type="checkbox" name="ids" value="{{ a.id }}" data-bulk-item aria-label="Отметить заявку {{ a.athlete_name }}" class="h-4 w-4 cursor-pointer accent-[#402FFF]">{% endif %}</td>
+            <td class="px-3 py-2.5"><p class="text-fsp-light">{{ a.athlete_name }}</p><p class="font-mono text-[11px] text-fsp-muted">{{ a.athlete_fsp_id }}</p></td>
+            <td class="px-3 py-2.5"><a href="{{ qs(request, competition_id=a.competition_id) }}" class="text-fsp-light hover:text-fsp-violet hover:underline" title="Только это соревнование">{{ a.competition_title }}</a><p class="font-mono text-[11px] text-fsp-muted">{{ a.competition_code }} · старт {{ a.start_date|ru_date }}</p></td>
+            <td class="px-3 py-2.5 font-mono text-xs text-fsp-soft">{{ a.registration_deadline|ru_date if a.registration_deadline else "—" }}</td>
+            <td class="px-3 py-2.5 font-mono text-xs text-fsp-soft">{{ a.created_at|ru_date }} {{ a.created_at[11:16] }}<span class="block text-[11px] text-fsp-dim2">{{ "тренер" if a.submitted_by != a.athlete_fsp_id else "сам" }}</span></td>
+            <td class="px-3 py-2.5"><span class="font-mono text-xs {% if a.status == 'APPROVED' %}text-emerald-300{% elif a.status == 'REJECTED' %}text-rose-300{% else %}text-amber-300{% endif %}">{{ a.status_label }}</span>{% if a.comment %}<p class="text-[11px] text-fsp-muted">{{ a.comment }}</p>{% endif %}</td>
+            <td class="px-3 py-2.5 text-right">{% if pending %}<div class="inline-flex gap-1.5">
+              <button name="single" value="APPROVED:{{ a.id }}" class="{{ m.BTN_OK }} !px-2" aria-label="Одобрить заявку {{ a.athlete_name }}" title="Одобрить">{{ m.icon("check", "h-3.5 w-3.5") }}</button>
+              <button name="single" value="REJECTED:{{ a.id }}" data-confirm="Отклонить заявку {{ a.athlete_name }}? Решение нельзя изменить." data-confirm-label="Отклонить" class="{{ m.BTN_NO }} !px-2" aria-label="Отклонить заявку {{ a.athlete_name }}" title="Отклонить">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
+            </div>{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="px-3 py-10 text-center font-mono text-sm text-fsp-muted">// заявок по фильтру нет{% if f.status == "PENDING" and not chips[1:] %} — все решения приняты{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-3">{{ m.pager(pg, request, "заявок") }}</div>
+  </form>
+</div>
+{% endblock %}

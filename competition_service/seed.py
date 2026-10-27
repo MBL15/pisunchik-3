@@ -8,9 +8,9 @@ import math
 import random
 from datetime import datetime, timedelta
 
-from shared import config
+from shared import config, demo_scale
 from shared.demo_roster import ROSTER_BY_SEQ, athletes_in, full_name
-from shared.domain import ApplicationStatus, CompetitionStatus, protocol_mode
+from shared.domain import AGE_GROUPS, ApplicationStatus, CompetitionStatus, protocol_mode
 from shared.fsp_id import make_fsp_id
 
 # (key, discipline, level, type, format, format_note, plan, plan_no, start_offset, days, venue, age_group, status, deadline_offset)
@@ -223,4 +223,28 @@ def seed(store) -> None:
             status=ApplicationStatus(status), created_at=now - timedelta(days=3),
             decided_at=now - timedelta(days=1) if status != "PENDING" else None,
         ))
+    _seed_scale_applications(store, today, now)
     store.log("system", "seed", f"{len(store.competitions)} соревнований, {len(store.protocols)} протоколов")
+
+
+def _seed_scale_applications(store, today, now) -> None:
+    """FSP_DEMO_SCALE: заявки синтетических спортсменов на открытые старты — объём для модерации и поиска."""
+    from competition_service.models import Application
+
+    people = [p for p in demo_scale.generate() if "athlete" in p["roles"]]
+    if not people:
+        return
+    rnd = random.Random(57)
+    opened = [c for c in store.competitions.values() if c.status == CompetitionStatus.REGISTRATION_OPEN]
+    for c in opened:
+        lo, hi = AGE_GROUPS[c.age_group]
+        for p in people:
+            if c.discipline in p["disciplines"] and lo <= demo_scale.age_on(p["birth_date"], today) <= hi and rnd.random() < 0.5:
+                roll = rnd.random()
+                status = "PENDING" if roll < 0.7 else "APPROVED" if roll < 0.92 else "REJECTED"
+                store.applications.append(Application(
+                    id=len(store.applications) + 1, competition_id=c.id, athlete_fsp_id=p["fsp_id"],
+                    athlete_name=f"{p['last_name']} {p['first_name']} {p['middle_name']}", submitted_by=p["fsp_id"],
+                    status=ApplicationStatus(status), created_at=now - timedelta(hours=rnd.randint(1, 24 * 14)),
+                    decided_at=now if status != "PENDING" else None,
+                ))

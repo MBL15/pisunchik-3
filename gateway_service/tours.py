@@ -219,6 +219,40 @@ def _headcount(user):
     ])
 
 
+def _registry(user):
+    return _tour("registry", "Реестр", [
+        {"sel": 'nav[aria-label="Разделы реестра"]', "title": "Разделы",
+         "text": "Спортсмены, тренеры, судьи и организации — один реестр по всем шести дисциплинам."},
+        {"sel": 'form[aria-label="Фильтры реестра"]', "title": "Поиск и фильтры",
+         "text": "Найдите человека по ФИО или ФСП ID и сузьте список: дисциплина, организация, разряд, возрастная группа, муниципалитет."},
+        {"sel": '[role="group"][aria-label="Выгрузить всё найденное"]', "title": "Выгрузка",
+         "text": "Текущий список с теми же фильтрами — в Excel, Word или PDF."},
+    ])
+
+
+def _applications(user):
+    return _tour("applications", "Модерация заявок", [
+        {"sel": 'form[aria-label="Фильтры заявок"]', "title": "Поиск и фильтры",
+         "text": "Ищите по спортсмену или соревнованию. Фильтры применяются сразу, а рядом с каждым значением видно, сколько заявок найдётся."},
+        {"sel": "[data-bulk-all]", "title": "Отметить всё",
+         "text": "Отметьте заявки на странице флажками — все сразу или диапазон с Shift."},
+        {"sel": '[aria-label="Решение по отмеченным"]', "title": "Решение по отмеченным",
+         "text": "Одобрите или отклоните все отмеченные одной кнопкой; каждый спортсмен получит уведомление."},
+        {"sel": 'nav[aria-label="Страницы"]', "title": "Страницы",
+         "text": "Большие списки разбиты на страницы; размер страницы можно поменять."},
+    ])
+
+
+def _audit(user):
+    return _tour("audit", "Журнал действий", [
+        {"sel": 'form[aria-label="Фильтры журнала"]', "title": "Поиск по журналу",
+         "text": "Слова из действия или объекта, сервис, автор и период. Нажмите на автора в таблице — останутся только его действия."},
+        {"sel": '[role="group"][aria-label="Выгрузить журнал"]', "title": "Выгрузка",
+         "text": "Журнал с теми же фильтрами — в Excel, Word или PDF."},
+        {"sel": 'nav[aria-label="Страницы"]', "title": "Страницы", "text": "Переход по страницам и размер страницы."},
+    ])
+
+
 def _protocol(user, is_admin=False):
     steps = [{"sel": '[role="group"][aria-label="Скачать"]', "title": "Скачать протокол",
               "text": "Протокол в Excel, Word или PDF. «Печать» отправит страницу на принтер без лишнего."},
@@ -239,7 +273,8 @@ def for_page(template: str, user: dict | None, **flags) -> dict | None:
         "cabinet_athlete.html": lambda: _cabinet_athlete(user), "cabinet_trainer.html": lambda: _cabinet_trainer(user),
         "cabinet_judge.html": lambda: _cabinet_judge(user), "cabinet_admin.html": lambda: _cabinet_admin(user),
         "teams.html": lambda: _teams(user), "team.html": lambda: _team(user), "report_headcount.html": lambda: _headcount(user),
-        "protocol.html": lambda: _protocol(user, admin),
+        "protocol.html": lambda: _protocol(user, admin), "registry.html": lambda: _registry(user),
+        "applications.html": lambda: _applications(user), "audit.html": lambda: _audit(user),
     }
     build = builders.get(template)
     return build() if build else None

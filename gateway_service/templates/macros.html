@@ -35,6 +35,7 @@
 {%- elif name == "map" -%}<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
 {%- elif name == "chevron" -%}<path d="m6 9 6 6 6-6"/>
 {%- elif name == "printer" -%}<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+{%- elif name == "bell" -%}<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
 {%- elif name == "swap" -%}<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>
 {%- endif -%}
 </svg>
@@ -227,6 +228,57 @@
   <span class="font-mono text-[11px] uppercase text-fsp-muted">{{ label }}</span>
   {% for ext in ("xlsx", "docx", "pdf") %}<a href="{{ base }}.{{ ext }}{{ ('?' ~ qs) if qs }}" download class="{{ BTN_SM }}">{{ icon("file", "h-3.5 w-3.5") }}{{ ext|upper }}</a>{% endfor %}
 </span>
+{%- endmacro %}
+
+{# ---------- большие списки: пагинатор, сортировка, чипы фильтров (адреса строит глобальный qs(request, …)) ---------- #}
+{% macro pager(p, request, label="записей") -%}
+<nav class="no-print flex flex-wrap items-center justify-between gap-3" aria-label="Страницы">
+  <p class="font-mono text-xs text-fsp-muted">{% if p.total %}<span class="text-fsp-light">{{ p.first }}–{{ p.last }}</span> из <span class="font-bold text-fsp-light">{{ p.total }}</span> {{ label }}{% else %}ничего не найдено{% endif %}</p>
+  <div class="flex flex-wrap items-center gap-1.5">
+    {% if p.pages > 1 %}
+    {% if p.page > 1 %}<a href="{{ qs(request, page=p.page - 1) }}" class="{{ BTN_SM }}" rel="prev" aria-label="Предыдущая страница">←</a>{% endif %}
+    {% set prev = namespace(n=0) %}
+    {% for n in p.window %}
+      {% if n - prev.n > 1 %}<span class="px-1 font-mono text-xs text-fsp-dim2">…</span>{% endif %}
+      {% if n == p.page %}<span class="inline-flex min-w-[2rem] justify-center rounded-md bg-fsp-blue px-2 py-1.5 font-mono text-xs font-bold text-white" aria-current="page">{{ n }}</span>
+      {% else %}<a href="{{ qs(request, page=n) }}" class="{{ BTN_SM }} min-w-[2rem] justify-center">{{ n }}</a>{% endif %}
+      {% set prev.n = n %}
+    {% endfor %}
+    {% if p.page < p.pages %}<a href="{{ qs(request, page=p.page + 1) }}" class="{{ BTN_SM }}" rel="next" aria-label="Следующая страница">→</a>{% endif %}
+    {% endif %}
+    <label class="ml-2 flex items-center gap-1.5 font-mono text-[11px] text-fsp-muted">по
+      <select class="rounded-md border border-fsp-line2 bg-fsp-bg px-1.5 py-1 text-xs text-fsp-light" data-nav-select aria-label="Записей на странице">
+        {% for n in PAGE_SIZES %}<option value="{{ qs(request, per=n) }}" {% if n == p.limit %}selected{% endif %}>{{ n }}</option>{% endfor %}
+      </select></label>
+  </div>
+</nav>
+{%- endmacro %}
+
+{% macro sort_th(label, key, request, sort, order, cls="", default_order="asc") -%}
+{% set active = sort == key %}
+<th scope="col" class="{{ TH }} {{ cls }}" aria-sort="{{ ('ascending' if order == 'asc' else 'descending') if active else 'none' }}">
+  <a href="{{ qs(request, sort=key, order=('desc' if order == 'asc' else 'asc') if active else default_order) }}" class="group inline-flex items-center gap-1 hover:text-fsp-light {% if active %}text-fsp-violet{% endif %}">{{ label }}<span class="text-[10px] {% if not active %}opacity-0 group-hover:opacity-60{% endif %}" aria-hidden="true">{{ "▲" if (order == "asc" if active else default_order == "asc") else "▼" }}</span></a>
+</th>
+{%- endmacro %}
+
+{# chips: [(подпись, адрес без этого фильтра)] #}
+{% macro filter_chips(chips, reset_href) -%}
+{% if chips %}
+<div class="no-print flex flex-wrap items-center gap-1.5" aria-label="Активные фильтры">
+  {% for label, href in chips %}<a href="{{ href }}" class="inline-flex items-center gap-1.5 rounded-full border border-fsp-blue/60 bg-fsp-blue/10 px-2.5 py-1 font-mono text-[11px] text-fsp-light hover:border-fsp-red hover:text-rose-200" title="Убрать фильтр">{{ label }}<span aria-hidden="true">✕</span><span class="sr-only">— убрать</span></a>{% endfor %}
+  {% if chips|length > 1 %}<a href="{{ reset_href }}" class="px-1 font-mono text-[11px] text-fsp-muted underline-offset-2 hover:text-fsp-light hover:underline">сбросить всё</a>{% endif %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{# Поле поиска: автоотправка формы с задержкой, «/» — фокус #}
+{% macro search_box(value, placeholder, id="q", name="q") -%}
+<div class="relative">
+  <label for="{{ id }}" class="sr-only">{{ placeholder }}</label>
+  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-fsp-muted" aria-hidden="true"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+  <input id="{{ id }}" name="{{ name }}" type="search" value="{{ value }}" placeholder="{{ placeholder }}" autocomplete="off" data-search data-autosubmit-input class="{{ INPUT }} !pl-9 !pr-10">
+  <kbd class="pointer-events-none absolute inset-y-0 right-2 my-auto hidden h-6 items-center rounded border border-fsp-line2 px-1.5 font-mono text-[11px] text-fsp-muted sm:flex">/</kbd>
+</div>
 {%- endmacro %}
 
 {# Плашка ЕВСК: результат выполняет требования разряда (state: assign | confirm | unknown) #}

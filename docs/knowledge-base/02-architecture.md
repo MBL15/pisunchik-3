@@ -17,8 +17,24 @@ flowchart LR
 | `competition_service` | Competition, Protocol, Application, Document, настройки рейтинга, аудит | Календарь, парсинг логов, live-поток, публикация, рейтинг, заявки с проверкой допуска, назначения судей, KPI, справки |
 | `gateway_service` | Ничего не хранит (только подписанные cookie) | UI, сессия и активная роль, ролевые проверки, публичный API-шлюз с allowlist, QR |
 
-Каждый сервис хранит данные **в памяти** и засевает их при старте (`lifespan` → `seed`).
-Перезапуск сервиса (в том числе live-reload после правки кода) возвращает демо-данные к исходным.
+Хранение двухрежимное. **Без `FSP_DATABASE_URL`** сервис держит данные в памяти и засевает их при старте
+(`lifespan` → `seed`); перезапуск возвращает демо-данные к исходным.
+**С `FSP_DATABASE_URL`** (Postgres) состояние персистентно — см. ниже.
+
+### Персистентность (Postgres)
+
+`shared/db.py` (`Persistence`): каждая сущность — строка `(key TEXT PK, data JSONB[, доп. колонки])`.
+Сервис отдаёт снимок состояния (`snapshot(store)` в своём `store.py`), слой считает хэши и пишет в БД только
+изменённые строки, исчезнувшие удаляет. Запись — middleware после каждого запроса, кроме `GET`.
+
+| Сервис | Таблицы |
+|---|---|
+| `sportsman_service` | `sp_persons` (+ колонка `email`, уникальный индекс по `lower(email)`), `sp_links`, `sp_requests`, `sp_meta` (счётчики ФСП ID/связей, аудит) |
+| `competition_service` | `comp_competitions`, `comp_protocols`, `comp_applications`, `comp_teams`, `comp_documents`, `comp_meta` (настройки рейтинга, типы, счётчик справок, аудит) |
+
+Старт: `db.init()` создаёт таблицы; если БД пуста — сид и первичная запись, иначе `restore()` читает состояние из БД.
+В competition сид выполняется всегда (календарь и воспроизводимые live-протоколы транзиентны), сохранённое состояние
+накладывается сверху; протоколы live-соревнований остаются из сида. Хэши пароля лежат в `data` персоны.
 
 Межсервисные вызовы — `shared/http.py`: один пулированный `httpx.AsyncClient` на downstream-сервис,
 заголовок `X-FSP-Caller`, единая ошибка `ServiceError(service, status, detail)`; сетевой сбой → статус `503`.
@@ -97,6 +113,7 @@ sequenceDiagram
 | `FSP_SECRET_KEY` | `dev-only-fsp56-change-me` | HMAC для сессий, flash и кодов справок — **обязательно сменить вне dev** |
 | `FSP_SERVICE_TIMEOUT` | `5.0` | Таймаут межсервисных вызовов, с |
 | `FSP_DEMO_TODAY` | — | Зафиксировать «сегодня» (`YYYY-MM-DD`) для воспроизводимой демонстрации |
+| `FSP_DEMO_SCALE` | `0` | Добавить N синтетических людей и их заявки (`shared/demo_scale.py`) — проверка работы с большими списками |
 | `FSP_TELEGRAM_TOKEN` / `FSP_TELEGRAM_BOT` | — | Токен и username бота уведомлений. Читаются из `.env` в корне (в git не попадает); без токена уведомления выключены |
 | `FSP_PDF_FONT` / `FSP_PDF_FONT_BOLD` | поиск Arial / DejaVu / Liberation | TTF-шрифт с кириллицей для выгрузки в PDF |
 

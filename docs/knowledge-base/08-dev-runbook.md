@@ -14,10 +14,10 @@
 
 ## Запуск
 
-```powershell
+``powershell
 py run_all.py              # три сервиса + live-reload
 py run_all.py --no-reload  # без перезагрузки
-```
+``
 
 Оркестратор поднимает `sportsman → competition → gateway`, ждёт `/health` каждого, печатает ссылки
 и демо-аккаунты. Если порт занят — сообщает и выходит. Ctrl+C гасит всё дерево процессов.
@@ -29,29 +29,29 @@ py run_all.py --no-reload  # без перезагрузки
 Консоль Windows в кодировке cp866 роняет сервисы на кириллице в логах (`UnicodeEncodeError`), поэтому
 нужны `-X utf8` и `PYTHONIOENCODING=utf-8`:
 
-```powershell
+``powershell
 $env:PYTHONIOENCODING = 'utf-8'
 Start-Process py -ArgumentList '-X','utf8','run_all.py' -WorkingDirectory (Get-Location) -WindowStyle Hidden `
   -RedirectStandardOutput "$env:TEMP\fsp_stack.log" -RedirectStandardError "$env:TEMP\fsp_stack.err"
-```
+``
 
 ### Полный перезапуск
 
-```powershell
+``powershell
 Get-CimInstance Win32_Process -Filter "Name='py.exe'" | Where-Object { $_.CommandLine -match 'run_all' } |
   ForEach-Object { taskkill /PID $_.ProcessId /T /F | Out-Null }
 Get-NetTCPConnection -LocalPort 8000,8001,8002 -State Listen -ErrorAction SilentlyContinue |
   ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
-```
+``
 
 Затем запустить снова. Перезапуск возвращает демо-данные к исходным.
 
 ## Тесты
 
-```powershell
+``powershell
 py -m unittest -v                 # движки, сервисы через TestClient, выгрузки (без сети и без запущенного стека)
 py -X utf8 tests/e2e_smoke.py     # сквозные сценарии через шлюз, нужен запущенный стек
-```
+``
 
 e2e (`tests/e2e_smoke.py`) ходит как браузер (cookie, формы, редиректы) и проверяет:
 
@@ -65,7 +65,7 @@ e2e (`tests/e2e_smoke.py`) ходит как браузер (cookie, формы,
   подсветку ЕВСК, отчёт о численности и выгрузки .xlsx/.docx/.pdf (по магическим байтам), сборную из рейтинга с утверждением
   приказом, права на отчёт спортсмена (сам, тренер подопечного, чужой — 403).
 
-e2e меняет данные в памяти — после прогона перезапустите стек, если дальше будет демонстрация.
+e2e меняет данные (в памяти или в Postgres) — после прогона сбросьте состояние (перезапуск стека; с БД — `docker compose down -v`), если дальше будет демонстрация. Юнит-тесты запускайте без `FSP_DATABASE_URL` (они рассчитаны на in-memory; с включённой БД часть падает).
 
 ## Визуальная проверка
 
@@ -107,3 +107,18 @@ e2e меняет данные в памяти — после прогона пе
 
 **Эффект**: по возможности переиспользуйте data-атрибуты ([UI](06-ui-design-system.md#система-эффектов-data-атрибуты));
 новый — с поддержкой reduced-motion и без скрытия контента при отключённом JS.
+
+## Проверка на больших объёмах
+
+`FSP_DEMO_SCALE=3000 py -X utf8 run_all.py` добавляет 3000 вымышленных людей (≈ 85 % спортсменов) и ≈ 650 их заявок на
+открытые старты; генерация детерминирована. Под ними не войти, в протоколы и рейтинг они не попадают. e2e и юнит-тесты
+запускайте без переменной (e2e рассчитан на базовые демо-данные). Ориентиры на 5000 людей: страница реестра с фасетами —
+≈ 50 мс в сервисе, выгрузка всего реестра в .xlsx — ≈ 1–2 с.
+
+## Postgres (опционально)
+
+`docker compose up -d postgres` поднимает только Postgres 17 (fsp/fsp, БД fsp). Включение: `FSP_DATABASE_URL=postgresql://fsp:fsp@127.0.0.1:5432/fsp` (можно в .env). Без переменной — in-memory, как раньше. Таблицы `sp_*` (sportsman) и `comp_*` (competition) создаются автоматически; первый запуск засевает демо-данные, дальше состояние берётся из БД и пишется после каждого не-GET запроса (`shared/db.py`). Сброс: `docker compose down -v`.
+
+## Всё в Docker
+
+`docker compose up -d --build` поднимает Postgres, sportsman, competition и gateway (http://localhost:8000, сервисы 8001/8002). Состояние хранится в томе `fsp_pg`; `docker compose down -v` — полный сброс. Переменные (`FSP_SECRET_KEY`, `FSP_PUBLIC_BASE_URL`, `FSP_TELEGRAM_TOKEN`, `FSP_DEMO_TODAY`) берутся из окружения или `.env`. Порты 8000–8002 должны быть свободны (остановите `py run_all.py`).

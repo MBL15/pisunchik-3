@@ -134,6 +134,11 @@
 {# ================= 03 · MY ATHLETES ================= #}
 <section id="athletes" class="mt-14 scroll-mt-36" aria-labelledby="athletes-title">
   {{ m.step_head("03", "Мои спортсмены", "athletes-title") }}
+  {% if links|length > 6 %}<div class="mb-3"><div class="relative max-w-md">
+    <label for="ath-find" class="sr-only">Найти: ФИО, ФСП ID, дисциплина, статус</label>
+    <input id="ath-find" type="search" placeholder="Найти: ФИО, ФСП ID, дисциплина, статус" autocomplete="off" data-search data-filter-input data-filter-target="#trainer-athletes" data-filter-count="#ath-find-count" class="{{ m.INPUT }} !py-2 !pr-24 text-sm">
+    <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center font-mono text-[11px] text-fsp-muted"><span id="ath-find-count"></span>&nbsp;в списке</span>
+  </div></div>{% endif %}
   <div class="overflow-x-auto rounded-xl border border-fsp-line bg-fsp-panel" data-reveal>
     <table class="w-full min-w-[860px] border-collapse text-sm">
       <thead class="border-b border-fsp-line bg-fsp-bg/70">
@@ -146,9 +151,9 @@
           <th scope="col" class="{{ m.TH }} text-right"><span class="sr-only">Действия</span></th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="trainer-athletes">
         {% for l in links %}{% set a = l.athlete %}{% set pf = l.performance %}
-        <tr class="border-b border-fsp-line/70 transition-colors last:border-0 hover:bg-fsp-card/50 {% if l.status == 'ENDED' %}opacity-50{% endif %}">
+        <tr data-filter-item data-filter-text="{{ a.full_name }} {{ a.fsp_id }} {{ l.discipline }} {{ l.discipline_label }} {{ l.status_label }}" class="border-b border-fsp-line/70 transition-colors last:border-0 hover:bg-fsp-card/50 {% if l.status == 'ENDED' %}opacity-50{% endif %}">
           <td class="px-3 py-3">
             <p class="font-medium text-white">{{ a.full_name }}{% if a.is_sanctioned %} <span class="ml-1 rounded-md border border-rose-500 px-1 font-mono text-[10px] font-bold text-rose-300">САНКЦИЯ</span>{% endif %}</p>
             <p class="font-mono text-[11px] text-fsp-muted">{{ a.fsp_id }} · {{ l.discipline }} · {{ a.age }} {{ plural(a.age, "год", "года", "лет") }}{% if a.is_minor %} · н/л{% endif %}</p>

@@ -302,5 +302,52 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
     html = login(c, "athlete@fsp56.ru")
     check("Кабинет спортсмена" in html and "[data-tour-start]" in html, "athlete cabinet tour ends with the help-button step")
 
+print("== 8. registry with filters, organizations, notifications feed, antidoping, report deadlines")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "admin@fsp56.ru")
+    reg = c.get("/registry", params={"tab": "athlete", "organization": "Лицей № 1 г. Оренбурга", "age_group": "юноши/девушки 14–17 лет"})
+    check(reg.status_code == 200 and "Валиева" in reg.text and "Жуков" not in reg.text, "registry filters by organization and age group")
+    check("Жуков" in c.get("/registry", params={"rank": "КМС", "q": "жук"}).text, "registry search + rank filter")
+    orgs = c.get("/registry?tab=org").text
+    check("ЦЦОД «IT-куб» г. Орск" in orgs and "Организация доп. образования" in orgs, "registry lists organizations with type")
+    for fmt, magic in (("xlsx", b"PK"), ("docx", b"PK"), ("pdf", b"%PDF")):
+        resp = c.get(f"/registry/export.{fmt}?tab=judge")
+        check(resp.status_code == 200 and resp.content.startswith(magic), f"registry export .{fmt}")
+    cab = c.get("/cabinet").text
+    check("Отчёт: " in cab and 'href="/notifications"' in cab and 'href="/registry"' in cab, "admin: report deadlines, bell, registry link")
+    feed = c.get("/notifications").text
+    check("Новая заявка на соревнование" in feed and "Заявка на разряд" in feed, "federation feed got applications and rank requests from e2e")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "athlete@fsp56.ru")
+    check(c.get("/registry").status_code == 403, "registry is federation-only")
+    c.post("/cabinet/antidoping", data={"course_date": "2026-09-01", "certificate_url": "https://course.rusada.ru/c/e2e"})
+    html = c.get("/cabinet").text
+    check("Онлайн-курс РУСАДА пройден" in html and "course.rusada.ru/c/e2e" in html, "athlete saves the RUSADA course mark")
+    check("Согласие на обработку персональных данных" in html, "athlete sees the stored PD consent")
+    check("вы проходите по возрасту" in c.get("/calendar?mine=1").text, "calendar marks age eligibility for the athlete")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "abramov@fsp56.ru")
+    check("Истекает срок разряда" in c.get("/notifications").text, "rank expiry reminder lands in the athlete's feed")
+
+print("== 9. large lists: paging, sorting, facets, bulk moderation, audit search")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "admin@fsp56.ru")
+    reg = c.get("/registry", params={"per": 25, "sort": "age", "order": "desc"}).text
+    check('aria-label="Страницы"' in reg and 'aria-sort="descending"' in reg, "registry: pager and sortable headers")
+    check("Алгоритмика · " in reg, "registry: filter options show facet counts")
+    last = c.get("/registry", params={"per": 25, "page": 999}).text
+    check("из <span class=\"font-bold text-fsp-light\">" in last and "никого не найдено" not in last, "registry: page past the end shows the last page")
+    apps = c.get("/applications").text
+    check("data-bulk-all" in apps and "Одобрить отмеченные" in apps, "applications page: bulk selection")
+    ids = re.findall(r'name="ids" value="(\d+)"', apps)
+    check(len(ids) >= 1, f"applications page lists pending applications ({len(ids)})")
+    if ids:
+        r = c.post("/applications/decide", data={"ids": ids[:1], "status": "APPROVED", "back": "/applications?status=all"})
+        check(r.status_code == 200 and "Одобрено: 1" in r.text, "bulk approve returns to the filtered list with a summary")
+    audit = c.get("/audit", params={"q": "пакетно"}).text
+    check("Модерация заявки" in audit, "audit search finds the bulk decision")
+    check(c.get("/audit/export.xlsx", params={"q": "заявк"}).content.startswith(b"PK"), "audit export .xlsx")
+    check("// завершённые" in c.get("/calendar", params={"q": "кубок"}).text, "calendar search")
+
 print("\nRESULT:", "ALL PASSED" if ok else "FAILURES")
 sys.exit(0 if ok else 1)

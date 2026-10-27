@@ -4,6 +4,7 @@
 {% block content %}
 {% include "_cabinet_head.html" %}
 {% set comp_apps = dash.applications_pending if dash else [] %}
+{% set INBOX_APPS = 6 %}
 {% set soon = panels|selectattr("days_to_start", "le", 90)|list %}
 {% set no_chief = soon|rejectattr("has_chief")|list %}
 {% set inbox_count = comp_apps|length + quals|length + sheets|length + no_chief|length %}
@@ -27,6 +28,9 @@
     <a href="#inbox" class="{{ m.BTN_SM }}">{{ m.icon("check", "h-3.5 w-3.5") }}Решения{% if inbox_count %}<span class="rounded bg-amber-400/20 px-1.5 text-amber-300">{{ inbox_count }}</span>{% endif %}</a>
     <a href="#results-entry" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Внести результаты{% if sheets %}<span class="rounded bg-amber-400/20 px-1.5 text-amber-300">{{ sheets|length }}</span>{% endif %}</a>
     <a href="#registration" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Приём заявок</a>
+    <a href="/registry" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Реестр</a>
+    <a href="/applications" class="{{ m.BTN_SM }}">{{ m.icon("check", "h-3.5 w-3.5") }}Заявки{% if comp_apps %}<span class="rounded bg-amber-400/20 px-1.5 text-amber-300">{{ comp_apps|length }}</span>{% endif %}</a>
+    <a href="/audit" class="{{ m.BTN_SM }}">{{ m.icon("terminal", "h-3.5 w-3.5") }}Журнал</a>
     <a href="/rating" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Сборная из рейтинга</a>
     <a href="/reports/headcount" class="{{ m.BTN_SM }}">{{ m.icon("pulse", "h-3.5 w-3.5") }}Отчёт о численности</a>
     <a href="#create" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Новое соревнование</a>
@@ -35,7 +39,7 @@
 
 {# ---------------- ATTENTION ---------------- #}
 {% macro inbox_group(title, n) %}<li class="sticky top-0 z-[1] flex items-center gap-2 bg-fsp-panel/95 px-5 py-2 font-mono text-[11px] uppercase tracking-wider text-fsp-muted backdrop-blur">{{ title }}<span class="rounded bg-fsp-card px-1.5 text-fsp-light">{{ n }}</span></li>{% endmacro %}
-<section id="inbox" class="mt-10 grid scroll-mt-36 gap-6 lg:grid-cols-2" aria-label="Требует внимания">
+<section id="inbox" class="mt-10 grid scroll-mt-36 gap-6 lg:grid-cols-2 [&>*]:min-w-0" aria-label="Требует внимания">
   <div class="{{ m.CARD }}">
     <div class="flex items-center justify-between border-b border-fsp-line px-5 py-3">
       <h2 class="font-mono text-xs font-bold uppercase tracking-wider text-amber-300">// входящие · требуют решения</h2>
@@ -95,7 +99,7 @@
 
       {% if comp_apps %}
       {{ inbox_group("Заявки на соревнования", comp_apps|length) }}
-      {% for a in comp_apps %}
+      {% for a in comp_apps[:INBOX_APPS] %}
       <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
         <div class="min-w-0">
           <p class="text-sm font-medium text-white">{{ a.athlete_name }} <span class="font-mono text-[11px] text-fsp-muted">{{ a.athlete_fsp_id }}</span></p>
@@ -108,6 +112,7 @@
         </form>
       </li>
       {% endfor %}
+      <li class="px-5 py-3"><a href="/applications" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}{% if comp_apps|length > INBOX_APPS %}Ещё {{ comp_apps|length - INBOX_APPS }} — все заявки с поиском и массовым решением{% else %}Все заявки: поиск, фильтры, массовое решение{% endif %} →</a></li>
       {% endif %}
       {% if not inbox_count %}<li class="flex items-center gap-3 px-5 py-6 text-sm text-emerald-100">{{ m.icon("check", "h-5 w-5 shrink-0 text-emerald-300") }}Все решения приняты — новые заявки появятся здесь.</li>{% endif %}
     </ul>
@@ -119,11 +124,13 @@
       <span class="font-mono text-xs text-fsp-muted">≤ 90 дней</span>
     </div>
     <ul class="max-h-[420px] divide-y divide-fsp-line overflow-y-auto">
-      {% if dash %}
+      {% for d in report_deadlines if d.days_left <= 90 %}
       <li class="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
-        <span class="text-fsp-light">Ходатайства на премии Губернатора</span>
-        <span class="font-mono text-xs text-amber-300">до {{ dash.governor_award_deadline|ru_date }}</span>
+        <span class="min-w-0"><span class="block truncate text-fsp-light">Отчёт: {{ d.title }}</span><span class="font-mono text-[11px] text-fsp-muted">{{ d.note }}</span></span>
+        <span class="shrink-0 font-mono text-xs {% if d.days_left <= 14 %}text-amber-300{% else %}text-fsp-violet{% endif %}">до {{ d.date|ru_date }}</span>
       </li>
+      {% endfor %}
+      {% if dash %}
       {% for c in dash.deadlines %}
       <li class="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
         <span class="min-w-0"><span class="block truncate text-fsp-light">Приём заявок: {{ c.title }}</span><span class="font-mono text-[11px] text-fsp-muted">{{ c.code }}</span></span>
@@ -360,6 +367,7 @@
       <form method="post" action="/cabinet/admin/competitions/{{ c.id }}/judges" class="mt-3 grid gap-2 border-t border-fsp-line pt-3 sm:grid-cols-[1fr_13rem_auto] sm:items-end">
         <div>
           <label for="jf-{{ c.id }}" class="{{ m.LABEL }} !mb-1 !text-[10px]">Судья</label>
+          {% if judges|length > 12 %}<input type="search" data-option-filter="#jf-{{ c.id }}" placeholder="найти судью: ФИО, ФСП ID, категория" aria-label="Найти судью в списке" autocomplete="off" class="{{ m.INPUT }} mb-1.5 !py-1.5 text-xs">{% endif %}
           <select id="jf-{{ c.id }}" name="fsp_id" class="{{ m.INPUT }} !py-2 text-xs">
             {% for j in judges if j.fsp_id not in taken %}{% set jc = j.judge_category %}
             {% set ok = jc and jc.expires_at >= c.end_date %}
@@ -562,6 +570,7 @@
 {# ---------------- AUDIT LOG ---------------- #}
 <section class="mt-12">
   {{ m.section_head("tail ./audit.log", "Журнал действий") }}
+  <p class="-mt-3 mb-3"><a href="/audit" class="font-mono text-xs text-fsp-violet hover:underline">весь журнал с поиском и фильтрами →</a></p>
   <div class="overflow-x-auto border border-fsp-line bg-black/50 rounded-xl">
     <table class="w-full min-w-[640px] font-mono text-xs">
       <tbody>

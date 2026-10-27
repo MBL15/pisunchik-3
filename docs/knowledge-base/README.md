@@ -26,11 +26,14 @@
 ```
 run_all.py                 оркестратор: поднимает 3 сервиса, ждёт /health, live-reload
 shared/                    общее для всех сервисов
-  config.py                порты, URL, секрет, FSP_DEMO_TODAY
+  config.py                порты, URL, секрет, FSP_DEMO_TODAY, FSP_DATABASE_URL
+  db.py                    Postgres-персистентность (снимок → JSONB, diff по хэшу)
   domain.py                справочники (RU), enum-статусы, пороги сроков
   fsp_id.py                формат и проверка ФСП ID (Луна)
   http.py                  ServiceClient / ServiceError — межсервисный httpx
   demo_roster.py           демо-люди, демо-аккаунты, связи тренер↔спортсмен
+  demo_scale.py            FSP_DEMO_SCALE: синтетический объём для проверки больших списков
+  listing.py               поиск по словам, фасеты, страницы, фильтр журнала
 sportsman_service/  :8001  реестр людей, ФСП ID, связи, санкции, сроки, агрегат выступлений
 competition_service/:8002  календарь, протоколы, live, рейтинг, заявки, судьи, справки
   log_parser.py            FSP-LOG/1 → ранжированный протокол
@@ -40,6 +43,7 @@ gateway_service/    :8000  UI (Jinja2 + Tailwind), сессии, роли, пу�
   templates/               страницы, кабинеты, macros.html
   static/app.css           эффекты и токены
 tests/                     unit (движки) + e2e smoke через шлюз
+Dockerfile, docker-compose.yml   Postgres + три сервиса одной командой
 ```
 
 ## Глоссарий

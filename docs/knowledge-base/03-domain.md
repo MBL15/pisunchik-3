@@ -22,7 +22,12 @@
 ## Участник (Person)
 
 Ключевые поля: ФИО, пол, дата рождения, муниципалитет, организация, `roles[]`, `disciplines[]`,
-`rank`, `judge_category`, `sanctions[]`, `guardian`, `pd_consent_at`, `start_year`, email, хеш пароля.
+`rank`, `judge_category`, `sanctions[]`, `guardian`, `pd_consent_at`, `start_year`, email, хеш пароля,
+`training_stage` (этап спортивной подготовки при наличии: `НП`, `УТ`, `ССМ`, `ВСМ` — `TRAINING_STAGES`),
+`antidoping` (`course_date` и `certificate_url` курса РУСАДА; вносит сам спортсмен в кабинете).
+
+Организации — справочник `ORGANIZATIONS` + карточки `ORGANIZATION_INFO` (тип, муниципалитет); состав и счётчики
+считает `GET /api/v1/organizations`. «Без организации» (`NO_ORGANIZATION`) — значение, а не организация.
 
 `store.present()` добавляет вычисляемые поля, на которые опирается UI:
 `age`, `is_minor` (< 18), `is_sanctioned` (есть действующая санкция), `full_name`,

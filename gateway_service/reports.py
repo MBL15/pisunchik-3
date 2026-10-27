@@ -190,3 +190,53 @@ def athlete_report_doc(person: dict, perf: dict, today: date) -> Doc:
                       widths=[1, 3.4, 1.8, 1.8, 0.8, 1, 2.2, 0.8], align=["center", "left", "left", "left", "center", "center", "left", "right"]),
                 Signatures([("Руководитель регионального отделения", "")])],
         landscape=True, footer=f"Сформирован {_d(today)} по опубликованным протоколам соревнований. Баллы — по таблице рейтинга без коэффициента.")
+
+
+# ---------------------------------------------------------------- реестр
+def _person_rank(p: dict) -> str:
+    r = p["rank"]
+    if not r:
+        return "—"
+    return r["short"] + (f" до {_d(r['expires_at'])}" if r["expires_at"] else "")
+
+
+def registry_doc(tab: str, tab_title: str, rows: list[dict], filter_text: str, today: date) -> Doc:
+    if tab == "org":
+        columns = ["№", "Организация", "Тип", "Муниципалитет", "Спортсменов", "Тренеров", "Судей", "Дисциплины"]
+        data = [[i, o["name"], o["type"], o["municipality"], o["athletes"], o["trainers"], o["judges"],
+                 ", ".join(o["discipline_labels"]) or "—"] for i, o in enumerate(rows, 1)]
+        widths, align = [0.5, 3.6, 1.8, 1.5, 1, 0.9, 0.8, 2.6], ["center", "left", "left", "left", "right", "right", "right", "left"]
+    else:
+        columns = ["№", "ФИО", "ФСП ID", "Дата рождения", "Муниципалитет", "Организация", "Дисциплины"]
+        if tab == "athlete":
+            columns += ["Этап", "Разряд"]
+        elif tab == "judge":
+            columns += ["Категория"]
+        data = []
+        for i, p in enumerate(rows, 1):
+            row = [i, p["full_name"], p["fsp_id"], _d(p["birth_date"]), p["municipality"], p["organization"],
+                   ", ".join(p["discipline_labels"]) or "—"]
+            if tab == "athlete":
+                row += [p["training_stage"] or "—", _person_rank(p)]
+            elif tab == "judge":
+                jc = p["judge_category"]
+                row += [f"{jc['code']} до {_d(jc['expires_at'])}" if jc else "—"]
+            data.append(row)
+        widths = [0.5, 2.8, 2, 1.1, 1.4, 2.8, 1.8] + ([0.7, 1.4] if tab == "athlete" else [1.4] if tab == "judge" else [])
+        align = ["center", "left", "left", "center", "left", "left", "left"] + ["left"] * (len(columns) - 7)
+    return Doc(
+        title="РЕЕСТР", subtitle=tab_title.lower(), filename=f"Реестр — {tab_title.lower()} {today:%d.%m.%Y}",
+        header_lines=[FEDERATION_NAME], meta=[("Сформирован", _d(today)), ("Фильтры", filter_text), ("Записей", str(len(rows)))],
+        blocks=[Table(columns, data, widths=widths, align=align)], landscape=True,
+        footer="Выгрузка из реестра Единой цифровой платформы ФСП Оренбургской области. Персональные данные в демо — фиктивные.")
+
+
+# ---------------------------------------------------------------- журнал действий
+def audit_doc(rows: list[dict], filter_text: str, today: date) -> Doc:
+    data = [[a["at"].replace("T", " "), a["service"], a["actor"], a["action"], a["object"]] for a in rows]
+    return Doc(
+        title="ЖУРНАЛ ДЕЙСТВИЙ", subtitle="кто, когда и что сделал в платформе", filename=f"Журнал действий {today:%d.%m.%Y}",
+        header_lines=[FEDERATION_NAME], meta=[("Сформирован", _d(today)), ("Фильтры", filter_text), ("Записей", str(len(rows)))],
+        blocks=[Table(["Время", "Сервис", "Кто", "Действие", "Объект"], data, widths=[1.6, 1.1, 1.8, 2, 4.5],
+                      align=["left", "left", "left", "left", "left"])], landscape=True,
+        footer="Выгрузка журнала Единой цифровой платформы ФСП Оренбургской области.")

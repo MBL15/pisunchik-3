@@ -83,7 +83,10 @@ shared/              справочники (RU), формат ФСП ID, http-�
 
 | Сущность | Сервис | Поля |
 |---|---|---|
-| Person | sportsman | fsp_id, ФИО, пол, дата рождения, муниципалитет, организация, roles[], disciplines[], rank{code, assigned_at, expires_at, order_no}, judge_category{code, expires_at}, sanctions[], guardian, pd_consent_at |
+| Person | sportsman | fsp_id, ФИО, пол, дата рождения, муниципалитет, организация, roles[], disciplines[], start_year, training_stage (НП/УТ/ССМ/ВСМ), rank{code, assigned_at, expires_at, order_no, basis}, judge_category{code, expires_at}, sanctions[], guardian, pd_consent_at, antidoping{course_date, certificate_url} |
+| Organization | sportsman | справочник `ORGANIZATIONS` + `ORGANIZATION_INFO` (тип, муниципалитет); состав и счётчики вычисляются по реестру |
+| Notification | sportsman | fsp_id, title, text, link, key (дедупликация напоминаний), at, read |
+| QualificationRequest | sportsman | kind (RANK/JUDGE_CATEGORY), person, code, purpose (присвоение/подтверждение), basis (соревнование и результат), status, order_no |
 | TrainerLink | sportsman | trainer_fsp_id, athlete_fsp_id, discipline, status (PENDING/ACTIVE/SUSPENDED/ENDED), history[] |
 | Competition | competition | code, title, discipline, level, type, format (+note), calendar_plan (ЕКП/региональный) + номер, даты, место, возрастная группа, status, registration_deadline, judges[] |
 | Protocol | competition | source (manual/upload/live/seed), results[] (ручной ввод), raw_log[], names snapshot, entries[] (place, status, solved, penalty, score, tasks), published |
@@ -96,7 +99,8 @@ shared/              справочники (RU), формат ФСП ID, http-�
 
 **sportsman_service** — `GET/POST /api/v1/persons`, `GET /api/v1/persons/{fsp_id}`, `POST /api/v1/persons/lookup`,
 `POST /api/v1/auth/verify`, `GET /api/v1/sanctions/active`, `GET /api/v1/alerts/ranks`, `GET /api/v1/alerts/judge-categories`,
-`GET /api/v1/reports/headcount`, `GET /api/v1/trainers/{fsp_id}/athletes?with_performance=true`, `GET /api/v1/athletes/{fsp_id}/links`,
+`GET /api/v1/reports/headcount`, `GET /api/v1/organizations`, `POST /api/v1/persons/{fsp_id}/antidoping`,
+`GET/POST /api/v1/notifications`, `POST /api/v1/notifications/read`, `GET/POST /api/v1/qualification-requests`, `GET /api/v1/trainers/{fsp_id}/athletes?with_performance=true`, `GET /api/v1/athletes/{fsp_id}/links`,
 `POST /api/v1/links`, `POST /api/v1/links/{id}/status`, `GET /api/v1/persons/{fsp_id}/performance`, `GET /api/v1/stats`, `GET /api/v1/audit`.
 
 **competition_service** — `GET/POST /api/v1/competitions`, `GET /api/v1/competitions/{id}/protocol`,
@@ -118,9 +122,16 @@ shared/              справочники (RU), формат ФСП ID, http-�
 | Спортсмен: подтверждение привязки, история выступлений, допуск по возрасту, заявки, справка с QR | `athlete@` → Кабинет |
 | Судья: категория и срок, назначения, история | `trainer@` → роль «Судья» |
 | Федерация вносит результаты → протокол формируется автоматически из участников с одобренными заявками → результаты в истории спортсменов (С5); протокол по форме с печатью в PDF | `admin@` → «Внести результаты» (Кубок «OrenCTF Осень») → «Сформировать и опубликовать»; `/protocols/{id}`; `hasanov@` → История |
-| Федерация: KPI, модерация заявок, контроль сроков (разряды, категории, заявки, премии Губернатора до 1 февраля), живой протокол + публикация, загрузка лога, настройки рейтинга, создание соревнования, журнал действий | `admin@` → Кабинет |
+| Реестр спортсменов, тренеров, судей и организаций: поиск по словам, фильтры со счётчиками (дисциплина, организация, разряд, возрастная группа, муниципалитет, этап), сортировка, страницы; выгрузка всего найденного в .xlsx / .docx / .pdf | `admin@` → «Реестр» (`/registry`) |
+| Модерация заявок любого объёма: поиск, фильтры, сортировка, массовое одобрение / отклонение с уведомлениями | `admin@` → «Заявки» (`/applications`) |
+| Журнал действий: поиск, сервис, автор, период, выгрузка | `admin@` → «Журнал» (`/audit`) |
+| Проверка на больших объёмах: `FSP_DEMO_SCALE=3000` — тысячи синтетических людей и заявок | см. `docs/knowledge-base/08-dev-runbook.md` |
+| Уведомления в кабинете (колокольчик, `/notifications`) и в Telegram: заявки, решения, назначения, протоколы, открытие приёма, приближение сроков | шапка у любой роли; Telegram — «Подключить Telegram» в кабинете (нужен `.env` с токеном бота) |
+| Разряды и судейские категории: заявки с основанием (соревнование и результат), присвоение с приказом и сроком | тренер / спортсмен без тренера / судья → кабинет; `admin@` → «Входящие» |
+| Антидопинг: дата курса РУСАДА и ссылка на сертификат, ссылки на rusada.ru; согласия на обработку ПДн | `athlete@` → Кабинет → «Разряд, тренеры и документы» |
+| Федерация: KPI, модерация заявок, контроль сроков (разряды, категории, заявки, сроки отчётов, премии Губернатора до 1 февраля), живой протокол + публикация, загрузка лога, настройки рейтинга, создание соревнования, журнал действий | `admin@` → Кабинет |
 | Рейтинг с прозрачным ×1.2, исключение санкционированных, фильтры по возрасту/разряду | `/rating` |
-| Календарь: ЕКП / региональный план, очно/онлайн/смешанный | `/calendar` |
+| Календарь: ЕКП / региональный план, очно/онлайн/смешанный, фильтр по возрастной группе, «вы проходите по возрасту» и «Только мои» для спортсмена | `/calendar` |
 | Справочник типов соревнований, который пополняет федерация | `admin@` → «Новое соревнование» → «Справочник типов» |
 | Ручное открытие, закрытие и продление приёма заявок | `admin@` → «Приём заявок» |
 | Подсветка спортсменов, выполнивших требования ЕВСК (рабочая таблица порогов) | `admin@` → «ЕВСК»; колонка «ЕВСК» в протоколе `/protocols/{id}` |

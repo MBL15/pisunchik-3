@@ -6,11 +6,14 @@
 """
 from datetime import date
 
-from shared.domain import DISCIPLINE_BY_CODE, DISCIPLINES, GENDER_LABELS, HEADCOUNT_AGE_BANDS, RANK_BY_CODE, RANK_ORDER, Role
+from shared.domain import (
+    DISCIPLINE_BY_CODE, DISCIPLINES, GENDER_LABELS, HEADCOUNT_AGE_BANDS, RANK_BY_CODE, RANK_ORDER, TRAINING_STAGES, Role,
+)
 from sportsman_service.models import PersonRecord
 from sportsman_service.store import age_on
 
 NO_RANK = "без разряда"
+NO_STAGE = "этап не указан"
 
 
 def _age_band(p: PersonRecord, on: date) -> list[str]:
@@ -35,6 +38,8 @@ def _cuts() -> list[tuple[str, str, object, list[str] | None]]:
         ("age", "По возрастным группам", _age_band, [label for label, _, _ in HEADCOUNT_AGE_BANDS]),
         ("gender", "По полу", lambda p, on: [GENDER_LABELS[p.gender]], list(GENDER_LABELS.values())),
         ("rank", "По спортивным разрядам", _rank, ranks),
+        ("stage", "По этапам спортивной подготовки", lambda p, on: [TRAINING_STAGES.get(p.training_stage, NO_STAGE)],
+         list(TRAINING_STAGES.values()) + [NO_STAGE]),
     ]
 
 

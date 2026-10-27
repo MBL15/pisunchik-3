@@ -4,41 +4,62 @@ import hashlib
 import hmac
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
 
 from competition_service import evsk
 from competition_service.log_parser import parse_log
 from competition_service.models import (
-    ActorIn, Application, ApplicationIn, Competition, CompetitionCreateIn, CompetitionTypeIn, DecisionIn, DocumentIn,
+    ActorIn, Application, ApplicationIn, BatchDecisionIn, Competition, CompetitionCreateIn, CompetitionTypeIn, DecisionIn,
+    DocumentIn,
     IngestIn, JudgeAssignIn, JudgeAssignment, Protocol, RegistrationIn, ResultsIn, SettingsIn, Team, TeamApproveIn,
     TeamCreateIn, TeamMember, TeamMemberIn, TeamRoleIn, TeamUpdateIn,
 )
 from competition_service.rating import RatingSettings, compute_rating
 from competition_service.seed import seed
-from competition_service.store import store
+from competition_service.store import DDL, restore, snapshot, store
 from shared import config
+from shared.db import Persistence
 from shared.domain import (
     AGE_GROUPS, DEFAULT_COMPETITION_TYPES, DISCIPLINE_BY_CODE, EVSK_REQUIREMENTS, JUDGE_POSITIONS, LEVEL_LABELS,
     RANK_BY_CODE, RANK_ORDER, REGION_CODE, SANCTION_LABELS, TEAM_ROLE_LABELS, ApplicationStatus, CompetitionStatus,
     LinkStatus, protocol_mode,
 )
 from shared.http import ServiceClient, ServiceError
+from shared.listing import AUDIT_LIMIT, MAX_LIMIT, facets, matches, page, search_audit, tokens
 
+db = Persistence(DDL)
 clients: dict[str, ServiceClient] = {}
 LIVE_TICK_MIN_INTERVAL = 1.5  # seconds; many open dashboards must not fast-forward the stream
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    seed(store)
+    seed(store)  # календарь и живые протоколы пересоздаются всегда; сохранённое состояние накладывается сверху
+    if db.enabled:
+        db.init()
+        rows = db.load()
+        if rows["comp_competitions"]:
+            restore(store, rows)
+            db.mark_loaded(snapshot(store))
+        else:
+            db.save(snapshot(store))
     clients["sportsman"] = ServiceClient("sportsman_service", config.SPORTSMAN_URL, caller="competition_service")
     yield
     await clients["sportsman"].aclose()
 
 
 app = FastAPI(title="ФСП Оренбург · Competition Service", version="1.0.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def persist_writes(request: Request, call_next):
+    response = await call_next(request)
+    if db.enabled and request.method != "GET":
+        await run_in_threadpool(lambda: db.save(snapshot(store)))
+    return response
 
 
 def _competition(cid: int) -> Competition:
@@ -70,20 +91,27 @@ async def health():
 
 
 @app.get("/api/v1/audit")
-async def audit(limit: int = Query(30, le=200)):
-    return store.audit[:limit]
+async def audit(limit: int = Query(30, le=AUDIT_LIMIT), q: str | None = None, actor: str | None = None,
+                date_from: date | None = None, date_to: date | None = None):
+    """Журнал (новые сверху). Фильтры: слова в действии/объекте, автор, даты включительно."""
+    return search_audit(store.audit, q, actor, date_from, date_to)[:limit]
 
 
 # ---------------------------------------------------------------- calendar
 @app.get("/api/v1/competitions")
 async def list_competitions(discipline: str | None = None, status: str | None = None, plan: str | None = None,
-                            format: str | None = None, season: int | None = None, upcoming: bool = False):
-    today = config.today()
+                            format: str | None = None, season: int | None = None, upcoming: bool = False,
+                            q: str | None = None, age_group: str | None = None, level: str | None = None):
+    """Календарь. `q` — слова в названии, коде, месте, типе или номере плана."""
+    today, words = config.today(), tokens(q)
     out = []
     for c in store.competitions.values():
         if (discipline and c.discipline != discipline) or (status and c.status != status) \
                 or (plan and c.calendar_plan != plan) or (format and c.format != format) \
-                or (season and c.end_date.year != season):
+                or (season and c.end_date.year != season) or (age_group and c.age_group != age_group) \
+                or (level and c.level != level):
+            continue
+        if words and not matches(words, c.title, c.code, c.venue, c.type, c.plan_number):
             continue
         if upcoming and c.end_date < today and c.status != CompetitionStatus.LIVE:
             continue
@@ -596,6 +624,73 @@ async def submit_application(data: ApplicationIn):
     store.applications.append(app_)
     store.log(data.submitted_by, "Подана заявка", f"{c.code} · {athlete['full_name']}")
     return store.present_application(app_)
+
+
+APPLICATION_SORTS = {
+    "created": lambda a, c: (a.created_at, a.id),
+    "athlete": lambda a, c: (a.athlete_name.lower(), a.id),
+    "start": lambda a, c: (c.start_date, a.id),
+    "deadline": lambda a, c: (c.registration_deadline or date.max, a.id),
+}
+
+
+@app.get("/api/v1/applications/search")
+async def search_applications(status: str | None = None, competition_id: int | None = None, discipline: str | None = None,
+                              q: str | None = None, by: str | None = Query(None, pattern="^(trainer|self)$"),
+                              sort: str = "created", order: str = Query("desc", pattern="^(asc|desc)$"),
+                              offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=MAX_LIMIT)):
+    """Заявки для модерации: `{total, offset, limit, items, facets}`; фасет считается без собственного фильтра.
+
+    `q` — слова в ФИО, ФСП ID спортсмена, названии или коде соревнования; `by` — кто подал (тренер / сам спортсмен).
+    """
+    if sort not in APPLICATION_SORTS:
+        raise HTTPException(422, f"Сортировка: {', '.join(APPLICATION_SORTS)}")
+    words = tokens(q)
+    base = []
+    for a in store.applications:
+        c = store.competitions[a.competition_id]
+        if words and not matches(words, a.athlete_name, a.athlete_fsp_id, c.title, c.code):
+            continue
+        if by and (a.submitted_by != a.athlete_fsp_id) != (by == "trainer"):
+            continue
+        base.append((a, c))
+    filters = {"status": status, "competition": str(competition_id) if competition_id else None, "discipline": discipline}
+    keyfn = {"status": lambda r: r[0].status.value, "competition": lambda r: str(r[1].id), "discipline": lambda r: r[1].discipline}
+
+    def keep(skip=None):
+        return [r for r in base if all(not v or k == skip or keyfn[k](r) == v for k, v in filters.items())]
+
+    rows = keep()
+    rows.sort(key=lambda r: APPLICATION_SORTS[sort](*r), reverse=order == "desc")
+    result = page(rows, offset, limit)
+    result["items"] = [store.present_application(a) for a, _ in result["items"]]
+    result["facets"] = {k: facets(keep(skip=k), {k: keyfn[k]})[k] for k in filters}
+    return result
+
+
+@app.post("/api/v1/applications/decisions")
+async def decide_applications(data: BatchDecisionIn):
+    """Массовое решение: каждая заявка решается отдельно, ошибки не мешают остальным; протоколы пересчитываются один раз."""
+    if data.status == ApplicationStatus.PENDING:
+        raise HTTPException(422, "Выберите решение: одобрить или отклонить")
+    by_id = {a.id: a for a in store.applications}
+    done, failed, touched = [], [], set()
+    for app_id in dict.fromkeys(data.ids):
+        a = by_id.get(app_id)
+        if not a:
+            failed.append({"id": app_id, "detail": "Заявка не найдена"})
+            continue
+        if a.status != ApplicationStatus.PENDING:
+            failed.append({"id": app_id, "detail": "Решение уже принято"})
+            continue
+        a.status, a.decided_at, a.comment = data.status, datetime.now(), data.comment
+        touched.add(a.competition_id)
+        store.log(data.actor, "Модерация заявки", f"#{a.id} {a.athlete_name} → {data.status} (пакетно)")
+        done.append(store.present_application(a))
+    for cid in touched:
+        if (proto := store.protocols.get(cid)) and not proto.published:
+            store.reparse(proto)
+    return {"done": done, "failed": failed}
 
 
 @app.post("/api/v1/applications/{app_id}/decision")

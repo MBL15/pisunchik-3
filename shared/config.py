@@ -32,7 +32,13 @@ SECRET_KEY = os.getenv("FSP_SECRET_KEY", "dev-only-fsp56-change-me")
 TELEGRAM_TOKEN = os.getenv("FSP_TELEGRAM_TOKEN", "")
 TELEGRAM_BOT = os.getenv("FSP_TELEGRAM_BOT", "")
 
-SERVICE_TIMEOUT = float(os.getenv("FSP_SERVICE_TIMEOUT", "5.0"))
+# Postgres, например postgresql://fsp:fsp@localhost:5432/fsp. Пусто — состояние только в памяти (как раньше).
+DATABASE_URL = os.getenv("FSP_DATABASE_URL", "")
+
+# Синтетический объём для проверки больших списков: N вымышленных людей и их заявок (shared/demo_scale.py). 0 — выключено.
+DEMO_SCALE = int(os.getenv("FSP_DEMO_SCALE", "0") or 0)
+
+SERVICE_TIMEOUT =float(os.getenv("FSP_SERVICE_TIMEOUT", "5.0"))
 
 # TTF-шрифт с кириллицей для выгрузки в PDF; по умолчанию ищется Arial / DejaVu / Liberation в системных каталогах.
 PDF_FONT = os.getenv("FSP_PDF_FONT", "")

@@ -19,9 +19,9 @@
         <th scope="col" class="{{ m.TH }} w-10"><span class="sr-only">Детализация</span></th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="rating-rows-{{ rating.discipline }}">
       {% for r in rows %}
-      <tr class="border-b border-fsp-line/70 transition-colors duration-150 hover:bg-fsp-card/60">
+      <tr data-filter-item data-filter-text="{{ r.full_name }} {{ r.fsp_id }} {{ r.municipality }} {{ r.rank_short }}" data-filter-with="#bd-{{ rating.discipline }}-{{ loop.index }}" class="border-b border-fsp-line/70 transition-colors duration-150 hover:bg-fsp-card/60">
         {% if pick %}<td class="px-3 py-3"><input type="checkbox" name="fids" value="{{ r.fsp_id }}" form="team-form" aria-label="Включить в сборную: {{ r.full_name }}" class="h-4 w-4 cursor-pointer accent-[#402FFF]"></td>{% endif %}
         <td class="px-3 py-3">{{ m.place(r.position) }}</td>
         <td class="px-3 py-3">

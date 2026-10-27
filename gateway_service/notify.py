@@ -1,7 +1,8 @@
-"""Уведомления в Telegram: привязка аккаунта через бота (/start <код>), отправка, напоминания о сроках.
+"""Уведомления: лента в личном кабинете (всегда) и Telegram (внешний канал), напоминания о сроках.
 
-Привязки (ФСП ID → chat_id) хранятся в `.telegram_links.json` в корне проекта, чтобы переживать live-reload.
-Без `FSP_TELEGRAM_TOKEN` модуль ничего не делает.
+Лента хранится в sportsman_service (`/api/v1/notifications`); шлюз передаёт сюда функцию записи при старте.
+Telegram: привязка аккаунта через бота (/start <код>); привязки (ФСП ID → chat_id) лежат в `.telegram_links.json`
+в корне проекта, чтобы переживать live-reload. Без `FSP_TELEGRAM_TOKEN` работает только лента.
 """
 import asyncio
 import html
@@ -24,8 +25,9 @@ REMIND_DAYS = (30, 7, 1)
 
 chats: dict[str, int] = {}  # fsp_id -> chat_id
 _codes: dict[str, tuple[str, float]] = {}  # код -> (fsp_id, истекает)
-_sent_reminders: set[str] = set()
 _http: httpx.AsyncClient | None = None
+# async (fsp_ids, title, text, link, key) -> адресаты, кому запись в ленту добавлена (с key — без повторов)
+_record = None
 
 
 def enabled() -> bool:
@@ -80,8 +82,7 @@ async def _send(chat_id: int, text: str) -> bool:
                        disable_web_page_preview=True) is not None
 
 
-async def notify(fsp_id: str, title: str, text: str = "", link: str = "") -> None:
-    """Отправить уведомление человеку, если он привязал Telegram. Ошибки доставки не ломают основной сценарий."""
+async def _telegram(fsp_id: str, title: str, text: str, link: str) -> None:
     chat = chats.get(fsp_id)
     if not (enabled() and chat and _http):
         return
@@ -91,8 +92,26 @@ async def notify(fsp_id: str, title: str, text: str = "", link: str = "") -> Non
     await _send(chat, body)
 
 
-async def notify_many(fsp_ids, title: str, text: str = "", link: str = "") -> None:
-    await asyncio.gather(*(notify(f, title, text, link) for f in set(fsp_ids)))
+async def notify_many(fsp_ids, title: str, text: str = "", link: str = "", key: str = "") -> None:
+    """Уведомление в ленту кабинета и в Telegram (кто подключил). Ошибки доставки не ломают основной сценарий.
+
+    С `key` (напоминания) человек получает уведомление один раз: в Telegram уходит только то, что впервые попало в ленту.
+    """
+    ids = list(dict.fromkeys(f for f in fsp_ids if f))
+    if not ids:
+        return
+    delivered = ids
+    if _record:
+        try:
+            delivered = await _record(ids, title, text, link, key)
+        except Exception as exc:  # noqa: BLE001 — лента недоступна, но действие пользователя уже выполнено
+            log.warning("notification feed: %s", exc)
+            delivered = [] if key else ids
+    await asyncio.gather(*(_telegram(f, title, text, link) for f in delivered))
+
+
+async def notify(fsp_id: str, title: str, text: str = "", link: str = "", key: str = "") -> None:
+    await notify_many([fsp_id], title, text, link, key)
 
 
 async def _handle(message: dict) -> None:
@@ -134,27 +153,41 @@ async def poll_updates() -> None:
                     log.exception("telegram update failed")
 
 
+def remind_bucket(days: int) -> str:
+    """Порог напоминания: срок прошёл, ≤1, ≤7 или ≤30 дней. На каждый порог — одно уведомление."""
+    if days < 0:
+        return "expired"
+    return f"d{next(d for d in sorted(REMIND_DAYS) if days <= d)}" if days <= max(REMIND_DAYS) else ""
+
+
+async def remind_pass(fetch_deadlines) -> None:
+    """`fetch_deadlines()` -> [(fsp_id, ключ, заголовок, текст, дней, ссылка)]; напоминает при входе в каждый порог."""
+    for fsp_id, key, title, text, days, link in await fetch_deadlines():
+        if bucket := remind_bucket(days):
+            await notify(fsp_id, title, text, link, key=f"{key}|{bucket}")
+
+
 async def remind_loop(fetch_deadlines) -> None:
-    """Раз в час: напоминания за 30/7/1 день. `fetch_deadlines()` -> [(fsp_id, ключ, заголовок, текст, дней)]."""
+    """Раз в час (при сбое — через минуту) проверяет сроки."""
     while True:
         try:
-            for fsp_id, key, title, text, days in await fetch_deadlines():
-                mark = f"{fsp_id}|{key}|{days}"
-                if days in REMIND_DAYS and mark not in _sent_reminders and is_linked(fsp_id):
-                    _sent_reminders.add(mark)
-                    await notify(fsp_id, title, text, "/cabinet")
+            await remind_pass(fetch_deadlines)
+            pause = 3600
         except Exception:  # noqa: BLE001
             log.exception("reminder pass failed")
-        await asyncio.sleep(3600)
+            pause = 60
+        await asyncio.sleep(pause)
 
 
-async def start(fetch_deadlines) -> list[asyncio.Task]:
-    global _http
-    if not enabled():
-        return []
-    _load()
-    _http = httpx.AsyncClient()
-    return [asyncio.create_task(poll_updates()), asyncio.create_task(remind_loop(fetch_deadlines))]
+async def start(fetch_deadlines, record) -> list[asyncio.Task]:
+    global _http, _record
+    _record = record
+    tasks = [asyncio.create_task(remind_loop(fetch_deadlines))]
+    if enabled():
+        _load()
+        _http = httpx.AsyncClient()
+        tasks.append(asyncio.create_task(poll_updates()))
+    return tasks
 
 
 async def stop(tasks: list[asyncio.Task]) -> None:

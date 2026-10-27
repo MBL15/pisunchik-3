@@ -257,3 +257,8 @@ body { overflow-x: clip; }
   .tour-hole, .tour-launcher, .tour-btn { transition: none; }
   .tour-hole::after, .tour-offer, .is-pending::after { animation: none; }
 }
+
+/* Формы фильтров больших списков: на телефоне дополнительные поля (.fsp-more) свёрнуты под кнопку «Фильтры» */
+@media (max-width: 639px) {
+  form[data-autosubmit]:not(.is-open) .fsp-more { display: none; }
+}

@@ -141,6 +141,13 @@ class DecisionIn(BaseModel):
     comment: str = Field(default="", max_length=300)
 
 
+class BatchDecisionIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=1000)
+    status: ApplicationStatus
+    actor: str
+    comment: str = Field(default="", max_length=300)
+
+
 class IngestIn(BaseModel):
     log: str = Field(min_length=10, max_length=200_000)
     actor: str

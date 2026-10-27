@@ -1,0 +1,57 @@
+# Вся платформа одной командой: docker compose up -d --build  →  http://localhost:8000
+x-app: &app
+  build: .
+  restart: unless-stopped
+  environment: &env
+    FSP_DATABASE_URL: postgresql://fsp:fsp@postgres:5432/fsp
+    FSP_SPORTSMAN_URL: http://sportsman:8001
+    FSP_COMPETITION_URL: http://competition:8002
+    FSP_PUBLIC_BASE_URL: ${FSP_PUBLIC_BASE_URL:-http://localhost:8000}
+    FSP_SECRET_KEY: ${FSP_SECRET_KEY:-dev-only-fsp56-change-me}
+    FSP_TELEGRAM_TOKEN: ${FSP_TELEGRAM_TOKEN:-}
+    FSP_TELEGRAM_BOT: ${FSP_TELEGRAM_BOT:-}
+    FSP_DEMO_TODAY: ${FSP_DEMO_TODAY:-}
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fsp
+      POSTGRES_PASSWORD: fsp
+      POSTGRES_DB: fsp
+    ports:
+      - "5432:5432"
+    volumes:
+      - fsp_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fsp -d fsp"]
+      interval: 3s
+      retries: 20
+
+  sportsman:
+    <<: *app
+    command: uvicorn sportsman_service.main:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+
+  competition:
+    <<: *app
+    command: uvicorn competition_service.main:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+
+  gateway:
+    <<: *app
+    command: uvicorn gateway_service.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - sportsman
+      - competition
+
+volumes:
+  fsp_pg:

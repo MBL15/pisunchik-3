@@ -28,7 +28,7 @@
 ```
 run_all.py                 оркестратор: поднимает 3 сервиса, ждёт /health, live-reload
 shared/                    общее для всех сервисов
-  config.py                порты, URL, секрет, FSP_DEMO_TODAY, FSP_DATABASE_URL
+  config.py                порты, URL, секрет, FSP_DEMO_TODAY, FSP_DATABASE_URL, Telegram (токен, бот, прокси, файл привязок)
   db.py                    Postgres-персистентность (снимок → JSONB, diff по хэшу)
   domain.py                справочники (RU), enum-статусы, пороги сроков
   fsp_id.py                формат и проверка ФСП ID (Луна)
@@ -41,17 +41,22 @@ sportsman_service/  :8001  реестр людей, ФСП ID, связи, са�
 competition_service/:8002  календарь, протоколы, live, рейтинг, заявки, судьи, справки
   log_parser.py            FSP-LOG/1 → ранжированный протокол
   rating.py                чистый расчёт рейтинга
+  regulation_files.py      официальный файл положения (.pdf/.docx), один на соревнование
   seed.py                  календарь сезона и синтетические логи
 market_service/     :8003  биржа программистов: анкеты, портфолио, отклики, токены доступа
 mcp_market/                MCP-сервер биржи для моделей (stdio, обёртка над API шлюза /api/market/v1)
 gateway_service/    :8000  UI (Jinja2 + Tailwind), сессии, роли, публичный API-шлюз
   web.py                   общий слой: клиенты, шаблоны, пользователь, выгрузки
-  routes/                  реестр, модерация заявок, журнал, лента уведомлений
+  routes/                  реестр, модерация заявок, журнал, лента уведомлений, кабинет министерства, файл положения
+  infographic.py           геометрия SVG-графиков кабинета министерства (чистые функции)
+  notify.py                лента + Telegram: опрос бота, прокси, привязки в томе
   listing_ui.py            адрес списка: qs, страницы, сортировка, чипы
   templates/               страницы, кабинеты, macros.html
   static/app.css           эффекты и токены
-tests/                     unit (движки) + e2e smoke через шлюз
+tests/                     unit (движки, инфографика, файл положения, Telegram-прокси) + e2e smoke через шлюз
+scripts/                   telegram_tunnel.ps1 — обратный SSH-туннель для Telegram
 Dockerfile, docker-compose.yml   Postgres + три сервиса одной командой
+docker-compose.telegram-tunnel.yml   необязательная надстройка: ретранслятор для туннеля
 ```
 
 ## Глоссарий

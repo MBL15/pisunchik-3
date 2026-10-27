@@ -59,7 +59,7 @@
       <a href="/" class="group flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue" aria-label="ФСП Оренбургская область — на главную">
         {{ m.fsp_mark("h-10 w-10 transition-transform duration-300 group-hover:rotate-[30deg] motion-reduce:transition-none") }}
         <span class="font-mono text-[26px] font-bold leading-none tracking-tight text-fsp-bg">ФСП</span>
-        <span class="hidden flex-col font-mono text-[12px] leading-[1.15] text-fsp-bg lg:flex">
+        <span class="hidden flex-col font-mono text-[12px] leading-[1.15] text-fsp-bg lg:flex xl:hidden">
           <span>федерация спортивного</span>
           <span>программирования · <span class="font-bold text-fsp-blue">56</span></span>
         </span>
@@ -95,8 +95,8 @@
             {{ m.icon("bell", "h-[18px] w-[18px]") }}
             {% if user.unread %}<span class="absolute right-1 top-1 min-w-[18px] rounded-full bg-fsp-red px-1 text-center font-mono text-[10px] font-bold leading-[18px] text-white" aria-hidden="true">{{ user.unread if user.unread < 100 else "99+" }}</span>{% endif %}
           </a>
-          <a href="/cabinet" class="inline-flex items-center gap-2 rounded-md bg-fsp-bg px-3 py-2 font-mono text-[12px] font-medium text-fsp-light transition-colors duration-150 hover:bg-fsp-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue" title="{{ user.person.full_name }}">
-            <span class="hidden text-fsp-muted xl:inline">{{ user.person.fsp_id }}</span><span>Кабинет</span>
+          <a href="/cabinet" class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-fsp-bg px-3 py-2 font-mono text-[12px] font-medium text-fsp-light transition-colors duration-150 hover:bg-fsp-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue" title="{{ user.person.full_name }}">
+            <span class="hidden text-fsp-muted min-[1440px]:inline">{{ user.person.fsp_id }}</span><span>Кабинет</span>
           </a>
           <form method="post" action="/logout">
             <button class="hidden h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2 font-mono text-[12px] font-medium text-fsp-bg transition-colors duration-150 hover:bg-[#D9D9D9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue cursor-pointer sm:flex" aria-label="Выйти">{{ m.icon("logout", "h-4 w-4") }}<span class="hidden sm:inline">Выйти</span></button>

@@ -524,6 +524,23 @@ with as_user("admin@fsp56.ru", "admin") as adm, as_user("ministry@fsp56.ru", "mi
     check(mini.post("/development/attachments", data={"indicator": "headcount", "year": "2026", "title": "Чужое", "url": "https://x.example"}).status_code == 403,
           "министерство вложения не добавляет")
 
+print("== 13a. Файл положения и блок «Ближайшие соревнования» федерации")
+with as_user("admin@fsp56.ru", "admin") as adm, as_user("athlete@fsp56.ru", "athlete") as ath, httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as guest:
+    check("// ближайшие соревнования" in adm.get("/cabinet").text, "на дашборде федерации есть блок «Ближайшие соревнования»")
+    r = adm.post("/competitions/1/regulation-file", files={"file": ("polozhenie.pdf", b"%PDF-1.4 e2e reg", "application/pdf")})
+    check("Файл положения загружен" in r.text and "Скачать polozhenie.pdf" in r.text, "федерация загрузила файл положения")
+    got = guest.get("/competitions/1/regulation-file")
+    check(got.content == b"%PDF-1.4 e2e reg" and "attachment" in got.headers["content-disposition"] and got.headers["x-content-type-options"] == "nosniff",
+          "гость скачивает положение как вложение")
+    check("Скачать polozhenie.pdf" in ath.get("/competitions/1/regulation").text and "Загрузить файл" not in ath.get("/competitions/1/regulation").text,
+          "спортсмен видит ссылку, но не форму загрузки")
+    check(ath.post("/competitions/1/regulation-file", files={"file": ("x.pdf", b"%PDF", "application/pdf")}).status_code == 403
+          and ath.post("/competitions/1/regulation-file/delete").status_code == 403, "загружать и удалять может только федерация")
+    check("Положение загружается файлом" in adm.post("/competitions/1/regulation-file", files={"file": ("a.exe", b"MZ", "application/octet-stream")}).text,
+          "исполняемый файл отклонён")
+    check("Файл положения удалён" in adm.post("/competitions/1/regulation-file/delete").text
+          and guest.get("/competitions/1/regulation-file").status_code == 404, "файл удалён")
+
 print("== 14. Д7 личный путь и справочник понятий")
 with as_user("athlete@fsp56.ru", "athlete") as ath, httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as guest:
     html = ath.get("/journey").text

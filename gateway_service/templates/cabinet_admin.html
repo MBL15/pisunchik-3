@@ -159,6 +159,24 @@
   </div>
 </section>
 
+{# ---------------- UPCOMING COMPETITIONS ---------------- #}
+<section id="upcoming" class="mt-10 scroll-mt-36" aria-labelledby="upcoming-h">
+  <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <h2 id="upcoming-h" class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-violet">// ближайшие соревнования</h2>
+    <a href="/calendar" class="font-mono text-xs text-fsp-violet hover:underline">весь календарь →</a>
+  </div>
+  {% set soon = (dash.live if dash else []) + (dash.upcoming if dash else []) %}
+  <ul class="grid gap-2 md:grid-cols-2 [&>*]:min-w-0">
+    {% for c in soon %}
+    <li class="{{ m.CARD }} p-3 text-sm">
+      <div class="flex flex-wrap items-center gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{{ m.tag(c.level_status) }}</div>
+      <a href="/competitions/{{ c.id }}/regulation" class="mt-1 block font-medium text-white hover:text-fsp-violet hover:underline">{{ c.title }}</a>
+      <p class="font-mono text-[11px] text-fsp-muted">{{ c.start_date|ru_date }} · {{ "идёт сейчас" if c.days_to_start <= 0 else "через " ~ (c.days_to_start|days_word) }} · {{ c.plan_label }}, {{ c.plan_number }} · {{ c.venue }}</p>
+    </li>
+    {% else %}<li class="rounded-xl border border-dashed border-fsp-line2 p-4 text-sm text-fsp-muted md:col-span-2">Ближайших соревнований нет — <a href="/cabinet?tab=competitions#create" class="text-fsp-violet hover:underline">создайте в календаре</a>.</li>{% endfor %}
+  </ul>
+</section>
+
 {# ---------------- AUDIT LOG ---------------- #}
 <section class="mt-12">
   {{ m.section_head("tail ./audit.log", "Журнал действий") }}

@@ -23,7 +23,7 @@ from gateway_service.listing_ui import chips, list_args, pages
 from gateway_service.qr import qr_svg
 from gateway_service.routes import (
     appeals, audit, awards, guide, integrations, judging, market, ministry, moderation, notifications, oidc, organizations, registry,
-    squads, training,
+    regulation, squads, training,
 )
 from gateway_service.session import clear_session, write_session
 from gateway_service.web import (
@@ -58,7 +58,7 @@ app.mount("/api/market/v1", market_api.api)
 app.mount("/api/ext/v1", integrations_api.api)
 for router in (registry.router, moderation.router, audit.router, notifications.router, market.router, guide.router, judging.router,
                ministry.router, awards.router, appeals.router, training.router, organizations.router, oidc.router,
-               integrations.router, squads.router):
+               integrations.router, squads.router, regulation.router):
     app.include_router(router)
 
 
@@ -169,10 +169,12 @@ async def calendar_page(request: Request, discipline: str = "", plan: str = "", 
 async def regulation_page(request: Request, cid: int):
     degraded: list[str] = []
     user = await safe(current_user(request), None, degraded)
-    c, settings = await asyncio.gather(clients["competition"].get(f"/api/v1/competitions/{cid}"),
-                                       safe(clients["competition"].get("/api/v1/rating/settings"), None, degraded))
+    c, settings, reg_file = await asyncio.gather(
+        clients["competition"].get(f"/api/v1/competitions/{cid}"),
+        safe(clients["competition"].get("/api/v1/rating/settings"), None, degraded),
+        safe(clients["competition"].get(f"/api/v1/competitions/{cid}/regulation-file"), None, degraded))
     return render(request, "regulation.html", user=user, c=c, mode=domain.protocol_mode(c["discipline"]),
-                  points=settings["points"].get(c["level"]) if settings else None, degraded=degraded)
+                  points=settings["points"].get(c["level"]) if settings else None, reg_file=reg_file, degraded=degraded)
 
 
 @app.get("/partials/live/{cid}", response_class=HTMLResponse)

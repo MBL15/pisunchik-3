@@ -9,7 +9,7 @@ from datetime import date, datetime
 from fastapi import FastAPI, HTTPException, Query, Request
 from starlette.concurrency import run_in_threadpool
 
-from competition_service import appeals, awards, development, evsk, integrations
+from competition_service import appeals, awards, development, evsk, integrations, regulation_files
 from competition_service.deps import clients
 from competition_service.log_parser import parse_log
 from competition_service.models import (
@@ -60,6 +60,7 @@ app.include_router(development.router)
 app.include_router(awards.router)
 app.include_router(appeals.router)
 app.include_router(integrations.router)
+app.include_router(regulation_files.router)
 
 
 @app.middleware("http")

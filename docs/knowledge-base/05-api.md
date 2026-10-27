@@ -44,6 +44,8 @@ Swagger: `http://127.0.0.1:8001/docs` (sportsman), `http://127.0.0.1:8002/docs` 
 |---|---|---|
 | `GET /api/v1/competitions` | Календарь (`discipline`, `status`, `plan`, `format`, `season`, `upcoming`, `level`, `age_group`, `q` — слова в названии, коде, месте, типе, номере плана) | — |
 | `GET /api/v1/competitions/{id}` | Соревнование | `404` |
+| `GET` / `PUT` / `DELETE /api/v1/competitions/{id}/regulation-file` | Официальный файл положения: сведения или `null` / загрузка `{filename, content_b64, actor}` (заменяет прежний; `.pdf` или `.docx`, до 4 МБ) / удаление `?actor=` | `404` нет соревнования (у `DELETE` и нет файла); `422` тип, размер, base64 |
+| `GET /api/v1/competitions/{id}/regulation-file/content` | Содержимое файла `{filename, media_type, content_b64}` | `404` файл не загружен |
 | `POST /api/v1/competitions` | Создание | Статус по сроку приёма заявок |
 | `POST /api/v1/competitions/{id}/registration` | Ручное открытие / закрытие / продление приёма заявок `{action, deadline?, actor}` | `409` не открыт / уже открыт; `422` срок прошёл, позже старта, соревнование идёт или завершено |
 | `GET/POST /api/v1/competition-types` | Справочник типов соревнований (с числом использований); добавить `{title, actor}` | `409` дубль (без учёта регистра); `422` название |
@@ -107,6 +109,8 @@ Swagger: `http://127.0.0.1:8001/docs` (sportsman), `http://127.0.0.1:8002/docs` 
 | `GET /protocols/{id}` | все (черновик — федерация) | Протокол по форме для печати / PDF |
 | `POST /cabinet/admin/competitions` | федерация | Создание соревнования |
 | `POST /documents/participation` | федерация, спортсмен | Справка (спортсмен — только на себя) |
+| `POST /competitions/{id}/regulation-file` · `POST …/regulation-file/delete` | федерация | Загрузить (`file`, .pdf/.docx до 4 МБ; заменяет прежний) / удалить файл положения |
+| `GET /competitions/{id}/regulation-file` | все, в т. ч. гость | Скачать файл положения (вложение, `nosniff`); `404`, если не загружен |
 | `POST /cabinet/admin/competitions/{id}/registration` | федерация | Открыть / закрыть / продлить приём заявок (`action`, `deadline`) |
 | `POST /cabinet/admin/competition-types` · `…/remove` | федерация | Пополнить справочник типов · удалить неиспользуемый |
 | `GET /reports/headcount` | федерация | Отчёт о численности с фильтрами (`years`, `discipline`, `municipality`, `organization`) |

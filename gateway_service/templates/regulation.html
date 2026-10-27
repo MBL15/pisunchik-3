@@ -19,6 +19,30 @@
 </div>
 <div class="no-print mt-4">{{ m.degraded_notice(degraded) }}</div>
 
+<section class="no-print mx-auto mt-6 max-w-[900px] {{ m.CARD }} p-4" aria-labelledby="reg-file-h">
+  <h2 id="reg-file-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Официальный файл положения</h2>
+  {% if reg_file %}
+  <div class="mt-2 flex flex-wrap items-center justify-between gap-3">
+    <a href="/competitions/{{ c.id }}/regulation-file" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Скачать {{ reg_file.filename }}<span class="text-fsp-muted">({{ ((reg_file.size / 1024)|round(0)|int) }} КБ)</span></a>
+    <span class="font-mono text-[11px] text-fsp-muted">загружен {{ reg_file.uploaded_at[:10]|ru_date }}</span>
+  </div>
+  {% else %}
+  <p class="mt-2 text-sm text-fsp-muted">Утверждённый файл положения не загружен — ниже положение, сформированное из карточки соревнования.</p>
+  {% endif %}
+  {% if role == "admin" %}
+  <form method="post" action="/competitions/{{ c.id }}/regulation-file" enctype="multipart/form-data" class="mt-3 flex flex-wrap items-center gap-2">
+    <label class="sr-only" for="reg-file">Файл положения (.pdf или .docx, до 4 МБ)</label>
+    <input id="reg-file" type="file" name="file" required accept=".pdf,.docx" class="text-xs text-fsp-soft">
+    <button class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}{{ "Заменить файл" if reg_file else "Загрузить файл" }}</button>
+  </form>
+  {% if reg_file %}
+  <form method="post" action="/competitions/{{ c.id }}/regulation-file/delete" class="mt-2">
+    <button class="{{ m.BTN_NO }}" data-confirm="Удалить файл положения? Положение из карточки соревнования останется." data-confirm-label="Удалить">Удалить файл</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</section>
+
 <article class="print-sheet relative mx-auto mt-8 max-w-[900px] overflow-hidden bg-white text-[#1B1C21] shadow-[10px_10px_0px_0px_#402FFF] ring-1 ring-[#C7C7C7]" aria-label="Положение о соревновании">
   <div class="h-2 bg-gradient-to-r from-fsp-blue via-fsp-blue to-fsp-red"></div>
   <div class="px-6 pb-10 pt-8 sm:px-12">

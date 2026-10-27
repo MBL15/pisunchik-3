@@ -221,6 +221,23 @@
 </li>
 {%- endmacro %}
 
+{# Ссылки на выгрузку документа: <base>.xlsx / .docx / .pdf (+ строка запроса с фильтрами) #}
+{% macro export_links(base, label="Скачать", qs="") -%}
+<span class="no-print inline-flex flex-wrap items-center gap-1.5" role="group" aria-label="{{ label }}">
+  <span class="font-mono text-[11px] uppercase text-fsp-muted">{{ label }}</span>
+  {% for ext in ("xlsx", "docx", "pdf") %}<a href="{{ base }}.{{ ext }}{{ ('?' ~ qs) if qs }}" download class="{{ BTN_SM }}">{{ icon("file", "h-3.5 w-3.5") }}{{ ext|upper }}</a>{% endfor %}
+</span>
+{%- endmacro %}
+
+{# Плашка ЕВСК: результат выполняет требования разряда (state: assign | confirm | unknown) #}
+{% macro evsk_pill(e, pending=False) -%}
+{%- if pending -%}
+<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-fsp-line2 px-2 py-0.5 font-mono text-[11px] text-fsp-soft" title="{{ e.target.requirement }}">{{ e.target.short }} · заявка подана</span>
+{%- else -%}
+<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-amber-400/70 bg-amber-400/15 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-300" title="{{ e.target.requirement }}">{{ icon("trophy", "h-3 w-3") }}ЕВСК · {{ e.target.short }}{% if e.state == "confirm" %} · подтверждение{% endif %}</span>
+{%- endif -%}
+{%- endmacro %}
+
 {% macro degraded_notice(items) -%}
 {%- if items -%}
 <div class="no-print mb-6 border border-amber-400/60 bg-amber-400/5 p-3 font-mono text-xs text-amber-200 rounded-md" role="status">

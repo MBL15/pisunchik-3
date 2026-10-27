@@ -5,9 +5,13 @@ from datetime import date, datetime
 from fastapi import FastAPI, HTTPException, Query
 
 from shared import config
-from shared.domain import JUDGE_CATEGORY_BY_CODE, RANK_BY_CODE, RANK_ORDER, ApplicationStatus, LinkStatus, Role
+from shared.domain import (
+    DISCIPLINE_BY_CODE, JUDGE_CATEGORY_BY_CODE, MUNICIPALITIES, ORGANIZATIONS, RANK_BY_CODE, RANK_ORDER,
+    ApplicationStatus, LinkStatus, Role,
+)
 from shared.fsp_id import is_valid_fsp_id
 from shared.http import ServiceClient, ServiceError
+from sportsman_service.headcount import build_report
 from sportsman_service.models import (
     AuthIn, Guardian, JudgeCategoryRecord, LinkCreateIn, LinkEvent, LinkStatusIn, LookupIn, PersonRecord,
     QualificationDecisionIn, QualificationIn, QualificationRequest, RankRecord, RegistrationIn,
@@ -143,6 +147,20 @@ async def stats():
         "by_discipline": by_disc, "by_municipality": dict(sorted(by_mun.items(), key=lambda x: -x[1])),
         "by_start_year": dict(sorted(by_year.items())),
     }
+
+
+@app.get("/api/v1/reports/headcount")
+async def headcount_report(years: int = Query(3, ge=2, le=6), discipline: str | None = None,
+                           municipality: str | None = None, organization: str | None = None):
+    """Численность занимающихся на конец каждого из последних `years` лет, разрезы и динамика."""
+    if discipline and discipline not in DISCIPLINE_BY_CODE:
+        raise HTTPException(422, "Неизвестная дисциплина")
+    if municipality and municipality not in MUNICIPALITIES:
+        raise HTTPException(422, "Неизвестный муниципалитет")
+    if organization and organization not in ORGANIZATIONS:
+        raise HTTPException(422, "Неизвестная организация")
+    return build_report(list(store.persons.values()), config.today(), years, discipline or None, municipality or None,
+                        organization or None)
 
 
 @app.get("/api/v1/audit")

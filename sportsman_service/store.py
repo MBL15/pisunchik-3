@@ -158,7 +158,7 @@ def seed(s: Store) -> None:
             fsp_id=r["fsp_id"], seq=r["seq"], last_name=r["last_name"], first_name=r["first_name"],
             middle_name=r["middle_name"], gender=r["gender"], birth_date=birth, municipality=r["municipality"],
             organization=r["organization"], roles=r["roles"], disciplines=r["disciplines"],
-            start_year=max(birth.year + 10, 2018 + r["seq"] % 6), email=r["email"],
+            start_year=max(birth.year + 10, 2000 + int(r["fsp_id"].split("-")[2]) - r["seq"] % 3), email=r["email"],
             password_hash=demo_hash if r["email"] else None, rank=rank, judge_category=judge,
             sanctions=sanctions, guardian=guardian, pd_consent_at=now, created_at=now,
         )

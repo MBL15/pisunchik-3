@@ -9,16 +9,17 @@ import asyncio
 import json
 import re
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from gateway_service import notify
+from gateway_service import exports, notify, reports
 from gateway_service.qr import qr_svg
 from gateway_service.session import (
     FLASH_COOKIE, clear_session, pop_flash, read_session, set_flash, write_session,
@@ -234,7 +235,8 @@ async def rating_page(request: Request, discipline: str = "ALG", season: int | N
         discipline = "ALG"
     rating = await safe(clients["competition"].get("/api/v1/rating", discipline=discipline, season=season,
                                                    age_group=age_group or None, min_rank=min_rank or None), None, degraded)
-    return render(request, "rating.html", user=user, rating=rating, discipline=discipline, degraded=degraded)
+    return render(request, "rating.html", user=user, rating=rating, discipline=discipline, degraded=degraded,
+                  can_pick=bool(user and user["role"] == Role.ADMIN))
 
 
 @app.get("/calendar", response_class=HTMLResponse)
@@ -369,7 +371,8 @@ async def cabinet(request: Request):
 async def _cabinet_admin(request: Request, user: dict):
     degraded: list[str] = []
     sp, co = clients["sportsman"], clients["competition"]
-    dash, stats, rank_alerts, judge_alerts, settings, comps, quals, judges, audit_sp, audit_co = await asyncio.gather(
+    dash, stats, rank_alerts, judge_alerts, settings, comps, quals, judges, audit_sp, audit_co, comp_types, teams, evsk, \
+        evsk_table = await asyncio.gather(
         safe(co.get("/api/v1/dashboard"), None, degraded),
         safe(sp.get("/api/v1/stats"), None, degraded),
         safe(sp.get("/api/v1/alerts/ranks", within_days=90), [], degraded),
@@ -380,8 +383,15 @@ async def _cabinet_admin(request: Request, user: dict):
         safe(sp.get("/api/v1/persons", role="judge"), [], degraded),
         safe(sp.get("/api/v1/audit", limit=15), [], degraded),
         safe(co.get("/api/v1/audit", limit=15), [], degraded),
+        safe(co.get("/api/v1/competition-types"), [], degraded),
+        safe(co.get("/api/v1/teams"), [], degraded),
+        safe(co.get("/api/v1/evsk/candidates"), {"rows": [], "ranks_checked": True}, degraded),
+        safe(co.get("/api/v1/evsk/requirements"), [], degraded),
     )
     today = config.today()
+    evsk_rows = [r for r in evsk["rows"] if r["state"] != "have"]
+    evsk_map = {f"{r['competition_id']}:{r['fsp_id']}": r for r in evsk_rows}
+    rank_pending = {q["person_fsp_id"] for q in quals if q["kind"] == "RANK"}
     for q in quals:
         years = domain.RANK_BY_CODE[q["code"]]["validity_years"] if q["kind"] == "RANK" else JUDGE_CATEGORY_DEFAULT_YEARS
         q["valid_until"] = _plus_years(today, years).isoformat() if years else None
@@ -390,6 +400,12 @@ async def _cabinet_admin(request: Request, user: dict):
     for c in panels:
         c["has_chief"] = any(j["position"] == "Главный судья" for j in c["judges"])
     awaiting = sorted([c for c in comps if c["awaiting_results"]], key=lambda c: c["start_date"])
+    registrations = sorted([c for c in comps if c["status"] in ("PLANNED", "REGISTRATION_OPEN", "REGISTRATION_CLOSED")
+                            and c["days_to_start"] > 0], key=lambda c: c["start_date"])
+    for c in registrations:
+        keep = c["registration_deadline"] and not c["registration_expired"]
+        c["suggest_deadline"] = c["registration_deadline"] if keep else (
+            today + timedelta(days=min(14, max(c["days_to_start"] - 1, 0)))).isoformat()
     protocols, sheets = await asyncio.gather(
         asyncio.gather(*[safe(co.get(f"/api/v1/competitions/{c['id']}/protocol"), None, degraded) for c in finished]),
         asyncio.gather(*[safe(co.get(f"/api/v1/competitions/{c['id']}/protocol/entry-sheet"), None, degraded) for c in awaiting]),
@@ -403,7 +419,9 @@ async def _cabinet_admin(request: Request, user: dict):
     return render(request, "cabinet_admin.html", user=user, dash=dash, stats=stats, rank_alerts=rank_alerts,
                   judge_alerts=judge_alerts, settings=settings, finished=finished, doc_options=doc_options,
                   sheets=[s for s in sheets if s], audit=audit, sample_log=_sample_log(protocols),
-                  quals=quals, panels=panels, judges=judges, degraded=sorted(set(degraded)))
+                  quals=quals, panels=panels, judges=judges, registrations=registrations, comp_types=comp_types,
+                  teams=teams, evsk_rows=evsk_rows, evsk_map=evsk_map, evsk_table=evsk_table,
+                  evsk_checked=evsk["ranks_checked"], rank_pending=rank_pending, degraded=sorted(set(degraded)))
 
 
 def _plus_years(d: date, years: int) -> date:
@@ -716,7 +734,11 @@ async def protocol_page(request: Request, cid: int):
         raise HTTPException(403, "Протокол ещё не опубликован — черновик доступен только федерации")
     c = p["competition"]
     judges = {j["position"]: j["full_name"] for j in reversed(c["judges"])}
-    return render(request, "protocol.html", user=user, p=p, c=c, judges=judges,
+    evsk: dict[str, dict] = {}
+    if user and user["role"] == Role.ADMIN:  # подсветка выполнивших требования ЕВСК — только в экранной версии для федерации
+        found = await safe(clients["competition"].get("/api/v1/evsk/candidates", competition_id=cid), {"rows": []}, [])
+        evsk = {r["fsp_id"]: r for r in found["rows"] if r["state"] != "have"}
+    return render(request, "protocol.html", user=user, p=p, c=c, judges=judges, evsk=evsk,
                   dsq_count=sum(e["status"] == "DSQ" for e in p["entries"]))
 
 
@@ -744,6 +766,234 @@ async def create_competition(request: Request):
     if c["status"] == "REGISTRATION_OPEN":
         await notify.notify_many(notify.chats.keys(), "Открыта регистрация на соревнование", c["title"], "/calendar")
     return back("/cabinet", "ok", f"Соревнование {c['code']} создано · статус: {c['status_label']}")
+
+
+@app.post("/cabinet/admin/competitions/{cid}/registration")
+async def toggle_registration(request: Request, cid: int):
+    user = await require(request, Role.ADMIN)
+    form = await request.form()
+    try:
+        c = await clients["competition"].post(f"/api/v1/competitions/{cid}/registration", json={
+            "action": form.get("action", ""), "deadline": form.get("deadline") or None, "actor": user["person"]["fsp_id"]})
+    except ServiceError as exc:
+        return back("/cabinet#registration", "error", humanize(exc.detail))
+    if c["status"] == "REGISTRATION_OPEN":
+        await notify.notify_many(notify.chats.keys(), "Открыт приём заявок",
+                                 f"{c['title']} · до {ru_date(c['registration_deadline'])}", "/calendar")
+        return back("/cabinet#registration", "ok", f"Приём заявок на {c['code']} открыт до {ru_date(c['registration_deadline'])}")
+    return back("/cabinet#registration", "ok", f"Приём заявок на {c['code']} закрыт: заявок {c['applications_total']}, "
+                                                f"на модерации {c['applications_pending']}")
+
+
+@app.post("/cabinet/admin/competition-types")
+async def add_competition_type(request: Request):
+    user = await require(request, Role.ADMIN)
+    title = " ".join(str((await request.form()).get("title", "")).split())
+    try:
+        await clients["competition"].post("/api/v1/competition-types", json={"title": title, "actor": user["person"]["fsp_id"]})
+    except ServiceError as exc:
+        return back("/cabinet#create", "error", humanize(exc.detail))
+    return back("/cabinet#create", "ok", f"Тип «{title}» добавлен в справочник — он доступен при создании соревнования")
+
+
+@app.post("/cabinet/admin/competition-types/remove")
+async def remove_competition_type(request: Request):
+    user = await require(request, Role.ADMIN)
+    title = str((await request.form()).get("title", ""))
+    try:
+        await clients["competition"].request("DELETE", "/api/v1/competition-types",
+                                             params={"title": title, "actor": user["person"]["fsp_id"]})
+    except ServiceError as exc:
+        return back("/cabinet#create", "error", humanize(exc.detail))
+    return back("/cabinet#create", "ok", f"Тип «{title}» удалён из справочника")
+
+
+# ---------------------------------------------------------------- выгрузки .xlsx / .docx / .pdf
+def _known_format(fmt: str) -> None:
+    if fmt not in exports.MEDIA_TYPES:
+        raise HTTPException(404, "Формат выгрузки не поддерживается: доступны xlsx, docx и pdf")
+
+
+async def download(doc: exports.Doc, fmt: str) -> Response:
+    try:
+        out = await asyncio.to_thread(exports.render, doc, fmt)
+    except exports.ExportError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return Response(out.content, media_type=out.media_type,
+                    headers={"Content-Disposition": exports.content_disposition(out.filename)})
+
+
+@app.get("/protocols/{cid}/export.{fmt}")
+async def export_protocol(request: Request, cid: int, fmt: str):
+    _known_format(fmt)
+    user = await current_user(request)
+    p = await clients["competition"].get(f"/api/v1/competitions/{cid}/protocol")
+    if not p["published"] and not (user and user["role"] == Role.ADMIN):
+        raise HTTPException(403, "Протокол ещё не опубликован — черновик доступен только федерации")
+    judges = {j["position"]: j["full_name"] for j in reversed(p["competition"]["judges"])}
+    return await download(reports.protocol_doc(p, judges), fmt)
+
+
+@app.get("/athletes/{fid}/report.{fmt}")
+async def export_athlete_report(request: Request, fid: str, fmt: str):
+    _known_format(fmt)
+    user = await require(request, Role.ADMIN, Role.ATHLETE, Role.TRAINER)
+    me, role = user["person"]["fsp_id"], user["role"]
+    if role == Role.ATHLETE and fid != me:
+        raise HTTPException(403, "Отчёт о соревнованиях доступен самому спортсмену, его тренеру и федерации")
+    if role == Role.TRAINER:
+        links = await clients["sportsman"].get(f"/api/v1/athletes/{fid}/links")
+        if not any(lk["trainer_fsp_id"] == me and lk["status"] == "ACTIVE" for lk in links):
+            raise HTTPException(403, "Отчёт доступен тренеру только по подопечным с активной привязкой")
+    person, perf = await asyncio.gather(clients["sportsman"].get(f"/api/v1/persons/{fid}"),
+                                        clients["sportsman"].get(f"/api/v1/persons/{fid}/performance"))
+    if "athlete" not in person["roles"]:
+        raise HTTPException(422, "Отчёт о соревнованиях формируется только для спортсмена")
+    if not perf.get("available"):
+        raise HTTPException(503, "Сервис соревнований недоступен — история выступлений не получена")
+    return await download(reports.athlete_report_doc(person, perf, config.today()), fmt)
+
+
+def _headcount_query(years: int, discipline: str, municipality: str, organization: str) -> dict:
+    return {"years": years, "discipline": discipline or None, "municipality": municipality or None,
+            "organization": organization or None}
+
+
+@app.get("/reports/headcount", response_class=HTMLResponse)
+async def headcount_page(request: Request, years: int = 3, discipline: str = "", municipality: str = "", organization: str = ""):
+    user = await require(request, Role.ADMIN)
+    query = _headcount_query(years, discipline, municipality, organization)
+    try:
+        report = await clients["sportsman"].get("/api/v1/reports/headcount", **query)
+    except ServiceError as exc:
+        if exc.unavailable:
+            raise
+        return back("/reports/headcount", "error", humanize(exc.detail))
+    qs = urlencode({k: v for k, v in query.items() if v})
+    return render(request, "report_headcount.html", user=user, r=report, qs=qs, years=years,
+                  filters={"discipline": discipline, "municipality": municipality, "organization": organization})
+
+
+@app.get("/reports/headcount/export.{fmt}")
+async def export_headcount(request: Request, fmt: str, years: int = 3, discipline: str = "", municipality: str = "",
+                           organization: str = ""):
+    _known_format(fmt)
+    await require(request, Role.ADMIN)
+    try:
+        report = await clients["sportsman"].get("/api/v1/reports/headcount", **_headcount_query(years, discipline, municipality, organization))
+    except ServiceError as exc:
+        raise HTTPException(exc.status if exc.status < 500 else 503, humanize(exc.detail)) from exc
+    chosen = [f"{label}: {value}" for label, value in (("дисциплина", domain.DISCIPLINE_BY_CODE.get(discipline, {}).get("short")),
+                                                       ("муниципалитет", municipality), ("организация", organization)) if value]
+    return await download(reports.headcount_doc(report, "; ".join(chosen) or "без фильтров"), fmt)
+
+
+# ---------------------------------------------------------------- сборные команды и проект приказа
+TEAMS_URL = "/teams"
+
+
+@app.post("/cabinet/admin/teams")
+async def create_team(request: Request):
+    user = await require(request, Role.ADMIN)
+    form = await request.form()
+    keep = {k: form.get(k) for k in ("discipline", "season", "age_group", "min_rank") if form.get(k)}
+    fids = form.getlist("fids")
+    if not fids:
+        return back("/rating?" + urlencode(keep), "error", "Отметьте в таблице рейтинга хотя бы одного спортсмена для сборной")
+    try:
+        t = await clients["competition"].post("/api/v1/teams", json={
+            "title": str(form.get("title", "")), "discipline": form.get("discipline", ""), "season": int(form.get("season", 0)),
+            "purpose": str(form.get("purpose", "")), "age_group": form.get("age_group") or None,
+            "min_rank": form.get("min_rank") or None, "fsp_ids": fids, "actor": user["person"]["fsp_id"]})
+    except ValueError:
+        return back("/rating?" + urlencode(keep), "error", "Сезон должен быть числом")
+    except ServiceError as exc:
+        return back("/rating?" + urlencode(keep), "error", humanize(exc.detail))
+    return back(f"{TEAMS_URL}/{t['id']}", "ok", f"Сборная сформирована: {t['main_count']} спортсменов в основном составе. "
+                                                  f"Проверьте состав, при необходимости измените его и скачайте документы.", celebrate=True)
+
+
+@app.get("/teams", response_class=HTMLResponse)
+async def teams_page(request: Request):
+    user = await require(request, Role.ADMIN)
+    degraded: list[str] = []
+    teams = await safe(clients["competition"].get("/api/v1/teams"), [], degraded)
+    return render(request, "teams.html", user=user, teams=teams, degraded=degraded)
+
+
+@app.get("/teams/{tid}", response_class=HTMLResponse)
+async def team_page(request: Request, tid: int):
+    user = await require(request, Role.ADMIN)
+    degraded: list[str] = []
+    t = await clients["competition"].get(f"/api/v1/teams/{tid}")
+    candidates: list[dict] = []
+    if not t["locked"]:
+        rating = await safe(clients["competition"].get("/api/v1/rating", discipline=t["discipline"], season=t["season"],
+                                                       age_group=t["age_group"], min_rank=t["min_rank"]), None, degraded)
+        taken = {m["fsp_id"] for m in t["members"]}
+        candidates = [r for r in (rating["rows"] if rating else []) if r["fsp_id"] not in taken]
+    return render(request, "team.html", user=user, t=t, candidates=candidates, degraded=degraded)
+
+
+async def _team_action(request: Request, tid: int, call, ok: str):
+    user = await require(request, Role.ADMIN)
+    form = await request.form()
+    try:
+        t = await call(user["person"]["fsp_id"], form)
+    except ServiceError as exc:
+        return back(f"{TEAMS_URL}/{tid}", "error", humanize(exc.detail))
+    return back(f"{TEAMS_URL}/{tid}", "ok", ok.format(t=t))
+
+
+@app.post("/cabinet/admin/teams/{tid}/update")
+async def update_team(request: Request, tid: int):
+    return await _team_action(request, tid, lambda actor, f: clients["competition"].put(f"/api/v1/teams/{tid}", json={
+        "title": str(f.get("title", "")), "purpose": str(f.get("purpose", "")), "actor": actor}), "Название и цель сборной сохранены")
+
+
+@app.post("/cabinet/admin/teams/{tid}/members")
+async def add_team_member(request: Request, tid: int):
+    return await _team_action(request, tid, lambda actor, f: clients["competition"].post(f"/api/v1/teams/{tid}/members", json={
+        "fsp_id": str(f.get("fsp_id", "")), "actor": actor}), "Спортсмен добавлен в резерв — переведите его в основной состав при необходимости")
+
+
+@app.post("/cabinet/admin/teams/{tid}/members/{fid}/remove")
+async def remove_team_member(request: Request, tid: int, fid: str):
+    return await _team_action(request, tid, lambda actor, f: clients["competition"].request(
+        "DELETE", f"/api/v1/teams/{tid}/members/{fid}", params={"actor": actor}), "Спортсмен исключён из сборной")
+
+
+@app.post("/cabinet/admin/teams/{tid}/members/{fid}/role")
+async def set_team_member_role(request: Request, tid: int, fid: str):
+    return await _team_action(request, tid, lambda actor, f: clients["competition"].post(
+        f"/api/v1/teams/{tid}/members/{fid}/role", json={"role": str(f.get("role", "")), "actor": actor}), "Статус спортсмена в сборной изменён")
+
+
+@app.post("/cabinet/admin/teams/{tid}/approve")
+async def approve_team(request: Request, tid: int):
+    return await _team_action(request, tid, lambda actor, f: clients["competition"].post(f"/api/v1/teams/{tid}/approve", json={
+        "order_no": str(f.get("order_no", "")), "order_date": f.get("order_date") or None, "actor": actor}),
+        "Состав утверждён приказом {t[order_no]} — изменения закрыты, документы содержат реквизиты приказа")
+
+
+@app.post("/cabinet/admin/teams/{tid}/delete")
+async def delete_team(request: Request, tid: int):
+    user = await require(request, Role.ADMIN)
+    try:
+        await clients["competition"].request("DELETE", f"/api/v1/teams/{tid}", params={"actor": user["person"]["fsp_id"]})
+    except ServiceError as exc:
+        return back(f"{TEAMS_URL}/{tid}", "error", humanize(exc.detail))
+    return back(TEAMS_URL, "ok", "Черновик сборной удалён")
+
+
+@app.get("/teams/{tid}/{kind}.{fmt}")
+async def export_team(request: Request, tid: int, kind: str, fmt: str):
+    _known_format(fmt)
+    if kind not in ("roster", "order"):
+        raise HTTPException(404, "Документ не найден: доступны список сборной (roster) и проект приказа (order)")
+    await require(request, Role.ADMIN)
+    t = await clients["competition"].get(f"/api/v1/teams/{tid}")
+    return await download(reports.team_roster_doc(t) if kind == "roster" else reports.team_order_doc(t), fmt)
 
 
 # ---------------------------------------------------------------- documents (case Д10)

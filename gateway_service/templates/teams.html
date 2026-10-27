@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Сборные команды · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="pt-10">
+  {{ m.section_head("team list --season", "Сборные команды", "Состав набирается вручную из отфильтрованного рейтинга: отметьте спортсменов на странице рейтинга. Для каждой сборной доступны список (.xlsx, .docx, .pdf) и проект приказа об утверждении состава.") }}
+  {{ m.degraded_notice(degraded) }}
+  <div class="no-print mb-6 flex flex-wrap gap-3">
+    <a href="/cabinet#teams" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
+    <a href="/rating" class="{{ m.BTN }} !py-2 !text-xs">{{ m.icon("users", "h-3.5 w-3.5") }}Сформировать из рейтинга</a>
+  </div>
+  <ul class="grid gap-3">
+    {% for t in teams %}
+    <li class="spotlight grid gap-3 border border-fsp-line bg-fsp-panel p-4 transition-all duration-150 hover:border-fsp-blue hover:shadow-[4px_4px_0px_0px_#402FFF] sm:grid-cols-[1fr_auto] rounded-xl">
+      <div class="min-w-0">
+        <div class="flex flex-wrap items-center gap-2">{{ m.tag(t.discipline_label, "blue") }}{{ m.tag("сезон " ~ t.season) }}{{ m.tag(t.status_label, "emerald" if t.locked else "amber") }}</div>
+        <a href="/teams/{{ t.id }}" class="mt-2 block font-medium text-white hover:text-fsp-violet hover:underline">{{ t.title }}</a>
+        <p class="mt-1 font-mono text-[11px] text-fsp-muted">основной состав {{ t.main_count }}{% if t.reserve_count %} · резерв {{ t.reserve_count }}{% endif %}{% if t.locked %} · приказ {{ t.order_no }} от {{ t.order_date|ru_date }}{% endif %} · обновлена {{ t.updated_at[:10]|ru_date }}</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <a href="/teams/{{ t.id }}" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Состав</a>
+        <a href="/teams/{{ t.id }}/order.docx" class="{{ m.BTN_SM }}" download>{{ m.icon("file", "h-3.5 w-3.5") }}Проект приказа</a>
+      </div>
+    </li>
+    {% else %}
+    <li class="rounded-xl border border-dashed border-fsp-line2 p-6 text-sm text-fsp-muted">Сборных пока нет. Откройте <a href="/rating" class="text-fsp-violet hover:underline">рейтинг</a>, отфильтруйте его и отметьте спортсменов.</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

@@ -16,7 +16,8 @@
   </div>
   <div class="flex flex-wrap gap-3">
     <a href="{{ '/cabinet#results-entry' if is_admin and not p.published else ('/cabinet#history' if user and user.role == 'athlete' else '/calendar') }}" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Назад</a>
-    <button type="button" onclick="window.print()" class="{{ m.BTN }} !py-2 !text-xs">{{ m.icon("printer", "h-3.5 w-3.5") }}Печать / PDF</button>
+    <button type="button" onclick="window.print()" class="{{ m.BTN }} !py-2 !text-xs">{{ m.icon("printer", "h-3.5 w-3.5") }}Печать</button>
+    {{ m.export_links("/protocols/" ~ c.id ~ "/export") }}
   </div>
 </div>
 
@@ -87,6 +88,7 @@
             <th scope="col" class="px-2 py-2 text-right">Баллы</th>
             {% endif %}
             <th scope="col" class="px-2 py-2">Примечание</th>
+            {% if evsk %}<th scope="col" class="no-print px-2 py-2">ЕВСК</th>{% endif %}
           </tr>
         </thead>
         <tbody>
@@ -106,6 +108,7 @@
             <td class="px-2 py-1.5 text-right font-mono font-bold tabular-nums">{{ "%.2f"|format(e.score) }}</td>
             {% endif %}
             <td class="px-2 py-1.5 text-xs">{{ e.dsq_reason or "" }}</td>
+            {% if evsk %}<td class="no-print px-2 py-1.5 {% if e.fsp_id in evsk %}bg-[#1B1C21]{% endif %}">{% if e.fsp_id in evsk %}{{ m.evsk_pill(evsk[e.fsp_id]) }}{% endif %}</td>{% endif %}
           </tr>
           {% else %}
           <tr><td colspan="8" class="px-2 py-6 text-center text-sm text-[#5F5F66]">В протоколе нет участников</td></tr>
@@ -114,6 +117,7 @@
       </table>
     </div>
 
+    {% if evsk %}<p class="no-print mt-3 font-mono text-[11px] text-[#5F5F66]">// подсвечены спортсмены региона, чей результат выполняет требования ЕВСК к разряду выше текущего или подтверждает истекающий; виден только федерации, в печать не выводится</p>{% endif %}
     <p class="mt-4 text-xs text-[#5F5F66]">
       Протокол сформирован автоматически в Единой цифровой платформе ФСП Оренбургской области
       {% if p.source == "manual" %}по результатам, внесённым федерацией для участников с одобренными заявками{% else %}из лога соревнования (формат FSP-LOG/1){% endif %}.

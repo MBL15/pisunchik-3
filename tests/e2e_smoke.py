@@ -192,5 +192,92 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
     reg = page(c, "/competitions/21/regulation")
     check("Положение" in reg and "Заявки подаются" in reg and "Галиев" in reg, "regulation document with the judge panel")
 
+print("== 6. federation tools: competition types, registration switch, ЕВСК highlight, headcount report, exports, team + order")
+from datetime import date, timedelta  # noqa: E402
+
+from shared.demo_roster import ROSTER_BY_SEQ  # noqa: E402
+
+ALG6 = 6
+SOKOLOV, ABRAMOV_ID, ZHUKOV = (ROSTER_BY_SEQ[s]["fsp_id"] for s in (3, 8, 12))
+soon = (date.today() + timedelta(days=10)).isoformat()
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "admin@fsp56.ru")
+    r = c.post("/cabinet/admin/competition-types", data={"title": "Фестиваль"})
+    check("добавлен в справочник" in r.text and 'aria-label="Удалить тип: Фестиваль"' in r.text, "competition type added to the directory")
+    check("уже есть" in c.post("/cabinet/admin/competition-types", data={"title": "фестиваль"}).text, "duplicate type rejected (case-insensitive)")
+    check("удалён из справочника" in c.post("/cabinet/admin/competition-types/remove", data={"title": "Фестиваль"}).text, "unused type removed")
+    check("используется в календаре" in c.post("/cabinet/admin/competition-types/remove", data={"title": "Турнир"}).text, "type used in the calendar cannot be removed")
+
+    r = c.post(f"/cabinet/admin/competitions/{ALG6}/registration", data={"action": "close"})
+    check("закрыт: заявок" in r.text and "Открыть приём" in r.text, "registration closed manually")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "trainer@fsp56.ru")
+    r = c.post("/cabinet/applications", data={"competition_id": str(ALG6), "athlete_fsp_id": ABRAMOV_ID})
+    check("закрыт" in r.text and "[ERR]" in r.text, "application to a closed registration is refused")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "admin@fsp56.ru")
+    r = c.post(f"/cabinet/admin/competitions/{ALG6}/registration", data={"action": "open", "deadline": soon})
+    check("открыт до" in r.text and "Закрыть приём" in r.text, "registration reopened with a new deadline")
+    r = c.post("/cabinet/admin/competitions/5/registration", data={"action": "close"})
+    check("уже идёт или завершено" in r.text, "live competition cannot be switched")
+
+    cabinet = c.get("/cabinet").text
+    check('id="evsk"' in cabinet and "Таблица требований, по которой идёт подсветка" in cabinet, "ЕВСК section with the requirements table")
+    m_ev = re.search(r'id="evsk".*?href="/protocols/(\d+)"', cabinet, re.S)
+    check(m_ev is not None and "ЕВСК ·" in cabinet, "ЕВСК candidates listed with their target rank")
+    if m_ev:
+        page_ev = page(c, f"/protocols/{m_ev.group(1)}")
+        check('<th scope="col" class="no-print px-2 py-2">ЕВСК</th>' in page_ev and "ЕВСК ·" in page_ev, "admin protocol highlights ЕВСК athletes (screen only)")
+    with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as anon:
+        check('class="no-print px-2 py-2">ЕВСК' not in anon.get("/protocols/4").text, "public protocol carries no ЕВСК column")
+
+    hc = page(c, "/reports/headcount")
+    check("Занимающихся — всего" in hc and "по дисциплинам" in hc and "по возрастным группам" in hc, "headcount report: totals and cuts")
+    check("Муниципалитет" in page(c, "/reports/headcount?years=2&discipline=ALG"), "headcount report filters")
+    for fmt, magic in (("xlsx", b"PK"), ("docx", b"PK"), ("pdf", b"%PDF")):
+        resp = c.get(f"/reports/headcount/export.{fmt}")
+        check(resp.status_code == 200 and resp.content.startswith(magic) and "attachment" in resp.headers["content-disposition"],
+              f"headcount .{fmt} download ({len(resp.content)} bytes)")
+        resp = c.get(f"/protocols/4/export.{fmt}")
+        check(resp.status_code == 200 and resp.content.startswith(magic), f"protocol .{fmt} download")
+    check(c.get("/protocols/4/export.odt").status_code == 404, "unknown export format → 404")
+
+    rating = page(c, "/rating?discipline=ALG")
+    picks = re.findall(r'name="fids" value="(FSP-[\w-]+)"', rating)
+    season = re.search(r'name="season" value="(\d+)"', rating).group(1)
+    check(len(picks) >= 4 and "Сформировать сборную из отмеченных" in rating, f"rating offers a team form for the federation ({len(picks)} rows)")
+    nobody = c.post("/cabinet/admin/teams", data={"discipline": "ALG", "season": season, "title": "Сборная команда региона"})
+    check("Отметьте в таблице рейтинга" in nobody.text, "team needs at least one selected athlete")
+    r = c.post("/cabinet/admin/teams", data={"discipline": "ALG", "season": season, "title": "Сборная команда региона (алгоритмика)",
+                                             "purpose": "участия во всероссийских соревнованиях", "fids": picks[:3]})
+    tid = re.search(r"/teams/(\d+)", str(r.url)).group(1) if "/teams/" in str(r.url) else None
+    check(tid is not None and "Сборная сформирована" in r.text and "проект приказа" in r.text, f"team #{tid} built from selected rating rows")
+    bad = c.post("/cabinet/admin/teams", data={"discipline": "ALG", "season": season, "title": "Сборная команда региона", "fids": [ZHUKOV]})
+    check("Нет в рейтинге" in bad.text, "sanctioned athlete cannot join a team")
+    for kind, fmt, magic in (("roster", "xlsx", b"PK"), ("roster", "pdf", b"%PDF"), ("order", "docx", b"PK"), ("order", "pdf", b"%PDF")):
+        resp = c.get(f"/teams/{tid}/{kind}.{fmt}")
+        check(resp.status_code == 200 and resp.content.startswith(magic), f"team {kind} .{fmt} download ({len(resp.content)} bytes)")
+    r = c.post(f"/cabinet/admin/teams/{tid}/members/{picks[0]}/role", data={"role": "RESERVE"})
+    check("Статус спортсмена в сборной изменён" in r.text and "В основной" in r.text, "athlete moved to the reserve")
+    r = c.post(f"/cabinet/admin/teams/{tid}/approve", data={"order_no": "без номера", "order_date": date.today().isoformat()})
+    check("Укажите номер приказа" in r.text, "approval without an order number refused")
+    r = c.post(f"/cabinet/admin/teams/{tid}/approve", data={"order_no": "№ 412-р", "order_date": date.today().isoformat()})
+    check("Состав утверждён приказом № 412-р" in r.text and "Утвердить состав" not in r.text, "team approved by order, editing closed")
+    r = c.post(f"/cabinet/admin/teams/{tid}/members", data={"fsp_id": picks[3]})
+    check("Состав утверждён приказом — изменить его нельзя" in r.text, "approved roster is locked on the server too")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "athlete@fsp56.ru")
+    html = c.get("/cabinet").text
+    check(f'href="/athletes/{SOKOLOV}/report.pdf"' in html, "athlete cabinet offers the competitions report")
+    for fmt, magic in (("xlsx", b"PK"), ("docx", b"PK"), ("pdf", b"%PDF")):
+        resp = c.get(f"/athletes/{SOKOLOV}/report.{fmt}")
+        check(resp.status_code == 200 and resp.content.startswith(magic), f"athlete report .{fmt}")
+    check(c.get(f"/athletes/{ABRAMOV_ID}/report.pdf").status_code == 403, "athlete cannot export someone else's report")
+    check(c.get("/reports/headcount").status_code == 403 and c.get("/teams").status_code == 403, "headcount and teams are federation-only")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "trainer@fsp56.ru")
+    check(c.get(f"/athletes/{ABRAMOV_ID}/report.xlsx").status_code == 200, "trainer exports the report of an active ward")
+    check(c.get(f"/athletes/{ZHUKOV}/report.xlsx").status_code == 403, "trainer cannot export a stranger's report")
+
 print("\nRESULT:", "ALL PASSED" if ok else "FAILURES")
 sys.exit(0 if ok else 1)

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Численность занимающихся · ФСП Оренбург{% endblock %}
+{% block content %}
+{% set total = r.total %}
+{% macro delta(v, pct) -%}
+<span class="font-mono text-xs tabular-nums {% if v > 0 %}text-emerald-300{% elif v < 0 %}text-rose-300{% else %}text-fsp-muted{% endif %}">{{ "%+d"|format(v) }}{% if pct is not none %} <span class="text-fsp-muted">({{ ("%+.1f"|format(pct))|replace(".", ",") }} %)</span>{% endif %}</span>
+{%- endmacro %}
+<div class="pt-10">
+  {{ m.section_head("report headcount --years=" ~ r.years|length, "Численность занимающихся", "Сколько спортсменов занималось на конец каждого года, как это менялось за период и как распределено по дисциплинам, территориям, организациям, возрасту, полу и разрядам. Отчёт выгружается в .xlsx, .docx и .pdf.") }}
+
+  <form method="get" class="mb-6 grid gap-3 border border-fsp-line bg-fsp-panel p-4 sm:grid-cols-2 lg:grid-cols-5 rounded-xl">
+    <div>
+      <label for="h-years" class="{{ m.LABEL }}">Период, лет</label>
+      <select id="h-years" name="years" class="{{ m.INPUT }} font-mono">
+        {% for n in range(2, 7) %}<option value="{{ n }}" {% if n == r.years|length %}selected{% endif %}>{{ n }} {{ plural(n, "год", "года", "лет") }} ({{ r.years[-1] - n + 1 }}–{{ r.years[-1] }})</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="h-disc" class="{{ m.LABEL }}">Дисциплина</label>
+      <select id="h-disc" name="discipline" class="{{ m.INPUT }}"><option value="">Все</option>{% for d in D.DISCIPLINES %}<option value="{{ d.code }}" {% if filters.discipline == d.code %}selected{% endif %}>{{ d.short }}</option>{% endfor %}</select>
+    </div>
+    <div>
+      <label for="h-mun" class="{{ m.LABEL }}">Муниципалитет</label>
+      <select id="h-mun" name="municipality" class="{{ m.INPUT }}"><option value="">Все</option>{% for x in D.MUNICIPALITIES %}<option {% if filters.municipality == x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+    </div>
+    <div>
+      <label for="h-org" class="{{ m.LABEL }}">Организация</label>
+      <select id="h-org" name="organization" class="{{ m.INPUT }}"><option value="">Все</option>{% for x in D.ORGANIZATIONS %}<option {% if filters.organization == x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+    </div>
+    <div class="flex items-end"><button class="{{ m.BTN }} w-full">Построить</button></div>
+  </form>
+
+  <div class="no-print mb-6 flex flex-wrap items-center justify-between gap-3">
+    <a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
+    {{ m.export_links("/reports/headcount/export", "Выгрузить отчёт", qs) }}
+  </div>
+
+  <section class="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Итоги">
+    {{ m.kpi("занимающихся", total.counts[-1], "на " ~ (r.as_of[-1]|ru_date)) }}
+    {{ m.kpi("прирост за период", "%+d"|format(total.delta), (("%+.1f"|format(total.delta_pct))|replace(".", ",") ~ " % к " ~ r.years[0]) if total.delta_pct is not none else "в " ~ r.years[0] ~ " занимающихся не было", "emerald" if total.delta >= 0 else "rose") }}
+    {{ m.kpi("начали в " ~ r.years[-1], total.joined[-1], "впервые в реестре года", "blue") }}
+    {{ m.kpi("с разрядом", (r.cuts|selectattr("key", "equalto", "rank")|first).rows|rejectattr("label", "equalto", "без разряда")|map(attribute="counts")|map("last")|sum, "на отчётную дату", "amber") }}
+  </section>
+
+  <div class="mt-8 overflow-x-auto border border-fsp-line bg-fsp-panel rounded-xl">
+    <table class="w-full min-w-[560px] border-collapse text-sm">
+      <caption class="sr-only">Динамика численности занимающихся</caption>
+      <thead class="border-b border-fsp-line bg-fsp-bg/70"><tr>
+        <th scope="col" class="{{ m.TH }}">Показатель</th>
+        {% for y in r.years %}<th scope="col" class="{{ m.TH }} text-right">на {{ r.as_of[loop.index0]|ru_date }}</th>{% endfor %}
+        <th scope="col" class="{{ m.TH }} text-right">Δ {{ r.years[0] }}→{{ r.years[-1] }}</th>
+      </tr></thead>
+      <tbody>
+        <tr class="border-b border-fsp-line/70"><td class="px-3 py-3 font-medium text-white">Занимающихся — всего</td>
+          {% for c in total.counts %}<td class="px-3 py-3 text-right font-mono text-lg font-bold tabular-nums text-fsp-violet">{{ c }}</td>{% endfor %}
+          <td class="px-3 py-3 text-right">{{ delta(total.delta, total.delta_pct) }}</td></tr>
+        <tr><td class="px-3 py-2 text-fsp-soft">в т.ч. начали заниматься в течение года</td>
+          {% for c in total.joined %}<td class="px-3 py-2 text-right font-mono tabular-nums text-fsp-soft">{{ c }}</td>{% endfor %}<td></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-8 grid gap-6 xl:grid-cols-2">
+    {% for cut in r.cuts %}
+    <section class="{{ m.CARD }} overflow-hidden" aria-labelledby="cut-{{ cut.key }}">
+      <div class="border-b border-fsp-line px-5 py-3">
+        <h2 id="cut-{{ cut.key }}" class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-soft">// {{ cut.title|lower }}</h2>
+        {% if cut.note %}<p class="mt-1 text-[11px] text-fsp-muted">{{ cut.note }}</p>{% endif %}
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[420px] border-collapse text-sm">
+          <thead class="border-b border-fsp-line bg-fsp-bg/60"><tr>
+            <th scope="col" class="{{ m.TH }}">Значение</th>
+            {% for y in r.years %}<th scope="col" class="{{ m.TH }} text-right">{{ y }}</th>{% endfor %}
+            <th scope="col" class="{{ m.TH }} text-right">Δ</th>
+          </tr></thead>
+          <tbody>
+            {% for row in cut.rows %}
+            {% set share = [100, (row.counts[-1] * 100 / total.counts[-1])|round|int]|min if total.counts[-1] else 0 %}
+            <tr class="border-b border-fsp-line/60 last:border-0">
+              <td class="px-3 py-2">
+                <span class="block text-fsp-light">{{ row.label }}</span>
+                <span class="mt-1 block h-1 w-full max-w-[9rem] overflow-hidden rounded-full bg-fsp-card" aria-hidden="true"><span class="block h-full bg-fsp-blue" style="width: {{ share }}%"></span></span>
+              </td>
+              {% for c in row.counts %}<td class="px-3 py-2 text-right font-mono tabular-nums {% if loop.last %}font-bold text-white{% else %}text-fsp-soft{% endif %}">{{ c }}</td>{% endfor %}
+              <td class="px-3 py-2 text-right">{{ delta(row.delta, row.delta_pct) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ r.years|length + 2 }}" class="px-3 py-6 text-center font-mono text-xs text-fsp-muted">// нет данных</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+
+  <p class="mt-6 max-w-3xl font-mono text-[11px] leading-relaxed text-fsp-muted">// занимающийся на конец года — спортсмен реестра, начавший занятия не позже этого года (данных о выбытии в реестре нет). Возраст — на отчётную дату, разряд — по текущей записи профиля, поэтому в прошлых годах он занижен. Отчётная дата текущего года — сегодня.</p>
+</div>
+{% endblock %}

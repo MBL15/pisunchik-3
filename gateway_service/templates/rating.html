@@ -48,7 +48,32 @@
     {{ m.kpi("протоколов", rating.competitions|length, "опубликовано в сезоне " ~ rating.season, "amber") }}
   </div>
 
-  {% with limit=None %}{% include "_rating_table.html" %}{% endwith %}
+  {% with limit=None, pick=can_pick %}{% include "_rating_table.html" %}{% endwith %}
+
+  {% if can_pick and rating.rows %}
+  <form id="team-form" method="post" action="/cabinet/admin/teams" class="{{ m.CARD }} mt-4 grid gap-4 border-fsp-blue p-5 sm:grid-cols-2">
+    <div class="sm:col-span-2">
+      <p class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-violet">// формирование сборной из рейтинга</p>
+      <p class="mt-1 text-xs text-fsp-muted">Отметьте спортсменов в таблице выше — в сборную попадут только они. Применённые фильтры (сезон, возраст, разряд) сохранятся как основание состава; исключённые по санкциям выбрать нельзя.</p>
+    </div>
+    <input type="hidden" name="discipline" value="{{ rating.discipline }}">
+    <input type="hidden" name="season" value="{{ rating.season }}">
+    <input type="hidden" name="age_group" value="{{ rating.filters.age_group or '' }}">
+    <input type="hidden" name="min_rank" value="{{ rating.filters.min_rank or '' }}">
+    <div>
+      <label for="team-title" class="{{ m.LABEL }}">Название сборной</label>
+      <input id="team-title" name="title" required minlength="5" maxlength="200" value="Сборная команда Оренбургской области по программированию ({{ rating.discipline_label|lower }})" class="{{ m.INPUT }}">
+    </div>
+    <div>
+      <label for="team-purpose" class="{{ m.LABEL }}">Цель формирования (для приказа)</label>
+      <input id="team-purpose" name="purpose" maxlength="300" placeholder="участия во всероссийских соревнованиях" class="{{ m.INPUT }}">
+    </div>
+    <div class="flex flex-wrap items-center gap-3 sm:col-span-2">
+      <button class="{{ m.BTN }}">{{ m.icon("users", "h-4 w-4") }}Сформировать сборную из отмеченных</button>
+      <a href="/teams" class="{{ m.BTN_GHOST }}">Все сборные</a>
+    </div>
+  </form>
+  {% endif %}
 
   <div class="mt-10 grid gap-6 lg:grid-cols-2">
     <div class="{{ m.CARD }} p-5">

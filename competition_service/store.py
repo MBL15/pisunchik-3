@@ -2,12 +2,13 @@
 from datetime import date, datetime
 
 from competition_service.log_parser import parse_log, rank_manual
-from competition_service.models import Application, Competition, Protocol
+from competition_service.models import Application, Competition, Protocol, Team
 from competition_service.rating import RatingSettings, base_points
 from shared import config
 from shared.domain import (
-    APPLICATION_STATUS_LABELS, CALENDAR_PLAN_LABELS, COMPETITION_STATUS_LABELS, DISCIPLINE_BY_CODE, FORMAT_LABELS,
-    LEVEL_LABELS, LEVEL_STATUS_LABELS, REGION_CODE, ApplicationStatus,
+    APPLICATION_STATUS_LABELS, CALENDAR_PLAN_LABELS, COMPETITION_STATUS_LABELS, DEFAULT_COMPETITION_TYPES,
+    DISCIPLINE_BY_CODE, FORMAT_LABELS, LEVEL_LABELS, LEVEL_STATUS_LABELS, REGION_CODE, TEAM_ROLE_LABELS,
+    TEAM_STATUS_LABELS, ApplicationStatus, CompetitionStatus,
 )
 
 
@@ -21,6 +22,8 @@ class Store:
         self.applications: list[Application] = []
         self.documents: dict[str, dict] = {}
         self.settings = RatingSettings()
+        self.competition_types: list[str] = list(DEFAULT_COMPETITION_TYPES)
+        self.teams: dict[int, Team] = {}
         self.audit: list[dict] = []
         self.doc_seq = 0
 
@@ -68,6 +71,8 @@ class Store:
             "level_label": LEVEL_LABELS[c.level], "level_status": LEVEL_STATUS_LABELS[c.level],
             "format_label": FORMAT_LABELS[c.format], "plan_label": CALENDAR_PLAN_LABELS[c.calendar_plan],
             "status_label": COMPETITION_STATUS_LABELS[c.status],
+            "registration_expired": c.status == CompetitionStatus.REGISTRATION_OPEN
+                                    and c.registration_deadline is not None and c.registration_deadline < on,
             "days_to_start": (c.start_date - on).days, "days_to_deadline": days_to_deadline,
             "applications_total": len(apps),
             "applications_approved": approved,
@@ -78,6 +83,19 @@ class Store:
                                 and self.live_queue.get(c.id) is None and c.id not in self.live_replay,
             "participants": len(proto.entries) if proto else 0,
             "season": c.end_date.year,
+        }
+
+    @staticmethod
+    def present_team(t: Team) -> dict:
+        main = [m for m in t.members if m.role == "MAIN"]
+        coaches = sorted({c for m in t.members for c in m.coaches})
+        return {
+            **t.model_dump(mode="json"),
+            "discipline_label": DISCIPLINE_BY_CODE[t.discipline]["short"],
+            "discipline_title": DISCIPLINE_BY_CODE[t.discipline]["title"],
+            "status_label": TEAM_STATUS_LABELS[t.status], "locked": t.status == "APPROVED",
+            "main_count": len(main), "reserve_count": len(t.members) - len(main), "coaches": coaches,
+            "members": [{**m.model_dump(mode="json"), "role_label": TEAM_ROLE_LABELS[m.role]} for m in t.members],
         }
 
     def present_application(self, a: Application) -> dict:

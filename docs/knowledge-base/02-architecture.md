@@ -98,10 +98,12 @@ sequenceDiagram
 | `FSP_SERVICE_TIMEOUT` | `5.0` | Таймаут межсервисных вызовов, с |
 | `FSP_DEMO_TODAY` | — | Зафиксировать «сегодня» (`YYYY-MM-DD`) для воспроизводимой демонстрации |
 | `FSP_TELEGRAM_TOKEN` / `FSP_TELEGRAM_BOT` | — | Токен и username бота уведомлений. Читаются из `.env` в корне (в git не попадает); без токена уведомления выключены |
+| `FSP_PDF_FONT` / `FSP_PDF_FONT_BOLD` | поиск Arial / DejaVu / Liberation | TTF-шрифт с кириллицей для выгрузки в PDF |
 
 Все даты демо-данных считаются от `config.today()`, поэтому сроки и статусы всегда «живые».
 
 ## Стек
 
-Python 3.14, FastAPI 0.135 / Starlette 1.0, Uvicorn, Jinja2, httpx, python-multipart, segno (QR в SVG).
+Python 3.14, FastAPI 0.135 / Starlette 1.0, Uvicorn, Jinja2, httpx, python-multipart, segno (QR в SVG),
+openpyxl / python-docx / reportlab (выгрузка документов в .xlsx / .docx / .pdf, только в шлюзе).
 UI: Tailwind CSS (CDN, конфиг в `base.html`), шрифты JetBrains Mono + Inter (CDN), ванильный JS без сборки.

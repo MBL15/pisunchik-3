@@ -1,4 +1,5 @@
 """competition_service (port 8002): calendar, applications, live protocols from logs, rating engine, documents."""
+import asyncio
 import hashlib
 import hmac
 import time
@@ -7,18 +8,21 @@ from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Query
 
+from competition_service import evsk
 from competition_service.log_parser import parse_log
 from competition_service.models import (
-    ActorIn, Application, ApplicationIn, Competition, CompetitionCreateIn, DecisionIn, DocumentIn, IngestIn,
-    JudgeAssignIn, JudgeAssignment, Protocol, ResultsIn, SettingsIn,
+    ActorIn, Application, ApplicationIn, Competition, CompetitionCreateIn, CompetitionTypeIn, DecisionIn, DocumentIn,
+    IngestIn, JudgeAssignIn, JudgeAssignment, Protocol, RegistrationIn, ResultsIn, SettingsIn, Team, TeamApproveIn,
+    TeamCreateIn, TeamMember, TeamMemberIn, TeamRoleIn, TeamUpdateIn,
 )
 from competition_service.rating import RatingSettings, compute_rating
 from competition_service.seed import seed
 from competition_service.store import store
 from shared import config
 from shared.domain import (
-    AGE_GROUPS, DISCIPLINE_BY_CODE, JUDGE_POSITIONS, RANK_ORDER, REGION_CODE, SANCTION_LABELS, ApplicationStatus,
-    CompetitionStatus, LinkStatus, protocol_mode,
+    AGE_GROUPS, DEFAULT_COMPETITION_TYPES, DISCIPLINE_BY_CODE, EVSK_REQUIREMENTS, JUDGE_POSITIONS, LEVEL_LABELS,
+    RANK_BY_CODE, RANK_ORDER, REGION_CODE, SANCTION_LABELS, TEAM_ROLE_LABELS, ApplicationStatus, CompetitionStatus,
+    LinkStatus, protocol_mode,
 )
 from shared.http import ServiceClient, ServiceError
 
@@ -95,6 +99,8 @@ async def get_competition(cid: int):
 @app.post("/api/v1/competitions", status_code=201)
 async def create_competition(data: CompetitionCreateIn):
     today = config.today()
+    if data.type not in store.competition_types:
+        raise HTTPException(422, "Неизвестный тип соревнования — добавьте его в справочник типов")
     cid = max(store.competitions, default=0) + 1
     status = CompetitionStatus.REGISTRATION_OPEN if data.registration_deadline >= today else CompetitionStatus.PLANNED
     c = Competition(id=cid, code=f"ОРБ-{data.discipline}-{data.start_date.year}-{cid:02d}", status=status,
@@ -102,6 +108,64 @@ async def create_competition(data: CompetitionCreateIn):
     store.competitions[cid] = c
     store.log(data.actor, "Создано соревнование", f"{c.code} · {c.title}")
     return store.present_competition(c, today)
+
+
+@app.post("/api/v1/competitions/{cid}/registration")
+async def toggle_registration(cid: int, data: RegistrationIn):
+    """Ручное открытие / закрытие приёма заявок. Открытие после истёкшего срока требует новой даты окончания."""
+    c = _competition(cid)
+    today = config.today()
+    if c.status in (CompetitionStatus.LIVE, CompetitionStatus.FINISHED):
+        raise HTTPException(422, "Соревнование уже идёт или завершено — приём заявок не меняется")
+    if data.action == "close":
+        if c.status != CompetitionStatus.REGISTRATION_OPEN:
+            raise HTTPException(409, "Приём заявок не открыт")
+        c.status = CompetitionStatus.REGISTRATION_CLOSED
+        store.log(data.actor, "Закрыт приём заявок", f"{c.code} · заявок: {sum(a.competition_id == c.id for a in store.applications)}")
+        return store.present_competition(c, today)
+
+    already_open = c.status == CompetitionStatus.REGISTRATION_OPEN
+    if already_open and not data.deadline:
+        raise HTTPException(409, "Приём заявок уже открыт — чтобы продлить, укажите новую дату окончания")
+    if c.start_date <= today:
+        raise HTTPException(422, "Соревнование уже началось — открыть приём заявок нельзя")
+    deadline = data.deadline or c.registration_deadline
+    if not deadline or deadline < today:
+        raise HTTPException(422, "Срок подачи заявок истёк или не задан — укажите новую дату окончания приёма")
+    if deadline > c.start_date:
+        raise HTTPException(422, "Приём заявок должен закрываться до начала соревнования")
+    c.registration_deadline, c.status = deadline, CompetitionStatus.REGISTRATION_OPEN
+    store.log(data.actor, "Продлён приём заявок" if already_open else "Открыт приём заявок", f"{c.code} · до {deadline:%d.%m.%Y}")
+    return store.present_competition(c, today)
+
+
+# ---------------------------------------------------------------- competition types directory
+@app.get("/api/v1/competition-types")
+async def list_competition_types():
+    used: dict[str, int] = {}
+    for c in store.competitions.values():
+        used[c.type] = used.get(c.type, 0) + 1
+    return [{"title": t, "used": used.get(t, 0), "default": t in DEFAULT_COMPETITION_TYPES} for t in store.competition_types]
+
+
+@app.post("/api/v1/competition-types", status_code=201)
+async def add_competition_type(data: CompetitionTypeIn):
+    if data.title.casefold() in {t.casefold() for t in store.competition_types}:
+        raise HTTPException(409, f"Тип «{data.title}» уже есть в справочнике")
+    store.competition_types.append(data.title)
+    store.log(data.actor, "Добавлен тип соревнования", data.title)
+    return await list_competition_types()
+
+
+@app.delete("/api/v1/competition-types")
+async def remove_competition_type(title: str, actor: str):
+    if title not in store.competition_types:
+        raise HTTPException(404, "Тип не найден в справочнике")
+    if any(c.type == title for c in store.competitions.values()):
+        raise HTTPException(409, f"Тип «{title}» используется в календаре — удалить его нельзя")
+    store.competition_types.remove(title)
+    store.log(actor, "Удалён тип соревнования", title)
+    return await list_competition_types()
 
 
 # ---------------------------------------------------------------- protocols (logs → ranking)
@@ -264,6 +328,12 @@ def _seasons() -> list[int]:
 @app.get("/api/v1/rating")
 async def rating(discipline: str = "ALG", season: int | None = None, age_group: str | None = None,
                  min_rank: str | None = None):
+    return (await _build_rating(discipline, season, age_group, min_rank))[0]
+
+
+async def _build_rating(discipline: str, season: int | None, age_group: str | None, min_rank: str | None
+                        ) -> tuple[dict, dict[str, dict]]:
+    """Рейтинг сезона и реестр спортсменов, по которому он отфильтрован (нужен сборной для снимка состава)."""
     if discipline not in DISCIPLINE_BY_CODE:
         raise HTTPException(422, "Неизвестная дисциплина")
     seasons = _seasons()
@@ -302,7 +372,185 @@ async def rating(discipline: str = "ALG", season: int | None = None, age_group: 
         "settings": await get_settings(), "rows": out["rows"], "excluded": out["excluded"],
         "sanctions_checked": sanctions_checked, "filters": {"age_group": age_group, "min_rank": min_rank},
         "competitions": [{"id": c[0], "code": c[1], "title": c[2], "level": c[3], "date": c[4]} for c in counted],
-    }
+    }, persons
+
+
+# ---------------------------------------------------------------- сборные команды (ручной состав из рейтинга)
+def _team(tid: int) -> Team:
+    t = store.teams.get(tid)
+    if not t:
+        raise HTTPException(404, "Сборная не найдена")
+    return t
+
+
+def _editable(t: Team) -> Team:
+    if t.status == "APPROVED":
+        raise HTTPException(409, "Состав утверждён приказом — изменить его нельзя")
+    return t
+
+
+async def _team_member(row: dict, person: dict | None, discipline: str, role: str = "MAIN") -> TeamMember:
+    coaches: list[str] = []
+    try:
+        links = await clients["sportsman"].get(f"/api/v1/athletes/{row['fsp_id']}/links")
+        coaches = [lk["trainer_name"] for lk in links if lk["status"] == LinkStatus.ACTIVE and lk["discipline"] == discipline]
+    except ServiceError:
+        pass  # состав всё равно формируется; тренеры в документе останутся пустыми
+    return TeamMember(fsp_id=row["fsp_id"], full_name=row["full_name"], role=role, position=row["position"],
+                      points=row["final"], rank_short=row["rank_short"], municipality=row["municipality"],
+                      organization=person["organization"] if person else "",
+                      birth_date=person["birth_date"] if person else None, coaches=coaches)
+
+
+async def _rating_rows_for(t: Team | TeamCreateIn) -> tuple[dict[str, dict], dict[str, dict]]:
+    payload, persons = await _build_rating(t.discipline, t.season, t.age_group, t.min_rank)
+    if not payload["sanctions_checked"]:
+        raise HTTPException(503, "Реестр спортсменов недоступен — санкции не проверить, состав не изменён")
+    return {r["fsp_id"]: r for r in payload["rows"]}, persons
+
+
+@app.get("/api/v1/teams")
+async def list_teams(discipline: str | None = None, season: int | None = None):
+    return [store.present_team(t) for t in sorted(store.teams.values(), key=lambda t: t.updated_at, reverse=True)
+            if (not discipline or t.discipline == discipline) and (not season or t.season == season)]
+
+
+@app.get("/api/v1/teams/{tid}")
+async def get_team(tid: int):
+    return store.present_team(_team(tid))
+
+
+@app.post("/api/v1/teams", status_code=201)
+async def create_team(data: TeamCreateIn):
+    rows, persons = await _rating_rows_for(data)
+    if missing := [fid for fid in data.fsp_ids if fid not in rows]:
+        raise HTTPException(422, f"Нет в рейтинге по выбранным фильтрам (или исключены по санкциям): {', '.join(missing)}")
+    members = await asyncio.gather(*(_team_member(rows[fid], persons.get(fid), data.discipline) for fid in data.fsp_ids))
+    now = datetime.now()
+    t = Team(id=max(store.teams, default=0) + 1, title=data.title.strip(), discipline=data.discipline, season=data.season,
+             purpose=data.purpose.strip(), age_group=data.age_group, min_rank=data.min_rank,
+             members=sorted(members, key=lambda m: m.position), created_by=data.actor, created_at=now, updated_at=now)
+    store.teams[t.id] = t
+    store.log(data.actor, "Сформирована сборная", f"#{t.id} {t.title}: {len(t.members)} спортсменов")
+    return store.present_team(t)
+
+
+@app.put("/api/v1/teams/{tid}")
+async def update_team(tid: int, data: TeamUpdateIn):
+    t = _editable(_team(tid))
+    t.title, t.purpose, t.updated_at = data.title.strip(), data.purpose.strip(), datetime.now()
+    store.log(data.actor, "Изменена сборная", f"#{t.id} {t.title}")
+    return store.present_team(t)
+
+
+@app.post("/api/v1/teams/{tid}/members", status_code=201)
+async def add_team_member(tid: int, data: TeamMemberIn):
+    t = _editable(_team(tid))
+    if any(m.fsp_id == data.fsp_id for m in t.members):
+        raise HTTPException(409, "Спортсмен уже в составе")
+    rows, persons = await _rating_rows_for(t)
+    if data.fsp_id not in rows:
+        raise HTTPException(422, "Спортсмена нет в рейтинге по фильтрам сборной (или он исключён по санкциям)")
+    t.members.append(await _team_member(rows[data.fsp_id], persons.get(data.fsp_id), t.discipline, role="RESERVE"))
+    t.members.sort(key=lambda m: m.position)
+    t.updated_at = datetime.now()
+    store.log(data.actor, "Добавлен в сборную", f"#{t.id} {rows[data.fsp_id]['full_name']} (резерв)")
+    return store.present_team(t)
+
+
+@app.delete("/api/v1/teams/{tid}/members/{fsp_id}")
+async def remove_team_member(tid: int, fsp_id: str, actor: str):
+    t = _editable(_team(tid))
+    m = next((x for x in t.members if x.fsp_id == fsp_id), None)
+    if not m:
+        raise HTTPException(404, "Спортсмена нет в составе")
+    if len(t.members) == 1:
+        raise HTTPException(422, "В сборной должен остаться хотя бы один спортсмен")
+    t.members.remove(m)
+    t.updated_at = datetime.now()
+    store.log(actor, "Исключён из сборной", f"#{t.id} {m.full_name}")
+    return store.present_team(t)
+
+
+@app.post("/api/v1/teams/{tid}/members/{fsp_id}/role")
+async def set_team_member_role(tid: int, fsp_id: str, data: TeamRoleIn):
+    t = _editable(_team(tid))
+    m = next((x for x in t.members if x.fsp_id == fsp_id), None)
+    if not m:
+        raise HTTPException(404, "Спортсмена нет в составе")
+    if data.role == "RESERVE" and not any(x.role == "MAIN" and x is not m for x in t.members):
+        raise HTTPException(422, "В основном составе должен остаться хотя бы один спортсмен")
+    m.role, t.updated_at = data.role, datetime.now()
+    store.log(data.actor, "Изменён статус в сборной", f"#{t.id} {m.full_name} → {TEAM_ROLE_LABELS[m.role]}")
+    return store.present_team(t)
+
+
+@app.post("/api/v1/teams/{tid}/approve")
+async def approve_team(tid: int, data: TeamApproveIn):
+    t = _editable(_team(tid))
+    if not any(m.role == "MAIN" for m in t.members):
+        raise HTTPException(422, "В основном составе нет спортсменов")
+    t.status, t.order_no, t.order_date, t.updated_at = "APPROVED", data.order_no, data.order_date, datetime.now()
+    store.log(data.actor, "Утверждён состав сборной", f"#{t.id} {t.title} · приказ {t.order_no}")
+    return store.present_team(t)
+
+
+@app.delete("/api/v1/teams/{tid}")
+async def delete_team(tid: int, actor: str):
+    t = _editable(_team(tid))
+    del store.teams[t.id]
+    store.log(actor, "Удалена сборная", f"#{t.id} {t.title}")
+    return {"deleted": t.id}
+
+
+# ---------------------------------------------------------------- ЕВСК: результаты, выполнившие разрядные требования
+@app.get("/api/v1/evsk/requirements")
+async def evsk_requirements():
+    return [{"code": code, "short": RANK_BY_CODE[code]["short"], "title": RANK_BY_CODE[code]["title"],
+             "rules": [{"level": lvl, "level_label": LEVEL_LABELS[lvl], "max_place": mp, "min_participants": mn,
+                        "text": evsk.requirement_text(lvl, mp, mn)} for lvl, mp, mn in rules]}
+            for code, rules in EVSK_REQUIREMENTS.items()]
+
+
+@app.get("/api/v1/evsk/candidates")
+async def evsk_candidates(competition_id: int | None = None, since_days: int = Query(365, ge=1, le=1460)):
+    """Спортсмены региона, чей результат в протоколе (в том числе черновике) выполняет требования ЕВСК.
+    Для каждого результата — высший подходящий разряд и состояние относительно текущего: assign | confirm | have."""
+    today = config.today()
+    persons: dict[str, dict] = {}
+    ranks_checked = True
+    try:
+        persons = {p["fsp_id"]: p for p in await clients["sportsman"].get("/api/v1/persons", role="athlete")}
+    except ServiceError:
+        ranks_checked = False
+    rows = []
+    for cid, proto in store.protocols.items():
+        c = store.competitions[cid]
+        if competition_id is not None and cid != competition_id:
+            continue
+        if competition_id is None and (today - c.end_date).days > since_days:
+            continue
+        if c.status == CompetitionStatus.LIVE:
+            continue  # результаты идущего соревнования ещё не окончательны
+        for e in proto.entries:
+            if e["fsp_id"].split("-")[1] != REGION_CODE:
+                continue
+            met = evsk.met_ranks(c.level, e["place"], e["status"], len(proto.entries))
+            p = persons.get(e["fsp_id"])
+            if not met or (p and p["is_sanctioned"]):
+                continue
+            target = met[-1]
+            held = p["rank"] if p else None
+            rows.append({
+                "fsp_id": e["fsp_id"], "full_name": e["full_name"], "municipality": p["municipality"] if p else "—",
+                "competition_id": cid, "competition_code": c.code, "title": c.title, "date": c.end_date.isoformat(),
+                "level": c.level, "level_label": LEVEL_LABELS[c.level], "published": proto.published,
+                "place": e["place"], "participants": len(proto.entries), "target": target,
+                "state": evsk.classify(target["code"], held) if ranks_checked and p else "unknown",
+                "current_rank": held["short"] if held else None, "current_state": held["state"] if held else None,
+            })
+    rows.sort(key=lambda r: (r["date"], -RANK_ORDER[r["target"]["code"]]), reverse=True)
+    return {"rows": rows, "ranks_checked": ranks_checked}
 
 
 # ---------------------------------------------------------------- applications

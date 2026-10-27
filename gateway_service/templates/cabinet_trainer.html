@@ -175,6 +175,7 @@
                 <button name="status" value="ENDED" class="{{ m.BTN_SM }}">Отозвать</button>
               {% endif %}
             </form>
+            {% if l.status == "ACTIVE" %}<div class="mt-2 flex justify-end">{{ m.export_links("/athletes/" ~ a.fsp_id ~ "/report", "Отчёт") }}</div>{% endif %}
           </td>
         </tr>
         {% else %}

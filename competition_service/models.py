@@ -1,10 +1,11 @@
 from datetime import date, datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from shared.domain import (
-    AGE_GROUPS, COMPETITION_TYPES, DISCIPLINE_BY_CODE, ApplicationStatus, CalendarPlan, CompetitionFormat,
-    CompetitionLevel, CompetitionStatus,
+    AGE_GROUPS, DISCIPLINE_BY_CODE, RANK_BY_CODE, ApplicationStatus, CalendarPlan, CompetitionFormat, CompetitionLevel,
+    CompetitionStatus,
 )
 
 
@@ -54,8 +55,6 @@ class CompetitionCreateIn(BaseModel):
     def _check(self):
         if self.discipline not in DISCIPLINE_BY_CODE:
             raise ValueError("Неизвестная дисциплина")
-        if self.type not in COMPETITION_TYPES:
-            raise ValueError("Неизвестный тип соревнования")
         if self.age_group not in AGE_GROUPS:
             raise ValueError("Неизвестная возрастная группа")
         if self.end_date < self.start_date:
@@ -66,6 +65,25 @@ class CompetitionCreateIn(BaseModel):
                 and self.calendar_plan != CalendarPlan.EKP:
             raise ValueError("Всероссийские и межрегиональные соревнования включаются в ЕКП Минспорта России")
         return self
+
+
+class CompetitionTypeIn(BaseModel):
+    title: str = Field(min_length=3, max_length=40)
+    actor: str
+
+    @field_validator("title")
+    @classmethod
+    def _title(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not any(ch.isalpha() for ch in v):
+            raise ValueError("Название типа должно содержать буквы")
+        return v
+
+
+class RegistrationIn(BaseModel):
+    action: Literal["open", "close"]
+    deadline: date | None = None  # новый срок окончания приёма при открытии или продлении
+    actor: str
 
 
 class Protocol(BaseModel):
@@ -152,6 +170,90 @@ class SettingsIn(BaseModel):
             if not pts[0] >= pts[1] >= pts[2]:
                 raise ValueError(f"{level}: баллы за 1 место не могут быть меньше, чем за 2 и 3")
         return self
+
+
+class TeamMember(BaseModel):
+    """Снимок спортсмена на момент включения в состав: место и баллы рейтинга, разряд, тренеры."""
+    fsp_id: str
+    full_name: str
+    role: Literal["MAIN", "RESERVE"] = "MAIN"
+    position: int
+    points: float
+    rank_short: str
+    municipality: str
+    organization: str = ""
+    birth_date: str | None = None
+    coaches: list[str] = []
+
+
+class Team(BaseModel):
+    id: int
+    title: str
+    discipline: str
+    season: int
+    purpose: str = ""
+    age_group: str | None = None  # фильтры рейтинга, из которого набран состав
+    min_rank: str | None = None
+    status: Literal["DRAFT", "APPROVED"] = "DRAFT"
+    order_no: str = ""
+    order_date: date | None = None
+    members: list[TeamMember] = []
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class TeamCreateIn(BaseModel):
+    title: str = Field(min_length=5, max_length=200)
+    discipline: str
+    season: int = Field(ge=2000, le=2100)
+    purpose: str = Field(default="", max_length=300)
+    age_group: str | None = None
+    min_rank: str | None = None
+    fsp_ids: list[str] = Field(min_length=1, max_length=40)
+    actor: str
+
+    @model_validator(mode="after")
+    def _check(self):
+        if self.discipline not in DISCIPLINE_BY_CODE:
+            raise ValueError("Неизвестная дисциплина")
+        if self.age_group and self.age_group not in AGE_GROUPS:
+            raise ValueError("Неизвестная возрастная группа")
+        if self.min_rank and self.min_rank not in RANK_BY_CODE:
+            raise ValueError("Неизвестный разряд")
+        if len(set(self.fsp_ids)) != len(self.fsp_ids):
+            raise ValueError("Спортсмен указан в составе дважды")
+        return self
+
+
+class TeamUpdateIn(BaseModel):
+    title: str = Field(min_length=5, max_length=200)
+    purpose: str = Field(default="", max_length=300)
+    actor: str
+
+
+class TeamMemberIn(BaseModel):
+    fsp_id: str
+    actor: str
+
+
+class TeamRoleIn(BaseModel):
+    role: Literal["MAIN", "RESERVE"]
+    actor: str
+
+
+class TeamApproveIn(BaseModel):
+    order_no: str = Field(min_length=1, max_length=120)
+    order_date: date
+    actor: str
+
+    @field_validator("order_no")
+    @classmethod
+    def _order_no(cls, v: str) -> str:
+        v = v.strip()
+        if not any(ch.isdigit() for ch in v):
+            raise ValueError("Укажите номер приказа")
+        return v
 
 
 class DocumentIn(BaseModel):

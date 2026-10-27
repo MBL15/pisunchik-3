@@ -11,6 +11,8 @@ pip install -r requirements.txt
 py run_all.py            # Windows (python run_all.py на Linux/macOS)
 ```
 
+Для выгрузки в PDF нужен шрифт с кириллицей (Arial, DejaVu или Liberation находятся сами; иначе `FSP_PDF_FONT=/путь/к/шрифту.ttf`).
+
 Откройте **http://localhost:8000**. Оркестратор поднимает `sportsman_service → competition_service → gateway_service`,
 ждёт `/health` каждого, мультиплексирует логи с цветными префиксами и включает live-reload
 (`--no-reload` — отключить). Каждый сервис засевает свою in-memory «БД» при старте; любая правка кода
@@ -86,18 +88,22 @@ shared/              справочники (RU), формат ФСП ID, http-�
 | Competition | competition | code, title, discipline, level, type, format (+note), calendar_plan (ЕКП/региональный) + номер, даты, место, возрастная группа, status, registration_deadline, judges[] |
 | Protocol | competition | source (manual/upload/live/seed), results[] (ручной ввод), raw_log[], names snapshot, entries[] (place, status, solved, penalty, score, tasks), published |
 | Application | competition | competition_id, athlete_fsp_id, submitted_by, status, decided_at |
+| Team | competition | title, discipline, season, purpose, фильтры рейтинга, members[] (снимок: место, баллы, разряд, тренеры; MAIN/RESERVE), status DRAFT/APPROVED, order_no, order_date |
+| CompetitionType | competition | справочник типов (title, число использований); пополняется федерацией |
 | Document | competition | number, verification_code (HMAC), person, competition, result, purpose |
 
 ## API (основное, Swagger: `:8001/docs`, `:8002/docs`)
 
 **sportsman_service** — `GET/POST /api/v1/persons`, `GET /api/v1/persons/{fsp_id}`, `POST /api/v1/persons/lookup`,
 `POST /api/v1/auth/verify`, `GET /api/v1/sanctions/active`, `GET /api/v1/alerts/ranks`, `GET /api/v1/alerts/judge-categories`,
-`GET /api/v1/trainers/{fsp_id}/athletes?with_performance=true`, `GET /api/v1/athletes/{fsp_id}/links`,
+`GET /api/v1/reports/headcount`, `GET /api/v1/trainers/{fsp_id}/athletes?with_performance=true`, `GET /api/v1/athletes/{fsp_id}/links`,
 `POST /api/v1/links`, `POST /api/v1/links/{id}/status`, `GET /api/v1/persons/{fsp_id}/performance`, `GET /api/v1/stats`, `GET /api/v1/audit`.
 
 **competition_service** — `GET/POST /api/v1/competitions`, `GET /api/v1/competitions/{id}/protocol`,
 `GET …/protocol/entry-sheet`, `POST …/protocol/results`, `POST …/protocol/ingest`, `POST …/live/tick`, `POST …/protocol/publish`, `GET /api/v1/results`,
 `GET /api/v1/rating`, `GET/PUT /api/v1/rating/settings`, `GET/POST /api/v1/applications`, `POST /api/v1/applications/{id}/decision`,
+`POST /api/v1/competitions/{id}/registration`, `GET/POST/DELETE /api/v1/competition-types`, `GET /api/v1/evsk/{requirements,candidates}`,
+`GET/POST /api/v1/teams`, `PUT/DELETE /api/v1/teams/{id}`, `POST /api/v1/teams/{id}/{members,approve}`,
 `GET /api/v1/judges/{fsp_id}/assignments`, `GET /api/v1/dashboard`, `POST /api/v1/documents/participation`,
 `GET /api/v1/documents/{number}`, `GET /api/v1/documents/{number}/verify`, `GET /api/v1/audit`.
 
@@ -115,11 +121,17 @@ shared/              справочники (RU), формат ФСП ID, http-�
 | Федерация: KPI, модерация заявок, контроль сроков (разряды, категории, заявки, премии Губернатора до 1 февраля), живой протокол + публикация, загрузка лога, настройки рейтинга, создание соревнования, журнал действий | `admin@` → Кабинет |
 | Рейтинг с прозрачным ×1.2, исключение санкционированных, фильтры по возрасту/разряду | `/rating` |
 | Календарь: ЕКП / региональный план, очно/онлайн/смешанный | `/calendar` |
+| Справочник типов соревнований, который пополняет федерация | `admin@` → «Новое соревнование» → «Справочник типов» |
+| Ручное открытие, закрытие и продление приёма заявок | `admin@` → «Приём заявок» |
+| Подсветка спортсменов, выполнивших требования ЕВСК (рабочая таблица порогов) | `admin@` → «ЕВСК»; колонка «ЕВСК» в протоколе `/protocols/{id}` |
+| Отчёт о численности занимающихся за 2 года с разрезами, выгрузка .xlsx / .docx / .pdf | `admin@` → «Отчёты» → `/reports/headcount` |
+| Формирование сборной из отфильтрованного рейтинга, список сборной и проект приказа | `admin@` → `/rating` → отметить спортсменов → `/teams/{id}` |
+| Выгрузка протокола и отчёта о соревнованиях спортсмена в .xlsx / .docx / .pdf | `/protocols/{id}`; кабинеты спортсмена и тренера |
 | Справка об участии с QR и публичной проверкой подлинности (Д10) | Кабинет федерации → «Справка об участии»; `/verify/...` |
 
 ## Тесты
 
 ```bash
-py -m unittest -v          # движки: ФСП ID, парсер логов, рейтинг
+py -m unittest -v          # движки, сервисы через TestClient, выгрузки документов (стек не нужен)
 py tests/e2e_smoke.py      # сквозные сценарии через шлюз (нужен запущенный run_all.py)
 ```

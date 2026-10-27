@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t.title }} · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="pt-10">
+  {{ m.section_head("team show --id=" ~ t.id, t.title, "Основание состава: рейтинг сезона " ~ t.season ~ " · " ~ t.discipline_title ~ ((" · " ~ t.age_group) if t.age_group else "") ~ ((" · разряд не ниже " ~ t.min_rank) if t.min_rank else "") ~ ". Место и баллы зафиксированы на момент включения в состав.") }}
+  {{ m.degraded_notice(degraded) }}
+
+  <div class="no-print mb-6 flex flex-wrap items-center gap-3">
+    <a href="/teams" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Сборные</a>
+    {{ m.tag(t.discipline_label, "blue") }}{{ m.tag(t.status_label, "emerald" if t.locked else "amber") }}
+    {% if t.locked %}{{ m.tag("приказ " ~ t.order_no ~ " от " ~ (t.order_date|ru_date), "emerald") }}{% endif %}
+  </div>
+
+  <section class="grid gap-4 lg:grid-cols-2" aria-label="Документы">
+    <div class="{{ m.CARD }} p-5">
+      <p class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-soft">// список сборной</p>
+      <p class="mt-1 text-xs text-fsp-muted">Основной состав и резерв: ФИО, дата рождения, разряд, тренеры, место и баллы рейтинга.</p>
+      <div class="mt-3">{{ m.export_links("/teams/" ~ t.id ~ "/roster", "Скачать") }}</div>
+    </div>
+    <div class="{{ m.CARD }} p-5">
+      <p class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-soft">// проект приказа</p>
+      <p class="mt-1 text-xs text-fsp-muted">{% if t.locked %}С реквизитами утверждённого приказа.{% else %}С пустыми реквизитами «№ ___ от ___» — заполняются при утверждении.{% endif %}</p>
+      <div class="mt-3">{{ m.export_links("/teams/" ~ t.id ~ "/order", "Скачать") }}</div>
+    </div>
+  </section>
+
+  {% if not t.locked %}
+  <form method="post" action="/cabinet/admin/teams/{{ t.id }}/update" class="{{ m.CARD }} mt-6 grid gap-3 p-5 sm:grid-cols-2">
+    <div><label for="t-title" class="{{ m.LABEL }}">Название</label><input id="t-title" name="title" required minlength="5" maxlength="200" value="{{ t.title }}" class="{{ m.INPUT }}"></div>
+    <div><label for="t-purpose" class="{{ m.LABEL }}">Цель формирования (для приказа)</label><input id="t-purpose" name="purpose" maxlength="300" value="{{ t.purpose }}" class="{{ m.INPUT }}"></div>
+    <div class="sm:col-span-2"><button class="{{ m.BTN_SM }}">{{ m.icon("check", "h-3.5 w-3.5") }}Сохранить название и цель</button></div>
+  </form>
+  {% elif t.purpose %}
+  <p class="mt-6 text-sm text-fsp-soft">Цель формирования: {{ t.purpose }}</p>
+  {% endif %}
+
+  <div class="mt-6 overflow-x-auto border border-fsp-line bg-fsp-panel rounded-xl">
+    <table class="w-full min-w-[820px] border-collapse text-sm">
+      <caption class="sr-only">Состав сборной: основной состав {{ t.main_count }}, резерв {{ t.reserve_count }}</caption>
+      <thead class="border-b border-fsp-line bg-fsp-bg/70"><tr>
+        <th scope="col" class="{{ m.TH }} w-14">Рейтинг</th>
+        <th scope="col" class="{{ m.TH }}">Спортсмен</th>
+        <th scope="col" class="{{ m.TH }}">Разряд</th>
+        <th scope="col" class="{{ m.TH }} text-right">Баллы</th>
+        <th scope="col" class="{{ m.TH }}">Тренер</th>
+        <th scope="col" class="{{ m.TH }}">Состав</th>
+        {% if not t.locked %}<th scope="col" class="{{ m.TH }}"><span class="sr-only">Действия</span></th>{% endif %}
+      </tr></thead>
+      <tbody>
+        {% for mem in t.members %}
+        <tr class="border-b border-fsp-line/70 {% if mem.role == 'RESERVE' %}opacity-80{% endif %}">
+          <td class="px-3 py-3">{{ m.place(mem.position) }}</td>
+          <td class="px-3 py-3"><p class="font-medium text-white">{{ mem.full_name }}</p><p class="font-mono text-[11px] text-fsp-muted">{{ mem.fsp_id }} · {{ mem.municipality }}</p></td>
+          <td class="px-3 py-3"><span class="inline-flex whitespace-nowrap rounded-md border border-fsp-dim bg-fsp-card px-1.5 py-0.5 font-mono text-[11px] font-bold text-fsp-light">{{ mem.rank_short }}</span></td>
+          <td class="px-3 py-3 text-right font-mono font-bold tabular-nums text-fsp-violet">{{ "%.1f"|format(mem.points) }}</td>
+          <td class="px-3 py-3 text-xs text-fsp-soft">{{ mem.coaches|join(", ") or "—" }}</td>
+          <td class="px-3 py-3">{{ m.tag(mem.role_label, "emerald" if mem.role == "MAIN" else "slate") }}</td>
+          {% if not t.locked %}
+          <td class="px-3 py-3">
+            <div class="flex flex-wrap items-center justify-end gap-2">
+              <form method="post" action="/cabinet/admin/teams/{{ t.id }}/members/{{ mem.fsp_id }}/role">
+                <button name="role" value="{{ 'RESERVE' if mem.role == 'MAIN' else 'MAIN' }}" class="{{ m.BTN_SM }}">{{ "В резерв" if mem.role == "MAIN" else "В основной" }}</button>
+              </form>
+              <form method="post" action="/cabinet/admin/teams/{{ t.id }}/members/{{ mem.fsp_id }}/remove">
+                <button class="flex h-8 w-8 items-center justify-center rounded-md border border-fsp-line2 text-fsp-muted hover:border-fsp-red hover:text-rose-300" aria-label="Исключить из сборной: {{ mem.full_name }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
+              </form>
+            </div>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="mt-2 font-mono text-[11px] text-fsp-muted">// основной состав: {{ t.main_count }} · резерв: {{ t.reserve_count }}{% if t.coaches %} · тренеры: {{ t.coaches|join(", ") }}{% endif %}</p>
+
+  {% if not t.locked %}
+  <div class="mt-8 grid gap-6 lg:grid-cols-2">
+    <form method="post" action="/cabinet/admin/teams/{{ t.id }}/members" class="{{ m.CARD }} grid content-start gap-3 p-5">
+      <p class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-soft">// добавить из рейтинга</p>
+      {% if candidates %}
+      <div>
+        <label for="t-add" class="{{ m.LABEL }}">Спортсмен</label>
+        <select id="t-add" name="fsp_id" class="{{ m.INPUT }} text-xs">{% for r in candidates %}<option value="{{ r.fsp_id }}">{{ "%02d"|format(r.position) }} · {{ r.full_name }} · {{ r.rank_short }} · {{ "%.1f"|format(r.final) }}</option>{% endfor %}</select>
+      </div>
+      <div><button class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Добавить в резерв</button></div>
+      {% else %}
+      <p class="text-sm text-fsp-muted">В рейтинге с теми же фильтрами больше нет спортсменов, которых можно добавить.</p>
+      {% endif %}
+    </form>
+
+    <form method="post" action="/cabinet/admin/teams/{{ t.id }}/approve" class="{{ m.CARD }} grid content-start gap-3 border-fsp-blue p-5 sm:grid-cols-2">
+      <p class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-violet sm:col-span-2">// утвердить состав приказом</p>
+      <div><label for="t-order" class="{{ m.LABEL }}">Номер приказа</label><input id="t-order" name="order_no" required pattern=".*\d.*" title="Укажите номер приказа" placeholder="№ 412-р" class="{{ m.INPUT }} font-mono"></div>
+      <div><label for="t-odate" class="{{ m.LABEL }}">Дата приказа</label><input id="t-odate" name="order_date" type="date" required value="{{ today.isoformat() }}" class="{{ m.INPUT }} font-mono [color-scheme:dark]"></div>
+      <p class="text-xs text-fsp-muted sm:col-span-2">После утверждения состав и реквизиты закрываются для изменений; в проекте приказа появятся номер и дата.</p>
+      <div class="sm:col-span-2"><button class="{{ m.BTN }}">{{ m.icon("check", "h-4 w-4") }}Утвердить состав</button></div>
+    </form>
+  </div>
+
+  <form method="post" action="/cabinet/admin/teams/{{ t.id }}/delete" class="mt-6">
+    <button class="{{ m.BTN_NO }}" onclick="return confirm('Удалить черновик сборной?')">{{ m.icon("x", "h-3.5 w-3.5") }}Удалить черновик</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

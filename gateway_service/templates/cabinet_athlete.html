@@ -189,6 +189,7 @@
     {{ m.icon("trophy", "h-3.5 w-3.5") }}
     {% if perf.podiums >= 2 %}Коэффициент стабильности ×1.2 применяется к вашему рейтингу{% else %}Ещё {{ 2 - perf.podiums }} {{ plural(2 - perf.podiums, "призовое место", "призовых места", "призовых мест") }} — и рейтинг умножится на ×1.2{% endif %}
   </p>
+  <div class="mb-5">{{ m.export_links("/athletes/" ~ user.person.fsp_id ~ "/report", "Отчёт о соревнованиях") }}</div>
   {% endif %}
   {% set max_pts = (results|map(attribute="base_points")|select|list or [1])|max %}
   <div class="overflow-x-auto rounded-xl border border-fsp-line bg-fsp-panel" data-reveal>

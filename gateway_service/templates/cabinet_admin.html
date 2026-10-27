@@ -7,7 +7,7 @@
 {% set soon = panels|selectattr("days_to_start", "le", 90)|list %}
 {% set no_chief = soon|rejectattr("has_chief")|list %}
 {% set inbox_count = comp_apps|length + quals|length + sheets|length + no_chief|length %}
-{{ m.cabinet_nav([("inbox", "Входящие", inbox_count), ("protocols", "Протоколы", sheets|length), ("judges", "Судейские коллегии", no_chief|length), ("documents", "Справки", None), ("rating-settings", "Рейтинг", None), ("create", "Новое соревнование", None)]) }}
+{{ m.cabinet_nav([("inbox", "Входящие", inbox_count), ("protocols", "Протоколы", sheets|length), ("evsk", "ЕВСК", evsk_rows|length), ("judges", "Судейские коллегии", no_chief|length), ("registration", "Приём заявок", None), ("documents", "Справки", None), ("rating-settings", "Рейтинг", None), ("teams", "Сборные", None), ("reports", "Отчёты", None), ("create", "Новое соревнование", None)]) }}
 <div class="mt-4">{{ m.degraded_notice(degraded) }}</div>
 
 {# ---------------- KPIs ---------------- #}
@@ -218,6 +218,7 @@
         <li class="flex items-center gap-3 rounded-md border border-fsp-line bg-fsp-panel px-3 py-2 text-sm {% if e.status == 'DSQ' %}opacity-60{% endif %}">
           <span class="w-8 shrink-0 text-center">{{ m.place(e.place, e.status) }}</span>
           <span class="min-w-0 flex-1 truncate text-fsp-light">{{ e.full_name }}</span>
+          {% set ev = evsk_map.get(c.id ~ ":" ~ e.fsp_id) %}{% if ev %}{{ m.evsk_pill(ev, ev.fsp_id in rank_pending) }}{% endif %}
           <span class="shrink-0 font-mono text-xs text-fsp-muted">{% if icpc %}{{ e.solved }} реш. · {{ e.penalty }}′{% else %}{{ "%.2f"|format(e.score) }}{% endif %}</span>
           <span class="w-10 shrink-0 text-right font-mono text-xs {% if e.base_points %}text-emerald-300{% else %}text-fsp-dim2{% endif %}">+{{ e.base_points }}</span>
         </li>
@@ -264,6 +265,55 @@
       </div>
       <div><button class="{{ m.BTN }}">Распарсить и пересчитать</button></div>
     </form>
+  </details>
+</section>
+
+{# ---------------- EVSK HIGHLIGHT ---------------- #}
+<section id="evsk" class="mt-12 scroll-mt-36">
+  {{ m.section_head("evsk --check-results", "Требования ЕВСК", "Результаты спортсменов региона за последние 12 месяцев, которые выполняют разрядные требования: на присвоение более высокого разряда или на подтверждение истекающего. Подсвечены и в протоколах — заявку подаёт тренер или сам спортсмен в своём кабинете.") }}
+  {% if not evsk_checked %}<p class="mb-4 font-mono text-xs text-amber-300">[WARN] реестр спортсменов недоступен — текущий разряд не сверен</p>{% endif %}
+  <div class="overflow-x-auto border border-fsp-line bg-fsp-panel rounded-xl">
+    <table class="w-full min-w-[760px] border-collapse text-sm">
+      <caption class="sr-only">Спортсмены, выполнившие требования ЕВСК</caption>
+      <thead class="border-b border-fsp-line bg-fsp-bg/70"><tr>
+        <th scope="col" class="{{ m.TH }}">Спортсмен</th>
+        <th scope="col" class="{{ m.TH }}">Результат</th>
+        <th scope="col" class="{{ m.TH }}">Выполнено</th>
+        <th scope="col" class="{{ m.TH }}">Сейчас</th>
+        <th scope="col" class="{{ m.TH }}">Заявка</th>
+      </tr></thead>
+      <tbody>
+        {% for e in evsk_rows %}
+        <tr class="border-b border-fsp-line/70 bg-amber-400/[0.04]">
+          <td class="px-3 py-3"><p class="font-medium text-white">{{ e.full_name }}</p><p class="font-mono text-[11px] text-fsp-muted">{{ e.fsp_id }} · {{ e.municipality }}</p></td>
+          <td class="px-3 py-3 text-xs"><a href="/protocols/{{ e.competition_id }}" class="block text-fsp-light hover:text-fsp-violet hover:underline">{{ e.place }} место из {{ e.participants }} · {{ e.title }}</a>
+            <span class="font-mono text-[11px] text-fsp-muted">{{ e.level_label }} · {{ e.date|ru_date }}{% if not e.published %} · черновик протокола{% endif %}</span></td>
+          <td class="px-3 py-3">{{ m.evsk_pill(e) if e.state != "unknown" else m.tag("проверьте разряд", "amber") }}<p class="mt-1 max-w-[16rem] text-[11px] text-fsp-muted">{{ e.target.requirement }}</p></td>
+          <td class="px-3 py-3 font-mono text-xs text-fsp-soft">{{ e.current_rank or "б/р" }}{% if e.current_state in ("expired", "critical", "warning") %} <span class="text-amber-300">· срок истекает</span>{% endif %}</td>
+          <td class="px-3 py-3 font-mono text-xs">{% if e.fsp_id in rank_pending %}<span class="text-emerald-300">на рассмотрении</span>{% else %}<span class="text-fsp-dim2">не подана</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="px-3 py-8 text-center font-mono text-sm text-fsp-muted">// нет результатов, выполняющих требования к более высокому разряду</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <details class="group {{ m.CARD }} mt-4">
+    <summary class="flex cursor-pointer list-none items-center justify-between px-5 py-4 font-mono text-sm font-bold text-fsp-light hover:text-fsp-violet">
+      <span>{{ m.icon("trophy", "mr-2 inline h-4 w-4 text-amber-300") }}Таблица требований, по которой идёт подсветка</span>
+      {{ m.icon("chevron", "h-4 w-4 transition-transform group-open:rotate-180") }}
+    </summary>
+    <div class="border-t border-fsp-line p-5">
+      <p class="mb-3 font-mono text-[11px] text-amber-300">// пороги рабочие (масштабированы под демо-протоколы): перед боевым использованием сверьте с действующей ЕВСК и правьте в shared/domain.py → EVSK_REQUIREMENTS</p>
+      <ul class="grid gap-3 md:grid-cols-2">
+        {% for r in evsk_table %}
+        <li class="rounded-md border border-fsp-line bg-fsp-bg p-3">
+          <p class="font-mono text-xs font-bold text-fsp-violet">{{ r.title }}</p>
+          <ul class="mt-1.5 grid gap-0.5 text-[11px] text-fsp-soft">{% for rule in r.rules %}<li>{{ rule.text }}</li>{% endfor %}</ul>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
   </details>
 </section>
 
@@ -315,6 +365,39 @@
     </li>
     {% else %}
     <li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Предстоящих соревнований нет — <a href="#create" class="text-fsp-violet hover:underline">создайте соревнование</a> в календаре.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+{# ---------------- REGISTRATION CONTROL ---------------- #}
+<section id="registration" class="mt-12 scroll-mt-36">
+  {{ m.section_head("registration --open --close", "Приём заявок", "Откройте или закройте приём заявок вручную. Закрытие останавливает подачу сразу, не дожидаясь срока; для открытия после истёкшего срока укажите новую дату — не позже начала соревнования.") }}
+  <ul class="grid gap-3">
+    {% for c in registrations %}
+    {% set is_open = c.status == "REGISTRATION_OPEN" %}
+    <li class="{{ m.CARD }} p-4 sm:p-5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{% if c.registration_expired %}{{ m.tag("срок подачи вышел", "amber") }}{% endif %}</div>
+          <p class="mt-2 font-medium text-white">{{ c.title }}</p>
+          <p class="font-mono text-[11px] text-fsp-muted">{{ c.code }} · старт {{ c.start_date|ru_date }} · приём до {{ c.registration_deadline|ru_date if c.registration_deadline else "не задан" }} · заявок: {{ c.applications_total }}{% if c.applications_pending %}, на модерации {{ c.applications_pending }}{% endif %}</p>
+        </div>
+      </div>
+      <form method="post" action="/cabinet/admin/competitions/{{ c.id }}/registration" class="mt-3 flex flex-wrap items-end gap-2 border-t border-fsp-line pt-3">
+        <div>
+          <label for="rg-{{ c.id }}" class="{{ m.LABEL }} !mb-1 !text-[10px]">{{ "Продлить приём до" if is_open else "Приём заявок до" }}</label>
+          <input id="rg-{{ c.id }}" type="date" name="deadline" value="{{ c.suggest_deadline }}" min="{{ today.isoformat() }}" max="{{ c.start_date }}" class="{{ m.INPUT }} !py-1.5 font-mono text-xs [color-scheme:dark]">
+        </div>
+        {% if is_open %}
+        <button name="action" value="open" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Продлить</button>
+        <button name="action" value="close" formnovalidate class="{{ m.BTN_NO }}">{{ m.icon("x", "h-3.5 w-3.5") }}Закрыть приём</button>
+        {% else %}
+        <button name="action" value="open" class="{{ m.BTN_OK }}">{{ m.icon("check", "h-3.5 w-3.5") }}Открыть приём</button>
+        {% endif %}
+      </form>
+    </li>
+    {% else %}
+    <li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Нет соревнований, для которых можно менять приём заявок.</li>
     {% endfor %}
   </ul>
 </section>
@@ -372,6 +455,46 @@
   {% endif %}
 </section>
 
+{# ---------------- TEAMS & REPORTS ---------------- #}
+<section id="teams" class="mt-12 scroll-mt-36">
+  {{ m.section_head("team build --from-rating", "Сборные команды", "Состав набирается вручную из отфильтрованного рейтинга; для сборной формируются список и проект приказа в .xlsx, .docx и .pdf.") }}
+  <div class="mb-4 flex flex-wrap gap-3">
+    <a href="/rating" class="{{ m.BTN }} !py-2 !text-xs">{{ m.icon("users", "h-3.5 w-3.5") }}Набрать из рейтинга</a>
+    <a href="/teams" class="{{ m.BTN_GHOST }} !py-2 !text-xs">Все сборные</a>
+  </div>
+  <ul class="grid gap-3">
+    {% for t in teams[:5] %}
+    <li class="{{ m.CARD }} flex flex-wrap items-center justify-between gap-3 p-4">
+      <div class="min-w-0">
+        <div class="flex flex-wrap items-center gap-2">{{ m.tag(t.discipline_label, "blue") }}{{ m.tag("сезон " ~ t.season) }}{{ m.tag(t.status_label, "emerald" if t.locked else "amber") }}</div>
+        <a href="/teams/{{ t.id }}" class="mt-2 block truncate font-medium text-white hover:text-fsp-violet hover:underline">{{ t.title }}</a>
+        <p class="font-mono text-[11px] text-fsp-muted">основной состав {{ t.main_count }}{% if t.reserve_count %} · резерв {{ t.reserve_count }}{% endif %}</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <a href="/teams/{{ t.id }}/roster.xlsx" download class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Список</a>
+        <a href="/teams/{{ t.id }}/order.docx" download class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Проект приказа</a>
+      </div>
+    </li>
+    {% else %}
+    <li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted">Сборных пока нет — отметьте спортсменов на странице рейтинга.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section id="reports" class="mt-12 scroll-mt-36">
+  {{ m.section_head("report headcount --export", "Отчёты", "Численность занимающихся с динамикой за несколько лет и разрезами. Отчёт о соревнованиях спортсмена выгружается из кабинета спортсмена и тренера, протокол — со страницы протокола, список сборной и проект приказа — со страницы сборной.") }}
+  <div class="{{ m.CARD }} flex flex-wrap items-center justify-between gap-4 p-5">
+    <div class="min-w-0">
+      <p class="font-medium text-white">Численность занимающихся</p>
+      <p class="mt-1 text-xs text-fsp-muted">Динамика на конец каждого года · дисциплины, муниципалитеты, организации, возраст, пол, разряды.</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <a href="/reports/headcount" class="{{ m.BTN_SM }}">{{ m.icon("pulse", "h-3.5 w-3.5") }}Открыть отчёт</a>
+      {{ m.export_links("/reports/headcount/export", "Скачать") }}
+    </div>
+  </div>
+</section>
+
 {# ---------------- CREATE COMPETITION ---------------- #}
 <section id="create" class="mt-12 scroll-mt-36">
   <details class="group {{ m.CARD }}">
@@ -383,7 +506,7 @@
       <div class="sm:col-span-2 lg:col-span-4"><label for="c-title" class="{{ m.LABEL }}">Название</label><input id="c-title" name="title" required class="{{ m.INPUT }}" value="Открытое первенство г. Орска по спортивному программированию"></div>
       <div><label for="c-disc" class="{{ m.LABEL }}">Дисциплина</label><select id="c-disc" name="discipline" class="{{ m.INPUT }}">{% for d in D.DISCIPLINES %}<option value="{{ d.code }}">{{ d.short }}</option>{% endfor %}</select></div>
       <div><label for="c-level" class="{{ m.LABEL }}">Статус (уровень)</label><select id="c-level" name="level" class="{{ m.INPUT }}">{% for k, v in D.LEVEL_LABELS.items() %}<option value="{{ k }}" {% if k == "REGIONAL" %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
-      <div><label for="c-type" class="{{ m.LABEL }}">Тип</label><select id="c-type" name="type" class="{{ m.INPUT }}">{% for t in D.COMPETITION_TYPES %}<option>{{ t }}</option>{% endfor %}</select></div>
+      <div><label for="c-type" class="{{ m.LABEL }}">Тип</label><select id="c-type" name="type" class="{{ m.INPUT }}">{% for t in comp_types %}<option>{{ t.title }}</option>{% endfor %}</select></div>
       <div><label for="c-format" class="{{ m.LABEL }}">Формат</label><select id="c-format" name="format" class="{{ m.INPUT }}">{% for k, v in D.FORMAT_LABELS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
       <div class="sm:col-span-2"><label for="c-note" class="{{ m.LABEL }}">Пояснение к формату</label><input id="c-note" name="format_note" class="{{ m.INPUT }}" placeholder="Разработка — онлайн, защита — очно"></div>
       <div><label for="c-plan" class="{{ m.LABEL }}">Календарный план</label><select id="c-plan" name="calendar_plan" class="{{ m.INPUT }}">{% for k, v in D.CALENDAR_PLAN_LABELS.items() %}<option value="{{ k }}" {% if k == "REGIONAL" %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
@@ -396,6 +519,31 @@
       <div class="flex items-end"><button class="{{ m.BTN }} w-full">Создать</button></div>
     </form>
   </details>
+
+  <div id="types" class="{{ m.CARD }} mt-4 scroll-mt-36 p-5">
+    <p class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-soft">// справочник типов соревнований</p>
+    <p class="mt-1 text-xs text-fsp-muted">Типы из справочника доступны в форме создания. Тип, который уже используется в календаре, удалить нельзя.</p>
+    <ul class="mt-3 flex flex-wrap gap-2" aria-label="Типы соревнований">
+      {% for t in comp_types %}
+      <li class="flex items-center gap-2 rounded-md border border-fsp-line2 bg-fsp-bg py-1 pl-2.5 {% if t.used %}pr-2.5{% else %}pr-1{% endif %} text-xs">
+        <span class="text-fsp-light">{{ t.title }}</span><span class="font-mono text-[10px] text-fsp-muted" title="Соревнований этого типа в календаре">{{ t.used }}</span>
+        {% if not t.used %}
+        <form method="post" action="/cabinet/admin/competition-types/remove">
+          <input type="hidden" name="title" value="{{ t.title }}">
+          <button class="flex h-6 w-6 items-center justify-center rounded text-fsp-muted hover:bg-fsp-red/20 hover:text-rose-300" aria-label="Удалить тип: {{ t.title }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <form method="post" action="/cabinet/admin/competition-types" class="mt-4 flex flex-wrap items-end gap-2">
+      <div class="min-w-[14rem] flex-1">
+        <label for="type-new" class="{{ m.LABEL }} !mb-1 !text-[10px]">Новый тип</label>
+        <input id="type-new" name="title" required minlength="3" maxlength="40" placeholder="Например: Фестиваль" class="{{ m.INPUT }} !py-2 text-sm">
+      </div>
+      <button class="{{ m.BTN }} !py-2">{{ m.icon("check", "h-4 w-4") }}Добавить в справочник</button>
+    </form>
+  </div>
 </section>
 
 {# ---------------- AUDIT LOG ---------------- #}

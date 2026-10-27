@@ -1,4 +1,4 @@
-{# Expects: rating (from competition_service /api/v1/rating), limit (int|None) #}
+{# Expects: rating (from competition_service /api/v1/rating), limit (int|None), pick (bool, optional: колонка выбора в сборную для федерации) #}
 {% import "macros.html" as m %}
 {% set rows = rating.rows[:limit] if limit else rating.rows %}
 {% set s = rating.settings %}
@@ -7,6 +7,7 @@
     <caption class="sr-only">Рейтинг сезона {{ rating.season }} — {{ rating.discipline_title }}</caption>
     <thead class="border-b border-fsp-line bg-fsp-bg/70">
       <tr>
+        {% if pick %}<th scope="col" class="{{ m.TH }} w-10"><span class="sr-only">В сборную</span></th>{% endif %}
         <th scope="col" class="{{ m.TH }} w-12">#</th>
         <th scope="col" class="{{ m.TH }}">Спортсмен</th>
         <th scope="col" class="{{ m.TH }}">Разряд</th>
@@ -21,6 +22,7 @@
     <tbody>
       {% for r in rows %}
       <tr class="border-b border-fsp-line/70 transition-colors duration-150 hover:bg-fsp-card/60">
+        {% if pick %}<td class="px-3 py-3"><input type="checkbox" name="fids" value="{{ r.fsp_id }}" form="team-form" aria-label="Включить в сборную: {{ r.full_name }}" class="h-4 w-4 cursor-pointer accent-[#402FFF]"></td>{% endif %}
         <td class="px-3 py-3">{{ m.place(r.position) }}</td>
         <td class="px-3 py-3">
           <p class="font-medium text-white">{{ r.full_name }}</p>
@@ -54,7 +56,7 @@
         </td>
       </tr>
       <tr id="bd-{{ rating.discipline }}-{{ loop.index }}" class="hidden border-b border-fsp-line bg-fsp-bg/80">
-        <td colspan="9" class="px-3 py-4 sm:px-6">
+        <td colspan="{{ 10 if pick else 9 }}" class="px-3 py-4 sm:px-6">
           <div class="grid gap-2">
             {% for b in r.breakdown %}
             <div class="grid grid-cols-[88px_1fr_auto_64px] items-center gap-3 border-l-2 {% if b.podium %}border-emerald-400{% elif b.status == 'DSQ' %}border-rose-500{% else %}border-fsp-line2{% endif %} bg-fsp-panel px-3 py-2 text-xs">
@@ -79,7 +81,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="px-3 py-10 text-center font-mono text-sm text-fsp-muted">// нет опубликованных протоколов по заданным фильтрам</td></tr>
+      <tr><td colspan="{{ 10 if pick else 9 }}" class="px-3 py-10 text-center font-mono text-sm text-fsp-muted">// нет опубликованных протоколов по заданным фильтрам</td></tr>
       {% endfor %}
     </tbody>
   </table>

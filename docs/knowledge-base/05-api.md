@@ -23,6 +23,7 @@ Swagger: `http://127.0.0.1:8001/docs` (sportsman), `http://127.0.0.1:8002/docs` 
 | `POST /api/v1/links` | Запрос на привязку `{trainer_fsp_id, athlete_fsp_id, discipline}` | См. [домен](03-domain.md#связь-тренер--спортсмен-trainerlink) |
 | `POST /api/v1/links/{id}/status` | Переход статуса `{status, actor_fsp_id, note}` | Только участники связи; подтверждает только спортсмен |
 | `GET /api/v1/persons/{fsp_id}/performance` | История выступлений | `422` на невалидный ФСП ID |
+| `GET /api/v1/reports/headcount?years=&discipline=&municipality=&organization=` | Численность занимающихся на конец каждого из последних лет, разрезы, динамика | `years` 2–6, по умолчанию 3; `422` на неизвестный фильтр |
 
 ## competition_service :8002
 
@@ -31,6 +32,16 @@ Swagger: `http://127.0.0.1:8001/docs` (sportsman), `http://127.0.0.1:8002/docs` 
 | `GET /api/v1/competitions` | Календарь (`discipline`, `status`, `plan`, `format`, `season`, `upcoming`) | — |
 | `GET /api/v1/competitions/{id}` | Соревнование | `404` |
 | `POST /api/v1/competitions` | Создание | Статус по сроку приёма заявок |
+| `POST /api/v1/competitions/{id}/registration` | Ручное открытие / закрытие / продление приёма заявок `{action, deadline?, actor}` | `409` не открыт / уже открыт; `422` срок прошёл, позже старта, соревнование идёт или завершено |
+| `GET/POST /api/v1/competition-types` | Справочник типов соревнований (с числом использований); добавить `{title, actor}` | `409` дубль (без учёта регистра); `422` название |
+| `DELETE /api/v1/competition-types?title=&actor=` | Удалить неиспользуемый тип | `409` используется; `404` нет |
+| `GET /api/v1/evsk/requirements` | Таблица требований ЕВСК, по которой идёт подсветка | — |
+| `GET /api/v1/evsk/candidates?competition_id=&since_days=` | Результаты спортсменов региона, выполняющие требования ЕВСК, с состоянием `assign/confirm/have/unknown` | `since_days` 1–1460, по умолчанию 365 |
+| `GET /api/v1/teams?discipline=&season=` · `GET /api/v1/teams/{id}` | Сборные | `404` |
+| `POST /api/v1/teams` | Сформировать сборную из рейтинга `{title, discipline, season, purpose, age_group, min_rank, fsp_ids[], actor}` | `422` не в рейтинге / санкция / дубль; `503` реестр недоступен |
+| `PUT /api/v1/teams/{id}` · `DELETE /api/v1/teams/{id}?actor=` | Название и цель · удалить черновик | `409` состав утверждён |
+| `POST /api/v1/teams/{id}/members` · `DELETE …/members/{fsp_id}?actor=` · `POST …/members/{fsp_id}/role` | Добавить в резерв · исключить · основной состав / резерв | `409` дубль или утверждён; `422` нет в рейтинге или не останется основного состава |
+| `POST /api/v1/teams/{id}/approve` | Утвердить приказом `{order_no, order_date, actor}` | `422` нет номера приказа; `409` уже утверждён |
 | `GET /api/v1/competitions/{id}/protocol` | Протокол | — |
 | `GET /api/v1/competitions/{id}/protocol/entry-sheet` | Лист ввода: участники с одобренными заявками, внесённые результаты, заявки на модерации, текущий черновик | — |
 | `POST /api/v1/competitions/{id}/protocol/results` | Ввод результатов `{results: [{fsp_id, solved, penalty, score, dsq, dsq_reason}], actor, publish}` → протокол ранжируется автоматически | `422`: старт не наступил, нет одобренных заявок, участник без одобренной заявки, дубль; `409`: уже опубликован или live из лога |
@@ -71,6 +82,16 @@ Swagger: `http://127.0.0.1:8001/docs` (sportsman), `http://127.0.0.1:8002/docs` 
 | `GET /protocols/{id}` | все (черновик — федерация) | Протокол по форме для печати / PDF |
 | `POST /cabinet/admin/competitions` | федерация | Создание соревнования |
 | `POST /documents/participation` | федерация, спортсмен | Справка (спортсмен — только на себя) |
+| `POST /cabinet/admin/competitions/{id}/registration` | федерация | Открыть / закрыть / продлить приём заявок (`action`, `deadline`) |
+| `POST /cabinet/admin/competition-types` · `…/remove` | федерация | Пополнить справочник типов · удалить неиспользуемый |
+| `GET /reports/headcount` | федерация | Отчёт о численности с фильтрами (`years`, `discipline`, `municipality`, `organization`) |
+| `GET /reports/headcount/export.{xlsx,docx,pdf}` | федерация | Выгрузка отчёта о численности |
+| `GET /protocols/{id}/export.{xlsx,docx,pdf}` | все (черновик — федерация) | Выгрузка протокола |
+| `GET /athletes/{fsp_id}/report.{xlsx,docx,pdf}` | сам спортсмен, его тренер с активной привязкой, федерация | Отчёт о соревнованиях спортсмена |
+| `POST /cabinet/admin/teams` | федерация | Сформировать сборную из отмеченных на `/rating` спортсменов (`fids`, фильтры, `title`, `purpose`) |
+| `GET /teams` · `GET /teams/{id}` | федерация | Список сборных · состав, правка, утверждение |
+| `POST /cabinet/admin/teams/{id}/update` · `members` · `members/{fsp_id}/remove` · `members/{fsp_id}/role` · `approve` · `delete` | федерация | Действия над сборной |
+| `GET /teams/{id}/{roster,order}.{xlsx,docx,pdf}` | федерация | Список сборной · проект приказа |
 | `GET /documents/{number}` | владелец, федерация | Печатная справка с QR |
 | `GET /api/public/{service}/{path}` | все | Allowlist-прокси, см. [архитектуру](02-architecture.md#публичный-api-шлюз) |
 | `GET /health` | все | Сводный статус трёх сервисов (его показывает терминал на главной) |

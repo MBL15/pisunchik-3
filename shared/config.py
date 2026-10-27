@@ -34,6 +34,10 @@ TELEGRAM_BOT = os.getenv("FSP_TELEGRAM_BOT", "")
 
 SERVICE_TIMEOUT = float(os.getenv("FSP_SERVICE_TIMEOUT", "5.0"))
 
+# TTF-шрифт с кириллицей для выгрузки в PDF; по умолчанию ищется Arial / DejaVu / Liberation в системных каталогах.
+PDF_FONT = os.getenv("FSP_PDF_FONT", "")
+PDF_FONT_BOLD = os.getenv("FSP_PDF_FONT_BOLD", "")
+
 
 def today() -> date:
     """Single source of 'now' so demos can be pinned via FSP_DEMO_TODAY=YYYY-MM-DD."""

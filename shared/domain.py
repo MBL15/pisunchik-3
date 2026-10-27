@@ -135,6 +135,23 @@ LEVEL_STATUS_LABELS: dict[str, str] = {
     CompetitionLevel.REGIONAL: "региональное",
 }
 
+# Требования ЕВСК к результату: разряд -> [(уровень соревнования, место не ниже, участников не менее)].
+# ВНИМАНИЕ: пороги рабочие, масштабированы под размеры протоколов демо-данных. Перед боевым использованием их нужно
+# сверить с действующей таблицей ЕВСК для вида спорта (приказ Минспорта России) — править только эту таблицу.
+# Звание МС присваивается по отдельной процедуре и автоматически не подсвечивается.
+EVSK_REQUIREMENTS: dict[str, list[tuple[str, int, int]]] = {
+    "3Ю": [(CompetitionLevel.REGIONAL, 8, 6), (CompetitionLevel.INTERREG, 12, 8)],
+    "2Ю": [(CompetitionLevel.REGIONAL, 6, 6), (CompetitionLevel.INTERREG, 9, 8), (CompetitionLevel.FIRST_RU, 14, 10)],
+    "1Ю": [(CompetitionLevel.REGIONAL, 4, 6), (CompetitionLevel.INTERREG, 6, 8), (CompetitionLevel.FIRST_RU, 10, 10)],
+    "3": [(CompetitionLevel.REGIONAL, 3, 6), (CompetitionLevel.INTERREG, 5, 8), (CompetitionLevel.FIRST_RU, 8, 10),
+          (CompetitionLevel.CHAMP_RU, 12, 12)],
+    "2": [(CompetitionLevel.REGIONAL, 2, 8), (CompetitionLevel.INTERREG, 4, 10), (CompetitionLevel.FIRST_RU, 6, 12),
+          (CompetitionLevel.CHAMP_RU, 10, 12)],
+    "1": [(CompetitionLevel.REGIONAL, 1, 8), (CompetitionLevel.INTERREG, 3, 10), (CompetitionLevel.FIRST_RU, 4, 12),
+          (CompetitionLevel.CHAMP_RU, 8, 14)],
+    "КМС": [(CompetitionLevel.INTERREG, 1, 12), (CompetitionLevel.FIRST_RU, 3, 14), (CompetitionLevel.CHAMP_RU, 6, 16)],
+}
+
 # Рекомендуемые базовые значения кейса (федерация может изменить в настройках): баллы за 1/2/3 место.
 DEFAULT_POINTS_TABLE: dict[str, list[int]] = {
     CompetitionLevel.CHAMP_RU: [100, 80, 60],
@@ -169,7 +186,8 @@ FORMAT_LABELS: dict[str, str] = {
     CompetitionFormat.HYBRID: "Смешанный",
 }
 
-COMPETITION_TYPES = ["Чемпионат", "Первенство", "Кубок", "Турнир"]
+# Стартовое наполнение справочника типов; дальше его пополняет федерация (competition_service, /api/v1/competition-types).
+DEFAULT_COMPETITION_TYPES = ["Чемпионат", "Первенство", "Кубок", "Турнир"]
 
 
 class CompetitionStatus(StrEnum):
@@ -224,6 +242,11 @@ APPLICATION_STATUS_LABELS: dict[str, str] = {
     ApplicationStatus.REJECTED: "Отклонена",
 }
 
+TEAM_STATUS_LABELS = {"DRAFT": "Состав формируется", "APPROVED": "Утверждена приказом"}
+TEAM_ROLE_LABELS = {"MAIN": "Основной состав", "RESERVE": "Резерв"}
+# Проект приказа о сборной готовит федерация; издаёт его профильное министерство региона.
+ORDER_ISSUER = "Министерство физической культуры и спорта Оренбургской области"
+
 SANCTION_LABELS = {"DISQUALIFICATION": "Дисквалификация", "SUSPENSION": "Отстранение"}
 
 # Заявки на присвоение/подтверждение спортивного разряда и судейской категории (статусы — ApplicationStatus).
@@ -234,6 +257,12 @@ QUALIFICATION_STATUS_LABELS = {
     ApplicationStatus.APPROVED: "Удовлетворена",
     ApplicationStatus.REJECTED: "Отклонена",
 }
+
+# Возрастные группы отчёта о численности (не пересекаются; возраст — на отчётную дату).
+HEADCOUNT_AGE_BANDS: list[tuple[str, int, int]] = [
+    ("до 10 лет", 0, 9), ("10–13 лет", 10, 13), ("14–17 лет", 14, 17), ("18–21 год", 18, 21), ("22 года и старше", 22, 200),
+]
+GENDER_LABELS = {"М": "Мужской", "Ж": "Женский"}
 
 MUNICIPALITIES = [
     "г. Оренбург", "г. Орск", "г. Новотроицк", "г. Бузулук", "г. Бугуруслан",

@@ -32,6 +32,9 @@ PUBLIC_BASE_URL = os.getenv("FSP_PUBLIC_BASE_URL", f"http://localhost:{GATEWAY_P
 # Development-only default. Override FSP_SECRET_KEY in any shared/deployed environment.
 DEV_SECRET_KEY = "dev-only-fsp56-change-me"
 SECRET_KEY = os.getenv("FSP_SECRET_KEY", DEV_SECRET_KEY)
+if SECRET_KEY == DEV_SECRET_KEY and not PUBLIC_BASE_URL.startswith(("http://localhost", "http://127.0.0.1", "http://[::1]")):
+    # Ключ из репозитория известен всем: с ним можно подделать cookie сессии любого пользователя, включая администратора.
+    raise RuntimeError("FSP_SECRET_KEY не задан, а FSP_PUBLIC_BASE_URL указывает не на localhost — задайте собственный секрет")
 
 # Служебный токен шлюза для внутренних сервисов (заголовок X-FSP-Service-Token). Пусто — проверка выключена (локальный запуск).
 SERVICE_TOKEN = os.getenv("FSP_SERVICE_TOKEN", "")

@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from gateway_service import integrations_api, market_api, notify, reports
+from gateway_service import integrations_api, market_api, notify, reports, throttle
 from gateway_service.listing_ui import chips, list_args, pages
 from gateway_service.qr import qr_svg
 from gateway_service.routes import (
@@ -243,13 +243,20 @@ async def login_submit(request: Request):
     form = await request.form()
     nxt = str(form.get("next") or "/cabinet")
     nxt = nxt if nxt.startswith("/") and not nxt.startswith("//") else "/cabinet"
+    attempt = throttle.key(request.client.host if request.client else "-", str(form.get("email", "")))
+    if wait := throttle.retry_after(attempt):
+        return back(f"/login?next={quote(nxt, safe='')}", "error",
+                    f"Слишком много неудачных попыток входа. Повторите через {wait // 60 + 1} мин.")
     try:
         person = await clients["sportsman"].post("/api/v1/auth/verify",
                                                  json={"email": form.get("email", ""), "password": form.get("password", "")})
     except ServiceError as exc:
         if exc.unavailable:
             raise
+        if exc.status == 401:
+            throttle.failed(attempt)
         return back(f"/login?next={quote(nxt, safe='')}", "error", humanize(exc.detail))
+    throttle.succeeded(attempt)
     role = form.get("role") if form.get("role") in person["roles"] else person["roles"][0]
     resp = back(nxt, "ok", f"Добро пожаловать, {person['first_name']}! Активная роль: {domain.ROLE_LABELS[role]}")
     write_session(resp, person["fsp_id"], role)

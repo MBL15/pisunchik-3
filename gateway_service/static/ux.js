@@ -235,4 +235,71 @@
     });
     sync();
   });
+  // ---------- Адаптация: таблицы-карточки, затухание у края прокрутки, меню шапки ----------
+  // table.cards: ux.js проставляет подписи ячеек из заголовков столбцов (ячейки — плитки «подпись / значение»);
+  // роли ARIA возвращают таблице семантику, которую CSS display:block у неё отнимает.
+  const cellText = (th) => {
+    if (!th) return '';
+    const c = th.cloneNode(true);
+    c.querySelectorAll('.sr-only, input, svg').forEach((n) => n.remove());
+    return c.textContent.replace(/[▲▼↑↓]/g, '').replace(/\s+/g, ' ').trim();
+  };
+  document.querySelectorAll('table.cards').forEach((table) => {
+    const heads = [...(table.tHead?.rows[table.tHead.rows.length - 1]?.cells || [])];
+    table.setAttribute('role', 'table');
+    table.tHead?.setAttribute('role', 'rowgroup');
+    [...table.tBodies].forEach((b) => b.setAttribute('role', 'rowgroup'));
+    table.querySelectorAll('tr').forEach((tr) => {
+      tr.setAttribute('role', 'row');
+      let col = 0, titled = false;
+      [...tr.cells].forEach((td) => {
+        if (td.tagName === 'TH') { td.setAttribute('role', 'columnheader'); return; }
+        td.setAttribute('role', 'cell');
+        const label = cellText(heads[col]);
+        const span = td.colSpan || 1;
+        col += span;
+        if (!td.dataset.card) {
+          if (!titled && !td.querySelector('input[type=checkbox]') ) td.dataset.card = 'title';
+          else if (td.querySelector('input[type=checkbox]') && !titled) td.dataset.card = 'lead';
+          else if (!label || td.querySelector('form, button, [data-confirm]')) td.dataset.card = label ? 'full' : 'actions';
+          else if (span > 1) td.dataset.card = 'full';
+        }
+        if (td.dataset.card === 'title') titled = true;
+        if (td.dataset.label === undefined) td.dataset.label = label;
+      });
+    });
+  });
+
+  // Горизонтально прокручиваемые обёртки: затухание там, где есть скрытое содержимое
+  document.querySelectorAll('.overflow-x-auto').forEach((el) => {
+    const upd = () => {
+      const max = el.scrollWidth - el.clientWidth;
+      if (max < 4) { el.removeAttribute('data-fade'); return; }
+      const rtl = getComputedStyle(el).direction === 'rtl';
+      const x = Math.abs(el.scrollLeft);
+      const atStart = x < 4, atEnd = x > max - 4;
+      el.dataset.fade = atStart && !atEnd ? (rtl ? 'start' : 'end') : !atStart && atEnd ? (rtl ? 'end' : 'start') : atStart ? '' : 'both';
+      if (!el.dataset.fade) el.removeAttribute('data-fade');
+    };
+    el.addEventListener('scroll', upd, { passive: true });
+    if ('ResizeObserver' in window) new ResizeObserver(upd).observe(el);
+    window.addEventListener('resize', upd);
+    upd();
+  });
+
+  // Меню шапки: закрывается по Esc, касанию вне панели и по переходу; открытое меню «Ещё» не мешает мобильному
+  const menus = () => [...document.querySelectorAll('header details')];
+  document.addEventListener('click', (e) => {
+    menus().forEach((d) => { if (d.open && !d.contains(e.target)) d.open = false; });
+    const a = e.target.closest?.('header details a[href]');
+    if (a) a.closest('details').open = false;
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    menus().forEach((d) => { if (d.open) { d.open = false; d.querySelector('summary')?.focus(); } });
+  });
+  document.querySelectorAll('header details').forEach((d) => d.addEventListener('toggle', () => {
+    if (d.open) menus().forEach((o) => { if (o !== d) o.open = false; });
+  }));
+
 })();

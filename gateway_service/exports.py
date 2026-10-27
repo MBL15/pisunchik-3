@@ -342,7 +342,6 @@ def to_pdf(doc: Doc) -> bytes:
         return ParagraphStyle(name, parent=base, **kw)
 
     s_title = style("title", fontName=bold, fontSize=15, leading=19, alignment=1, spaceBefore=6, spaceAfter=2)
-    s_center = style("center", alignment=1)
     s_head = style("head", fontName=bold, fontSize=11.5, leading=15, spaceBefore=10, spaceAfter=4)
     s_cell = style("cell", fontSize=8.5, leading=10.5)
     s_cell_head = style("cellhead", fontName=bold, fontSize=8.5, leading=10.5, textColor=colors.white, alignment=1)

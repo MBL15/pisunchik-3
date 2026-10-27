@@ -206,7 +206,7 @@
   {% endif %}
   {% set max_pts = (results|map(attribute="base_points")|select|list or [1])|max %}
   <div class="overflow-x-auto rounded-xl border border-fsp-line bg-fsp-panel" data-reveal>
-    <table class="w-full min-w-[560px] border-collapse text-sm">
+    <table class="cards w-full min-w-[560px] border-collapse text-sm">
       <thead class="border-b border-fsp-line bg-fsp-bg/70"><tr>
         <th scope="col" class="{{ m.TH }}">Соревнование</th>
         <th scope="col" class="{{ m.TH }} text-center">Место</th>

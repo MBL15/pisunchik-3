@@ -51,7 +51,7 @@
 
     <div class="mb-3">{{ m.pager(pg, request, "заявок") }}</div>
     <div class="max-h-[70vh] overflow-auto rounded-xl border border-fsp-line bg-fsp-panel">
-      <table class="w-full min-w-[960px] border-collapse text-sm">
+      <table class="cards w-full min-w-[960px] border-collapse text-sm">
         <caption class="sr-only">Заявки: {{ pg.total }}</caption>
         <thead class="sticky top-0 z-10 border-b border-fsp-line bg-fsp-bg"><tr>
           <th scope="col" class="{{ m.TH }} w-10"><input type="checkbox" data-bulk-all aria-label="Отметить все на странице" class="h-4 w-4 cursor-pointer accent-[#402FFF]"></th>
@@ -72,7 +72,7 @@
             <td class="px-3 py-2.5 font-mono text-xs text-fsp-soft">{{ a.registration_deadline|ru_date if a.registration_deadline else "—" }}</td>
             <td class="px-3 py-2.5 font-mono text-xs text-fsp-soft">{{ a.created_at|ru_date }} {{ a.created_at[11:16] }}<span class="block text-[11px] text-fsp-dim2">{{ "тренер" if a.submitted_by != a.athlete_fsp_id else "сам" }}</span></td>
             <td class="px-3 py-2.5"><span class="font-mono text-xs {% if a.status == 'APPROVED' %}text-emerald-300{% elif a.status == 'REJECTED' %}text-rose-300{% else %}text-amber-300{% endif %}">{{ a.status_label }}</span>{% if a.comment %}<p class="text-[11px] text-fsp-muted">{{ a.comment }}</p>{% endif %}</td>
-            <td class="px-3 py-2.5 text-right">{% if pending %}<div class="inline-flex gap-1.5">
+            <td data-card="actions" class="px-3 py-2.5 text-right">{% if pending %}<div class="inline-flex gap-1.5">
               <button name="single" value="APPROVED:{{ a.id }}" class="{{ m.BTN_OK }} !px-2" aria-label="Одобрить заявку {{ a.athlete_name }}" title="Одобрить">{{ m.icon("check", "h-3.5 w-3.5") }}</button>
               <button name="single" value="REJECTED:{{ a.id }}" data-confirm="Отклонить заявку {{ a.athlete_name }}? Решение нельзя изменить." data-confirm-label="Отклонить" class="{{ m.BTN_NO }} !px-2" aria-label="Отклонить заявку {{ a.athlete_name }}" title="Отклонить">{{ m.icon("x", "h-3.5 w-3.5") }}</button>
             </div>{% endif %}</td>

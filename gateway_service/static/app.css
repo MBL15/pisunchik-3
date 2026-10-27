@@ -262,3 +262,98 @@ body { overflow-x: clip; }
 @media (max-width: 639px) {
   form[data-autosubmit]:not(.is-open) .fsp-more { display: none; }
 }
+
+/* =====================================================================
+   Адаптация под телефоны и планшеты
+   ·  < 640px — телефон, 640–1023px — планшет; шапка со сворачиваемым меню уже до 1280px (xl).
+   ·  Таблицы с классом .cards на телефоне превращаются в карточки (подписи ячеек проставляет ux.js),
+      остальные широкие таблицы прокручиваются по горизонтали с затуханием у края.
+   ===================================================================== */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { overflow-wrap: break-word; }
+/* дети сетки и гибких рядов не растягивают страницу шире экрана */
+.grid > *, .flex > .flex-1, main section, main form { min-width: 0; }
+select, input, textarea { max-width: 100%; }
+.overflow-x-auto { position: relative; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: #4E5268 transparent; }
+.overflow-x-auto[data-fade="end"] { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
+.overflow-x-auto[data-fade="start"] { -webkit-mask-image: linear-gradient(270deg, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(270deg, #000 calc(100% - 40px), transparent); }
+.overflow-x-auto[data-fade="both"] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
+
+/* безопасные зоны вырезов (iPhone) */
+@supports (padding: max(0px)) {
+  .tour-launcher { right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); }
+  .tour-offer { right: max(16px, env(safe-area-inset-right)); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 64px); }
+  footer { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+}
+
+/* крупные цели нажатия и «неувеличивающиеся» поля на сенсорных экранах */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=range]), select { min-height: 44px; }
+  input[type=checkbox], input[type=radio] { width: 22px !important; height: 22px !important; }
+  summary, [data-toggle], [data-copy] { min-height: 40px; }
+  button:not(.tour-btn), [role=button] { touch-action: manipulation; }
+  a, button, summary { -webkit-tap-highlight-color: rgba(140, 128, 255, .25); }
+}
+@media (max-width: 767px) {
+  input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=range]), select, textarea { font-size: 16px !important; }
+}
+
+/* Меню шапки: панель на всю ширину острова, крупные строки */
+.nav-sheet a, .nav-sheet button { display: flex; align-items: center; min-height: 44px; }
+.nav-sheet a[aria-current="page"] { background: rgba(64, 47, 255, .18); color: #EDEDED; }
+@media (max-width: 639px) {
+  .nav-sheet { max-height: calc(100dvh - 104px); overflow-y: auto; overscroll-behavior: contain; }
+}
+
+/* ---------- Таблицы-карточки (телефон и планшет) ---------- */
+@media (max-width: 1023px) {
+  table.cards { min-width: 0 !important; width: 100%; }
+  table.cards, table.cards tbody { display: block; }
+  table.cards thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  table.cards caption { display: none; }
+  table.cards tr { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 14px; padding: 14px 16px; }
+  table.cards tr[hidden], table.cards tr.hidden { display: none; }
+  table.cards td { display: block; min-width: 0; padding: 0 !important; text-align: left !important; flex: 1 1 calc(50% - 7px); }
+  table.cards td[data-card="lead"] { flex: 0 0 auto; }
+  table.cards td[data-card="title"] { flex: 1 1 0; min-width: 60%; }
+  table.cards td[data-card="full"] { flex: 1 1 100%; }
+  table.cards td[data-card="actions"] { flex: 1 1 100%; }
+  table.cards td[data-card="actions"] > * { justify-content: flex-start !important; }
+  table.cards td[data-card="actions"] .flex, table.cards td[data-card="actions"] form.flex { flex-wrap: wrap; }
+  table.cards td[data-card="end"] { flex: 0 0 auto; margin-left: auto; }
+  /* подпись поля над значением */
+  table.cards td[data-label]:not([data-label=""]):not([data-card="title"]):not([data-card="lead"]):not([data-card="actions"]):not([data-card="end"])::before {
+    content: attr(data-label); display: block; margin-bottom: 3px;
+    font: 500 10px/1.2 "JetBrains Mono", monospace; letter-spacing: .06em; text-transform: uppercase; color: #9B9C9E;
+  }
+  table.cards td[data-card="actions"] { padding-top: 10px !important; border-top: 1px dashed #3D3E42; }
+  table.cards td[data-card="actions"] button, table.cards td[data-card="actions"] a { min-height: 44px; }
+  /* кнопка раскрытия строки: растягивается и получает подпись из data-card-text */
+  table.cards button[data-card-text] { width: 100%; height: 44px; gap: 8px; justify-content: center; font: 500 12px "JetBrains Mono", monospace; }
+  table.cards button[data-card-text]::after { content: attr(data-card-text); }
+  table.cards td[data-card="expand"] { flex: 1 1 100%; }
+  table.cards details form.absolute { position: static !important; width: 100% !important; margin-top: 8px; }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  table.cards td { flex-basis: calc(25% - 11px); }
+  table.cards td[data-card="lead"] { flex: 0 0 auto; }
+  table.cards td[data-card="title"] { flex: 1 1 0; min-width: 62%; }
+  table.cards td[data-card="full"], table.cards td[data-card="actions"] { flex-basis: 100%; }
+  table.cards td[data-card="expand"] { flex: 0 0 auto; margin-left: auto; }
+  table.cards button[data-card-text] { width: auto; padding: 0 18px; }
+}
+@media (min-width: 1024px) { button[data-card-text]::after { content: none; } }
+
+/* ---------- Мелочи вёрстки на узких экранах ---------- */
+@media (max-width: 639px) {
+  .ux-dialog { margin: auto auto 12px; width: calc(100vw - 24px); }
+  .ux-dialog-actions { flex-direction: column-reverse; }
+  .ux-dialog-actions .tour-btn { min-height: 46px; }
+  .tour-toast { bottom: 96px; }
+}
+
+/* Открытое меню шапки не перекрывается подсказками тура */
+body:has(header details[open]) .tour-offer, body:has(header details[open]) .tour-launcher { display: none; }
+@media (max-width: 767px) {
+  table.cards td [class*="whitespace-nowrap"] { white-space: normal; }
+}

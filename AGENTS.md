@@ -13,3 +13,4 @@
 - Project knowledge base (RU): `docs/knowledge-base/` — start at its `README.md`. Keep it in sync when changing domain rules, API, demo data or UI effects.
 - Tours: steps live in `gateway_service/tours.py`, engine in `static/tour.js`; state is per-user `localStorage` (`fsp.tour:<id>`) — clear it to see the first-visit offer again. Mobile checks: Chrome's emulation does not change `innerWidth`; use a 375px iframe.
 - On Windows the gateway's live-reload can hang after `.py`/`.html` edits; do a full stack restart (see `docs/knowledge-base/08-dev-runbook.md`). E2E mutates in-memory state — restart before demos.
+- Адаптив: широкие таблицы получают класс `cards` (карточки на `< lg`, подписи ячеек проставляет `static/ux.js`, роли ячеек — `data-card`), детали в `docs/knowledge-base/06-ui-design-system.md`. Проверка мобильной вёрстки через CDP `Emulation.setDeviceMetricsOverride` (mobile=true) меняет `innerWidth` — по нему видно переполнение страницы.

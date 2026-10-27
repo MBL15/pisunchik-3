@@ -23,16 +23,16 @@
     <label class="sr-only" for="nf-d">Дисциплина</label><select id="nf-d" name="discipline" class="{{ m.INPUT }} !w-auto"><option value="">Все дисциплины</option>{% for d in disciplines %}<option value="{{ d.code }}" {% if filters.discipline == d.code %}selected{% endif %}>{{ d.short }}</option>{% endfor %}</select>
   </form>
   <div class="overflow-x-auto rounded-xl border border-fsp-line bg-fsp-panel">
-    <table class="w-full min-w-[760px] border-collapse text-sm">
+    <table class="cards w-full min-w-[760px] border-collapse text-sm">
       <caption class="sr-only">Нормативы по этапам</caption>
       <thead class="border-b border-fsp-line bg-fsp-bg/70"><tr><th scope="col" class="{{ m.TH }}">Этап</th><th scope="col" class="{{ m.TH }}">Норматив</th><th scope="col" class="{{ m.TH }}">Дисциплина · пол</th><th scope="col" class="{{ m.TH }}">Порог</th><th scope="col" class="{{ m.TH }}">Статус</th>{% if can_edit %}<th scope="col" class="{{ m.TH }}"><span class="sr-only">Изменить</span></th>{% endif %}</tr></thead>
       <tbody>{% for n in norms %}
         <tr class="border-b border-fsp-line/70 {% if not n.active %}opacity-60{% endif %}">
-          <td class="px-3 py-2 font-mono text-xs">{{ n.stage }}</td><td class="px-3 py-2 text-fsp-light">{{ n.title }}<p class="font-mono text-[11px] text-fsp-muted">{{ n.kind_label }}</p></td>
+          <td data-card="lead" class="px-3 py-2 font-mono text-xs">{{ n.stage }}</td><td data-card="title" class="px-3 py-2 text-fsp-light">{{ n.title }}<p class="font-mono text-[11px] text-fsp-muted">{{ n.kind_label }}</p></td>
           <td class="px-3 py-2 text-xs text-fsp-soft">{{ n.discipline_label }} · {{ n.gender_label }}</td>
           <td class="px-3 py-2 font-mono text-xs">{{ n.direction_label }} {{ "%g"|format(n.threshold) }} {{ n.unit }}</td>
           <td class="px-3 py-2">{{ m.tag("обязателен" if n.required else "необязателен", "blue" if n.required else "slate") }}{% if not n.active %} {{ m.tag("отключён", "amber") }}{% endif %}</td>
-          {% if can_edit %}<td class="px-3 py-2"><details class="relative"><summary class="{{ m.BTN_SM }} cursor-pointer list-none">Изменить</summary>
+          {% if can_edit %}<td data-card="actions" class="px-3 py-2"><details class="relative"><summary class="{{ m.BTN_SM }} cursor-pointer list-none">Изменить</summary>
             <form method="post" action="/training/norms" class="absolute right-0 z-10 mt-2 grid w-[min(34rem,90vw)] gap-3 rounded-xl border border-fsp-line bg-fsp-panel p-4 shadow-lg sm:grid-cols-2"><input type="hidden" name="id" value="{{ n.id }}">{{ norm_fields(n) }}<div class="sm:col-span-2"><button class="{{ m.BTN_SM }}">Сохранить</button></div></form></details></td>{% endif %}
         </tr>
       {% else %}<tr><td colspan="6" class="px-3 py-6 text-center font-mono text-sm text-fsp-muted">// нормативов нет</td></tr>{% endfor %}</tbody>

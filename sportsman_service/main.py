@@ -26,6 +26,7 @@ from shared.db import Persistence
 from sportsman_service.store import DDL, age_on, restore, seed, snapshot, store
 
 db = Persistence(DDL)
+_NO_ACCOUNT_HASH = hash_password("no-such-account")
 clients: dict[str, ServiceClient] = {}
 
 
@@ -289,7 +290,9 @@ async def lookup_persons(data: LookupIn):
 @app.post("/api/v1/auth/verify")
 async def verify_credentials(data: AuthIn):
     p = store.by_email(data.email.strip())
-    if not p or not p.password_hash or not verify_password(data.password, p.password_hash):
+    stored = p.password_hash if p and p.password_hash else _NO_ACCOUNT_HASH
+    ok = verify_password(data.password, stored)  # KDF считается и для несуществующей почты — по времени ответа учётные записи не перебрать
+    if not p or not p.password_hash or not ok:
         raise HTTPException(401, "Неверная электронная почта или пароль")
     return store.present(p)
 

@@ -36,7 +36,7 @@
   {% endif %}
 
   <div class="mt-6 overflow-x-auto border border-fsp-line bg-fsp-panel rounded-xl">
-    <table class="w-full min-w-[820px] border-collapse text-sm">
+    <table class="cards w-full min-w-[820px] border-collapse text-sm">
       <caption class="sr-only">Состав сборной: основной состав {{ t.main_count }}, резерв {{ t.reserve_count }}</caption>
       <thead class="border-b border-fsp-line bg-fsp-bg/70"><tr>
         <th scope="col" class="{{ m.TH }} w-14">Рейтинг</th>
@@ -50,14 +50,14 @@
       <tbody>
         {% for mem in t.members %}
         <tr class="border-b border-fsp-line/70 {% if mem.role == 'RESERVE' %}opacity-80{% endif %}">
-          <td class="px-3 py-3">{{ m.place(mem.position) }}</td>
-          <td class="px-3 py-3"><p class="font-medium text-white">{{ mem.full_name }}</p><p class="font-mono text-[11px] text-fsp-muted">{{ mem.fsp_id }} · {{ mem.municipality }}</p></td>
+          <td data-card="lead" class="px-3 py-3">{{ m.place(mem.position) }}</td>
+          <td data-card="title" class="px-3 py-3"><p class="font-medium text-white">{{ mem.full_name }}</p><p class="font-mono text-[11px] text-fsp-muted">{{ mem.fsp_id }} · {{ mem.municipality }}</p></td>
           <td class="px-3 py-3"><span class="inline-flex whitespace-nowrap rounded-md border border-fsp-dim bg-fsp-card px-1.5 py-0.5 font-mono text-[11px] font-bold text-fsp-light">{{ mem.rank_short }}</span></td>
           <td class="px-3 py-3 text-right font-mono font-bold tabular-nums text-fsp-violet">{{ "%.1f"|format(mem.points) }}</td>
           <td class="px-3 py-3 text-xs text-fsp-soft">{{ mem.coaches|join(", ") or "—" }}</td>
           <td class="px-3 py-3">{{ m.tag(mem.role_label, "emerald" if mem.role == "MAIN" else "slate") }}</td>
           {% if editable %}
-          <td class="px-3 py-3">
+          <td data-card="actions" class="px-3 py-3">
             <div class="flex flex-wrap items-center justify-end gap-2">
               <form method="post" action="/cabinet/admin/teams/{{ t.id }}/members/{{ mem.fsp_id }}/role">
                 <button name="role" value="{{ 'RESERVE' if mem.role == 'MAIN' else 'MAIN' }}" class="{{ m.BTN_SM }}">{{ "В резерв" if mem.role == "MAIN" else "В основной" }}</button>

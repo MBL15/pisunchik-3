@@ -3,7 +3,7 @@
 {% set rows = rating.rows[:limit] if limit else rating.rows %}
 {% set s = rating.settings %}
 <div class="overflow-x-auto border border-fsp-line bg-fsp-panel rounded-xl">
-  <table class="w-full min-w-[820px] border-collapse text-sm">
+  <table class="cards w-full min-w-[820px] border-collapse text-sm">
     <caption class="sr-only">Рейтинг сезона {{ rating.season }} — {{ rating.discipline_title }}</caption>
     <thead class="border-b border-fsp-line bg-fsp-bg/70">
       <tr>
@@ -22,9 +22,9 @@
     <tbody id="rating-rows-{{ rating.discipline }}">
       {% for r in rows %}
       <tr data-filter-item data-filter-text="{{ r.full_name }} {{ r.fsp_id }} {{ r.municipality }} {{ r.rank_short }}" data-filter-with="#bd-{{ rating.discipline }}-{{ loop.index }}" class="border-b border-fsp-line/70 transition-colors duration-150 hover:bg-fsp-card/60">
-        {% if pick %}<td class="px-3 py-3"><input type="checkbox" name="fids" value="{{ r.fsp_id }}" form="team-form" aria-label="Включить в сборную: {{ r.full_name }}" class="h-4 w-4 cursor-pointer accent-[#402FFF]"></td>{% endif %}
-        <td class="px-3 py-3">{{ m.place(r.position) }}</td>
-        <td class="px-3 py-3">
+        {% if pick %}<td data-card="lead" class="px-3 py-3"><input type="checkbox" name="fids" value="{{ r.fsp_id }}" form="team-form" aria-label="Включить в сборную: {{ r.full_name }}" class="h-4 w-4 cursor-pointer accent-[#402FFF]"></td>{% endif %}
+        <td data-card="lead" class="px-3 py-3">{{ m.place(r.position) }}</td>
+        <td data-card="title" class="px-3 py-3">
           <p class="font-medium text-white">{{ r.full_name }}</p>
           <p class="font-mono text-[11px] text-fsp-muted">{{ r.fsp_id }} · {{ r.municipality }}</p>
         </td>
@@ -49,8 +49,8 @@
           {% endif %}
         </td>
         <td class="px-3 py-3 text-right font-mono text-lg font-black tabular-nums text-fsp-violet">{{ "%.1f"|format(r.final) }}</td>
-        <td class="px-3 py-3">
-          <button type="button" data-toggle="bd-{{ rating.discipline }}-{{ loop.index }}" aria-expanded="false" aria-controls="bd-{{ rating.discipline }}-{{ loop.index }}"
+        <td data-card="expand" class="px-3 py-3">
+          <button type="button" data-card-text="Показать расчёт баллов" data-toggle="bd-{{ rating.discipline }}-{{ loop.index }}" aria-expanded="false" aria-controls="bd-{{ rating.discipline }}-{{ loop.index }}"
             class="flex h-8 w-8 items-center justify-center border border-fsp-line2 text-fsp-muted transition-colors duration-150 hover:border-fsp-blue hover:text-fsp-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet cursor-pointer rounded-md"
             aria-label="Показать расчёт: {{ r.full_name }}">{{ m.icon("chevron", "h-4 w-4 transition-transform duration-150") }}</button>
         </td>

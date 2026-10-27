@@ -3,7 +3,7 @@
 <html lang="ru" class="bg-fsp-bg">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}ФСП · Оренбургская область{% endblock %}</title>
   <meta name="description" content="Единая цифровая платформа Федерации спортивного программирования Оренбургской области: реестр, календарь, протоколы, рейтинг, документы.">
   <meta name="theme-color" content="#1B1C21">
@@ -59,7 +59,7 @@
       <a href="/" class="group flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue" aria-label="ФСП Оренбургская область — на главную">
         {{ m.fsp_mark("h-10 w-10 transition-transform duration-300 group-hover:rotate-[30deg] motion-reduce:transition-none") }}
         <span class="font-mono text-[26px] font-bold leading-none tracking-tight text-fsp-bg">ФСП</span>
-        <span class="hidden flex-col font-mono text-[12px] leading-[1.15] text-fsp-bg sm:flex">
+        <span class="hidden flex-col font-mono text-[12px] leading-[1.15] text-fsp-bg lg:flex">
           <span>федерация спортивного</span>
           <span>программирования · <span class="font-bold text-fsp-blue">56</span></span>
         </span>
@@ -99,27 +99,54 @@
             <span class="hidden text-fsp-muted xl:inline">{{ user.person.fsp_id }}</span><span>Кабинет</span>
           </a>
           <form method="post" action="/logout">
-            <button class="flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2 font-mono text-[12px] font-medium text-fsp-bg transition-colors duration-150 hover:bg-[#D9D9D9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue cursor-pointer" aria-label="Выйти">{{ m.icon("logout", "h-4 w-4") }}<span class="hidden sm:inline">Выйти</span></button>
+            <button class="hidden h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2 font-mono text-[12px] font-medium text-fsp-bg transition-colors duration-150 hover:bg-[#D9D9D9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue cursor-pointer sm:flex" aria-label="Выйти">{{ m.icon("logout", "h-4 w-4") }}<span class="hidden sm:inline">Выйти</span></button>
           </form>
         {% else %}
           <a href="/login" class="hidden rounded-md px-3 py-2 font-mono text-[13px] text-fsp-bg transition-colors duration-150 hover:text-fsp-blue sm:inline">Войти</a>
           <a href="/register" class="inline-flex items-center rounded-md bg-fsp-blue px-4 py-2 font-mono text-[13px] font-medium text-white transition-all duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[3px_3px_0px_0px_#1B1C21] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue focus-visible:ring-offset-2 motion-reduce:transition-none">Регистрация</a>
         {% endif %}
-        <details class="relative xl:hidden">
-          <summary class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md text-xl text-fsp-bg hover:bg-[#D9D9D9]" aria-label="Меню">≡</summary>
-          <div class="absolute right-0 mt-3 w-60 rounded-xl border border-fsp-line bg-fsp-panel p-2 text-fsp-light shadow-[4px_4px_0px_0px_#402FFF]">
-            {% for href, label in nav + more %}
-            <a href="{{ href }}" class="block rounded-md px-3 py-2 font-mono text-sm text-fsp-soft hover:bg-fsp-card hover:text-fsp-light">{{ label }}</a>
-            {% endfor %}
+        <details class="group sm:relative xl:hidden" data-menu>
+          <summary class="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-md text-fsp-bg transition-colors duration-150 hover:bg-[#D9D9D9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-blue group-open:bg-fsp-bg group-open:text-white" aria-label="Меню" aria-haspopup="true">
+            <svg class="h-6 w-6 group-open:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            <svg class="hidden h-6 w-6 group-open:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </summary>
+          <div class="nav-sheet absolute inset-x-0 top-full z-50 mt-2 rounded-xl border border-fsp-line bg-fsp-panel p-2 text-fsp-light shadow-[4px_4px_0px_0px_#402FFF] sm:inset-x-auto sm:right-0 sm:w-[30rem]">
+            {% if user %}
+            <div class="mb-2 flex items-center justify-between gap-3 rounded-lg bg-fsp-card px-3 py-2.5">
+              <div class="min-w-0"><p class="truncate font-mono text-sm text-fsp-light">{{ user.person.full_name }}</p><p class="truncate font-mono text-[11px] text-fsp-muted">{{ user.person.fsp_id }}</p></div>
+              <span class="shrink-0 rounded-md bg-fsp-bg px-2 py-1 font-mono text-[11px] text-fsp-soft">{{ user.role_label }}</span>
+            </div>
+            {% endif %}
+            <div class="sm:grid sm:grid-cols-2 sm:gap-x-2">
+              <div>
+                <p class="px-3 pb-1 pt-1 font-mono text-[10px] uppercase tracking-wider text-fsp-muted">Разделы</p>
+                {% for href, label in nav %}<a href="{{ href }}" class="rounded-md px-3 py-2 font-mono text-sm text-fsp-soft hover:bg-fsp-card hover:text-fsp-light"{% if path == href %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+              </div>
+              <div>
+                <p class="px-3 pb-1 pt-2 font-mono text-[10px] uppercase tracking-wider text-fsp-muted sm:pt-1">Ещё</p>
+                {% for href, label in more %}<a href="{{ href }}" class="rounded-md px-3 py-2 font-mono text-sm text-fsp-soft hover:bg-fsp-card hover:text-fsp-light"{% if path == href %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+              </div>
+            </div>
             {% if user and user.person.roles|length > 1 %}
-            <form method="post" action="/role" class="mt-2 border-t border-fsp-line pt-2">
-              <p class="px-3 pb-1 font-mono text-[10px] uppercase text-fsp-muted">Активная роль</p>
-              {% for r in user.person.roles %}
-              <button name="role" value="{{ r }}" class="block w-full rounded-md px-3 py-2 text-left font-mono text-sm {% if r == user.role %}bg-fsp-blue text-white{% else %}text-fsp-soft hover:bg-fsp-card{% endif %}">{{ D.ROLE_LABELS[r] }}</button>
-              {% endfor %}
+            <form method="post" action="/role" class="mt-2 border-t border-fsp-line px-1 pt-2">
+              <p class="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-wider text-fsp-muted">Активная роль</p>
+              <div class="grid grid-cols-2 gap-1.5">
+                {% for r in user.person.roles %}
+                <button name="role" value="{{ r }}" aria-pressed="{{ 'true' if r == user.role else 'false' }}" class="justify-center rounded-md border px-2 py-2 font-mono text-[13px] {% if r == user.role %}border-fsp-blue bg-fsp-blue text-white{% else %}border-fsp-line2 text-fsp-soft hover:bg-fsp-card{% endif %}">{{ D.ROLE_LABELS[r] }}</button>
+                {% endfor %}
+              </div>
             </form>
             {% endif %}
-            {% if not user %}<a href="/login" class="block rounded-md px-3 py-2 font-mono text-sm text-fsp-soft hover:bg-fsp-card">Войти</a>{% endif %}
+            <div class="mt-2 border-t border-fsp-line px-1 pt-2">
+              {% if user %}
+              <form method="post" action="/logout" class="sm:hidden"><button class="w-full cursor-pointer justify-center gap-2 rounded-md border border-fsp-line2 px-3 py-2 font-mono text-sm text-fsp-soft hover:bg-fsp-card">{{ m.icon("logout", "h-4 w-4") }}Выйти</button></form>
+              {% else %}
+              <div class="grid grid-cols-2 gap-1.5">
+                <a href="/login" class="justify-center rounded-md border border-fsp-line2 px-3 py-2 font-mono text-sm text-fsp-soft hover:bg-fsp-card">Войти</a>
+                <a href="/register" class="justify-center rounded-md bg-fsp-blue px-3 py-2 font-mono text-sm text-white">Регистрация</a>
+              </div>
+              {% endif %}
+            </div>
           </div>
         </details>
       </div>

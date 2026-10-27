@@ -58,7 +58,7 @@
   {% if people %}
   <div class="mb-3">{{ m.pager(pg, request, "записей") }}</div>
   <div class="max-h-[72vh] overflow-auto rounded-xl border border-fsp-line bg-fsp-panel">
-    <table class="w-full min-w-[880px] border-collapse text-sm">
+    <table class="cards w-full min-w-[880px] border-collapse text-sm">
       <caption class="sr-only">{{ tabs[tab] }}: {{ pg.total }}</caption>
       <thead class="sticky top-0 z-10 border-b border-fsp-line bg-fsp-bg"><tr>
         {{ m.sort_th("Участник", "name", request, sort, order) }}

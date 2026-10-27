@@ -259,3 +259,17 @@ class TrainerLink(BaseModel):
     discipline: str
     status: LinkStatus
     history: list[LinkEvent]
+
+
+class DisciplinesIn(BaseModel):
+    """Самостоятельный выбор дисциплин спортсменом (в профиле и кабинете)."""
+    disciplines: list[str] = Field(max_length=len(DISCIPLINE_BY_CODE))
+    actor: str
+
+    @field_validator("disciplines")
+    @classmethod
+    def _known(cls, v: list[str]) -> list[str]:
+        bad = set(v) - set(DISCIPLINE_BY_CODE)
+        if bad:
+            raise ValueError(f"Неизвестные дисциплины: {', '.join(sorted(bad))}")
+        return list(dict.fromkeys(v))

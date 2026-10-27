@@ -251,6 +251,9 @@ def seed(s: Store) -> None:
     from sportsman_service import training_seed  # отложенный импорт: модуль зависит только от shared
 
     training_seed.seed(s)
+    from sportsman_service import squads
+
+    squads.seed(s)
     from sportsman_service import oidc
 
     oidc.seed_demo_client(s)

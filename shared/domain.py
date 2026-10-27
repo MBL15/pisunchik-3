@@ -92,6 +92,10 @@ ICPC_DISCIPLINES = {"ALG", "SEC"}
 def protocol_mode(discipline: str) -> str:
     return "icpc" if discipline in ICPC_DISCIPLINES else "score"
 
+# Командные дисциплины (продуктовая и CTF): спортсмен сам собирает команду. Размер — рабочее значение, сверить с положением.
+TEAM_DISCIPLINES = ("PRD", "SEC")
+TEAM_MAX_SIZE = 5
+
 # ЕВСК: спортивные разряды и звания (по возрастанию). validity_years=None — бессрочно (звание).
 SPORT_RANKS: list[dict] = [
     {"code": "3Ю", "title": "III юношеский спортивный разряд", "short": "III юн.", "validity_years": 2},

@@ -11,6 +11,12 @@ Swagger: `http://127.0.0.1:8001/docs` (sportsman), `http://127.0.0.1:8002/docs` 
 | `GET /api/v1/persons` | Реестр: фильтры `role`, `q` (ФИО / ФСП ID), `discipline`, `municipality`, `organization`, `age_group`, `rank` (код или `none`), `min_rank`, `stage` (код этапа или `none`) | `422` на неизвестную возрастную группу |
 | `GET /api/v1/organizations?q=&discipline=&municipality=` | Организации: тип и муниципалитет из `ORGANIZATION_INFO`, число спортсменов / с разрядом / тренеров / судей, дисциплины, спортсмены по этапам. `q` — слова в названии, типе, муниципалитете | «Без организации» не выводится |
 | `POST /api/v1/persons/{fsp_id}/antidoping` | Отметка о курсе РУСАДА `{course_date, certificate_url}` | дата не в будущем, ссылка `http(s)://` |
+| `PUT /api/v1/persons/{fsp_id}/disciplines` | Выбор дисциплин `{disciplines[], actor}` → карточка | `actor` — сам участник или федерация (`403`); хотя бы одна для спортсмена и тренера, коды из справочника (`422`); снятая командная дисциплина выводит из команды |
+| `GET /api/v1/squads?discipline=&member=&q=` | Команды (`PRD`/`SEC`) с составом и приглашениями | другая дисциплина — `422` |
+| `GET /api/v1/squads/{id}`, `GET /api/v1/athletes/{fsp_id}/squads` | Команда; команды спортсмена, входящие приглашения, `can_create` | `404` |
+| `POST /api/v1/squads` | Создать команду `{title, discipline, actor}` | роль спортсмена (`403`), дисциплина в профиле (`422`), одна команда на дисциплину и уникальное название (`409`) |
+| `POST /api/v1/squads/{id}/invite` · `revoke` · `kick` | Приглашение, отзыв, исключение `{fsp_id, actor}` | капитан (`403`); приглашать — спортсмена с этой дисциплиной, не в другой команде, не больше 5 (`409`/`422`) |
+| `POST /api/v1/squads/{id}/respond` · `leave` · `disband` | Ответ на приглашение `{accept, actor}`; выход; роспуск `{actor}` | роспуск — капитан или федерация; `404`, если приглашения нет |
 | `POST /api/v1/notifications` | В ленту кабинета `{fsp_ids, title, text, link, key}` → `{delivered}` | с `key` — не больше одного уведомления на (адресат, ключ) |
 | `GET /api/v1/notifications?fsp_id=&limit=&offset=&unread_only=&q=` | Лента: `{total, offset, limit, items, unread, all}` (новые сверху) | `limit` ≤ 200 |
 | `POST /api/v1/notifications/read?fsp_id=` | Отметить прочитанными показанные `{ids}` (без тела — все) → `{unread}` | до 500 id |
@@ -86,6 +92,9 @@ Swagger: `http://127.0.0.1:8001/docs` (sportsman), `http://127.0.0.1:8002/docs` 
 | `POST /applications/decide` | федерация | Решение по отмеченным (`ids[]`, `status`, `comment`) или по одной (`single=СТАТУС:id`); возврат на ту же выборку (`back`) |
 | `GET /audit?q=&service=&actor=&date_from=&date_to=&page=&per=`, `GET /audit/export.{fmt}` | федерация | Журнал действий обоих сервисов с поиском и выгрузкой |
 | `POST /cabinet/antidoping` | спортсмен | Дата курса РУСАДА и ссылка на сертификат → `/cabinet#antidoping` |
+| `POST /cabinet/disciplines` | спортсмен | Выбор дисциплин (`disciplines[]`) → `/cabinet#disciplines` |
+| `GET /squads?discipline=&q=` | спортсмен, тренер, федерация, министерство | Команды; спортсмену — приглашения, создание, управление своими командами |
+| `POST /squads`, `POST /squads/{id}/{invite,respond,revoke,kick,leave,disband}` | спортсмен (роспуск и исключение — и федерация) | Действия с командой, возврат на `next` |
 | `GET /registry?tab=&q=&discipline=&organization=&rank=&age_group=&municipality=&stage=&sort=&order=&page=&per=` | федерация | Реестр: поиск, фильтры с числом записей, сортировка, страницы; `tab` — `athlete`, `trainer`, `judge`, `org` |
 | `GET /registry/export.{fmt}?…` | федерация | Выгрузка **всего** отфильтрованного списка (не только страницы) в .xlsx / .docx / .pdf; больше 20 000 строк — `422` |
 | `POST /cabinet/links` | тренер | Запрос на привязку |

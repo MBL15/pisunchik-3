@@ -8,7 +8,8 @@
 {% set pending = links|selectattr("status", "equalto", "PENDING")|list %}
 {% set rank_alert = p.rank and p.rank.state in ("expired", "critical", "warning") %}
 {% set show_apply = can_apply and not p.is_sanctioned and not rank_alert %}
-{% set todo_count = sanctions|length + pending|length + (1 if rank_alert else 0) + (1 if show_apply else 0) %}
+{% set invites = squads.invites %}
+{% set todo_count = sanctions|length + pending|length + invites|length + (1 if rank_alert else 0) + (1 if show_apply else 0) %}
 {% set results = perf.results if perf and perf.available else [] %}
 {% set trainers = links|selectattr("status", "in", ["ACTIVE", "SUSPENDED"])|list %}
 {% set active_apps = in_progress|rejectattr("status", "equalto", "REJECTED")|list %}
@@ -47,6 +48,18 @@
         <button name="status" value="ACTIVE" class="{{ m.BTN }} !px-4 !py-2">{{ m.icon("check", "h-4 w-4") }}Подтвердить</button>
         <button name="status" value="ENDED" class="{{ m.BTN_NO }} !px-3 !py-2">Отклонить</button>
       </form>
+    </li>
+    {% endfor %}
+
+    {% for i in invites %}
+    <li class="relative flex flex-wrap items-center gap-4 rounded-xl border-2 border-fsp-blue bg-fsp-panel p-4 shadow-[4px_4px_0px_0px_#402FFF]">
+      <span class="beam" aria-hidden="true"></span>
+      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-fsp-blue text-white">{{ m.icon("users", "h-4 w-4") }}</span>
+      <div class="min-w-0 flex-1">
+        <p class="font-mono text-sm text-white">{{ i.by_name }} приглашает вас в команду «{{ i.squad.title }}»</p>
+        <p class="mt-1 text-sm text-fsp-muted">{{ i.squad.discipline_label }} · в команде {{ i.squad.size }} из {{ i.squad.max_size }}. Ответьте на странице команд — там виден состав.</p>
+      </div>
+      <a href="/squads" class="{{ m.BTN_GHOST }} !px-4 !py-2">К приглашению {{ m.icon("arrow", "h-4 w-4") }}</a>
     </li>
     {% endfor %}
 
@@ -228,6 +241,40 @@
 {# ================= 04 · PROFILE: trainers, guardian, anti-doping ================= #}
 <section id="profile" class="mt-14 scroll-mt-36" aria-labelledby="profile-title">
   {{ m.step_head("04", "Разряд, тренеры и документы", "profile-title") }}
+  <div id="disciplines" class="{{ m.CARD }} mb-4 scroll-mt-36 p-5" data-reveal>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <p class="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fsp-muted">{{ m.icon("code", "h-4 w-4") }}Мои дисциплины</p>
+      <a href="/squads" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Команды{% if squads.squads %} · {{ squads.squads|length }}{% endif %}</a>
+    </div>
+    <p class="mt-2 text-sm text-fsp-muted">От дисциплин зависят календарь, заявки и рейтинг. В продуктовом программировании и CTF можно собрать команду.</p>
+    <form method="post" action="/cabinet/disciplines" class="mt-4">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {% for d in D.DISCIPLINES %}
+        <label class="flex cursor-pointer items-center gap-3 rounded-md border border-fsp-line2 bg-fsp-bg p-3 transition-all duration-150 hover:border-fsp-blue has-[:checked]:border-fsp-blue has-[:checked]:bg-fsp-blue/15 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-fsp-violet">
+          <input type="checkbox" name="disciplines" value="{{ d.code }}" class="peer sr-only" {% if d.code in p.disciplines %}checked{% endif %}>
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-fsp-line2 text-fsp-violet peer-checked:border-fsp-blue peer-checked:bg-fsp-blue peer-checked:text-white">{{ m.icon(d.icon, "h-4 w-4") }}</span>
+          <span class="min-w-0"><span class="block text-sm font-medium text-white">{{ d.short }}</span>
+            <span class="font-mono text-[11px] text-fsp-muted">{% if d.code in D.TEAM_DISCIPLINES %}командная{% else %}{{ d.code }}{% endif %}</span></span>
+        </label>
+        {% endfor %}
+      </div>
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        <button class="{{ m.BTN }} !py-2.5">{{ m.icon("check", "h-4 w-4") }}Сохранить дисциплины</button>
+        <p class="text-xs text-fsp-muted">Нужна хотя бы одна. Снятие командной дисциплины выводит из её команды.</p>
+      </div>
+    </form>
+    {% if squads.squads %}
+    <ul class="mt-4 grid gap-2 border-t border-fsp-line pt-4 sm:grid-cols-2" aria-label="Мои команды">
+      {% for s in squads.squads %}
+      <li><a href="/squads#squad-{{ s.id }}" class="flex items-center justify-between gap-3 rounded-lg border border-fsp-line px-3 py-2 text-sm transition-colors duration-150 hover:border-fsp-blue">
+        <span class="min-w-0 truncate text-fsp-light">{{ s.title }}</span>
+        <span class="flex shrink-0 gap-2">{{ m.tag(s.discipline_label, "blue") }}{{ m.tag(s.size ~ "/" ~ s.max_size) }}{% if s.captain == p.fsp_id %}{{ m.tag("капитан", "emerald") }}{% endif %}</span></a></li>
+      {% endfor %}
+    </ul>
+    {% elif squads.can_create %}
+    <p class="mt-4 border-t border-fsp-line pt-4 text-sm text-fsp-soft">У вас есть командная дисциплина, но нет команды. <a href="/squads" class="text-fsp-violet hover:underline">Создайте команду или найдите её →</a></p>
+    {% endif %}
+  </div>
   <div id="rank" class="{{ m.CARD }} mb-4 scroll-mt-36" data-reveal>
     <div class="flex flex-wrap items-start justify-between gap-4 p-5">
       <div class="min-w-0">

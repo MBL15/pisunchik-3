@@ -14,10 +14,10 @@ from shared.domain import (
 from shared.fsp_id import is_valid_fsp_id
 from shared.listing import AUDIT_LIMIT, MAX_LIMIT, audit_page, facets, matches, norm, page, search_audit, tokens
 from shared.http import ServiceClient, ServiceError
-from sportsman_service import groups, norms, oidc
+from sportsman_service import groups, norms, oidc, squads
 from sportsman_service.headcount import build_report
 from sportsman_service.models import (
-    Antidoping, AntidopingIn, AuthIn, Guardian, Sanction, SanctionIn, JudgeCategoryRecord, LinkCreateIn, LinkEvent, LinkStatusIn, LookupIn,
+    Antidoping, AntidopingIn, AuthIn, DisciplinesIn, Guardian, Sanction, SanctionIn, JudgeCategoryRecord, LinkCreateIn, LinkEvent, LinkStatusIn, LookupIn,
     NotificationIn, NotificationsReadIn, PersonRecord, QualificationDecisionIn, QualificationIn, QualificationRequest, RankRecord, RegistrationIn,
 )
 from sportsman_service.security import hash_password, verify_password
@@ -52,6 +52,7 @@ service_auth.install(app)
 app.include_router(norms.router)
 app.include_router(groups.router)
 app.include_router(oidc.router)
+app.include_router(squads.router)
 
 
 @app.middleware("http")
@@ -251,6 +252,22 @@ async def set_antidoping(fsp_id: str, data: AntidopingIn):
         raise HTTPException(422, "Дата прохождения курса не может быть в будущем")
     p.antidoping = Antidoping(course_date=data.course_date, certificate_url=data.certificate_url)
     store.log(fsp_id, "Антидопинг", f"курс РУСАДА {data.course_date:%d.%m.%Y}")
+    return store.present(p)
+
+
+@app.put("/api/v1/persons/{fsp_id}/disciplines")
+async def set_disciplines(fsp_id: str, data: DisciplinesIn):
+    """Спортсмен сам выбирает свои дисциплины (федерация — любому). Снятая командная дисциплина выводит из её команды."""
+    p = _person(fsp_id)
+    if data.actor != fsp_id and Role.ADMIN not in _person(data.actor).roles:
+        raise HTTPException(403, "Дисциплины меняет сам участник или федерация")
+    if not data.disciplines and ({Role.ATHLETE, Role.TRAINER} & set(p.roles)):
+        raise HTTPException(422, "Спортсмену и тренеру необходимо указать хотя бы одну дисциплину")
+    removed = set(p.disciplines) - set(data.disciplines)
+    if (data.disciplines, removed) != (p.disciplines, set()):
+        p.disciplines = data.disciplines
+        squads.on_disciplines_changed(fsp_id, removed)
+        store.log(data.actor, "Дисциплины", f"{fsp_id}: {', '.join(data.disciplines) or '—'}")
     return store.present(p)
 
 

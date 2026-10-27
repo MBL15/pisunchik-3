@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Команды · ФСП Оренбург{% endblock %}
+{% block content %}
+{% set me = user.person.fsp_id %}
+{% set is_athlete = user.role == "athlete" %}
+<div class="pt-10">
+  {{ m.section_head("squads --list", "Команды", "Продуктовое программирование и CTF — командные дисциплины. Капитан создаёт команду и приглашает спортсменов по ФСП ID; в каждой дисциплине спортсмен состоит в одной команде, в составе не больше " ~ max_size ~ " человек.") }}
+  {{ m.degraded_notice(degraded) }}
+  <div class="no-print mb-6 flex flex-wrap gap-3">
+    <a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a>
+    {% if is_athlete %}<a href="/cabinet#disciplines" class="{{ m.BTN_SM }}">{{ m.icon("code", "h-3.5 w-3.5") }}Мои дисциплины</a>{% endif %}
+  </div>
+
+  {% if is_athlete and mine %}
+  {% if mine.invites %}
+  <section class="mb-8" aria-labelledby="inv-title">
+    <h3 id="inv-title" class="mb-3 flex items-center gap-3 font-mono text-xs uppercase tracking-wider text-fsp-muted"><span class="h-2 w-2 rounded-[2px] bg-fsp-blue"></span>Вас приглашают · {{ mine.invites|length }}<span class="h-px flex-1 bg-fsp-line"></span></h3>
+    <ul class="grid gap-3">
+      {% for i in mine.invites %}
+      <li class="relative flex flex-wrap items-center gap-4 rounded-xl border-2 border-fsp-blue bg-fsp-panel p-4 shadow-[4px_4px_0px_0px_#402FFF]">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-fsp-blue text-white">{{ m.icon("users", "h-4 w-4") }}</span>
+        <div class="min-w-0 flex-1">
+          <p class="font-mono text-sm text-white">Команда «{{ i.squad.title }}» · {{ i.squad.discipline_label }}</p>
+          <p class="mt-1 text-sm text-fsp-muted">Приглашает {{ i.by_name }}. В команде {{ i.squad.size }} из {{ i.squad.max_size }}: {{ i.squad.members|map(attribute="full_name")|join(", ") }}.</p>
+        </div>
+        {% if mine.squads|selectattr("discipline", "equalto", i.squad.discipline)|list %}
+        <p class="text-xs text-amber-200">Вы уже в команде этой дисциплины — сначала выйдите из неё.</p>
+        {% else %}
+        <form method="post" action="/squads/{{ i.squad.id }}/respond" class="flex gap-2">
+          <button name="decision" value="accept" class="{{ m.BTN }} !px-4 !py-2" {% if i.squad.full %}disabled title="Команда заполнена"{% endif %}>{{ m.icon("check", "h-4 w-4") }}Вступить</button>
+          <button name="decision" value="decline" class="{{ m.BTN_NO }} !px-3 !py-2">Отклонить</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <section class="{{ m.CARD }} mb-8 p-5" aria-labelledby="new-title">
+    <h3 id="new-title" class="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-fsp-muted">{{ m.icon("users", "h-4 w-4") }}Создать команду</h3>
+    {% if mine.can_create %}
+    <form method="post" action="/squads" class="mt-4 grid gap-3 sm:grid-cols-[1fr_220px_auto] sm:items-end">
+      <div><label for="sq-title" class="{{ m.LABEL }}">Название</label><input id="sq-title" name="title" required minlength="3" maxlength="50" placeholder="Например, Null Pointers" class="{{ m.INPUT }}"></div>
+      <div><label for="sq-disc" class="{{ m.LABEL }}">Дисциплина</label>
+        <select id="sq-disc" name="discipline" class="{{ m.INPUT }}">{% for d in mine.can_create %}<option value="{{ d }}">{{ D.DISCIPLINE_BY_CODE[d].short }}</option>{% endfor %}</select></div>
+      <button class="{{ m.BTN }} !py-2.5">Создать</button>
+    </form>
+    <p class="mt-3 text-xs text-fsp-muted">Создатель становится капитаном: приглашает и исключает участников, может распустить команду.</p>
+    {% elif mine.team_disciplines %}
+    <p class="mt-3 text-sm text-fsp-muted">Вы уже состоите в команде каждой своей командной дисциплины ({% for d in mine.team_disciplines %}{{ D.DISCIPLINE_BY_CODE[d].short }}{% if not loop.last %}, {% endif %}{% endfor %}).</p>
+    {% else %}
+    <p class="mt-3 text-sm text-amber-200">Команды есть в дисциплинах «{% for d in team_disciplines %}{{ d.short }}{% if not loop.last %}», «{% endif %}{% endfor %}». Добавьте одну из них в профиль — тогда сможете создать команду или принять приглашение.</p>
+    <a href="/cabinet#disciplines" class="{{ m.BTN_GHOST }} mt-3 !py-2 !text-xs">Выбрать дисциплины {{ m.icon("arrow", "h-3.5 w-3.5") }}</a>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <form method="get" class="no-print mb-5 flex flex-wrap items-center gap-2" role="search">
+    <a href="/squads" class="{{ m.BTN_SM }} {% if not filters.discipline %}!border-fsp-blue !text-white{% endif %}">Все</a>
+    {% for d in team_disciplines %}<a href="/squads?discipline={{ d.code }}{% if filters.q %}&q={{ filters.q|urlencode }}{% endif %}" class="{{ m.BTN_SM }} {% if filters.discipline == d.code %}!border-fsp-blue !text-white{% endif %}">{{ d.short }}</a>{% endfor %}
+    {% if filters.discipline %}<input type="hidden" name="discipline" value="{{ filters.discipline }}">{% endif %}
+    <label for="sq-q" class="sr-only">Поиск по названию</label>
+    <input id="sq-q" name="q" value="{{ filters.q }}" placeholder="Название команды" class="{{ m.INPUT }} !w-56 !py-1.5">
+    <button class="{{ m.BTN_SM }}">Найти</button>
+  </form>
+
+  <ul class="grid gap-4 lg:grid-cols-2" data-stagger>
+    {% for s in squads %}
+    {% set captain = s.captain == me %}
+    {% set member = s.id in my_ids %}
+    {% set admin = user.role == "admin" %}
+    <li id="squad-{{ s.id }}" class="{{ m.CARD }} spotlight scroll-mt-28 p-5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="font-medium text-white">{{ s.title }}</p>
+          <p class="font-mono text-[11px] text-fsp-muted">капитан {{ s.captain_name }} · создана {{ s.created_at|ru_date }}</p>
+        </div>
+        <div class="flex flex-wrap gap-2">{{ m.tag(s.discipline_label, "blue") }}{{ m.tag(s.size ~ " из " ~ s.max_size, "amber" if s.full else "emerald") }}</div>
+      </div>
+      <ul class="mt-4 grid gap-2" aria-label="Состав команды">
+        {% for p in s.members %}
+        <li class="flex items-center justify-between gap-3 rounded-lg border border-fsp-line px-3 py-2 text-sm">
+          <span class="min-w-0"><span class="text-fsp-light">{{ p.full_name }}</span>{% if p.captain %} {{ m.tag("капитан") }}{% endif %}
+            <span class="block truncate font-mono text-[11px] text-fsp-muted">{{ p.fsp_id }}{% if p.rank %} · {{ p.rank }}{% endif %} · {{ p.municipality }}</span></span>
+          {% if (captain or admin) and not p.captain %}
+          <form method="post" action="/squads/{{ s.id }}/kick" onsubmit="return confirm('Исключить участника из команды?')"><input type="hidden" name="fsp_id" value="{{ p.fsp_id }}"><input type="hidden" name="next" value="/squads#squad-{{ s.id }}">
+            <button class="{{ m.BTN_NO }}" aria-label="Исключить {{ p.full_name }}">{{ m.icon("x", "h-3.5 w-3.5") }}</button></form>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% if s.invites %}
+      <p class="mt-4 font-mono text-[11px] uppercase tracking-wider text-fsp-muted">Приглашены, ответа нет</p>
+      <ul class="mt-2 grid gap-2">
+        {% for i in s.invites %}
+        <li class="flex items-center justify-between gap-3 rounded-lg border border-dashed border-fsp-line2 px-3 py-2 text-sm text-fsp-soft">
+          <span class="min-w-0 truncate">{{ i.full_name }} <span class="font-mono text-[11px] text-fsp-muted">{{ i.fsp_id }}</span></span>
+          {% if captain %}<form method="post" action="/squads/{{ s.id }}/revoke"><input type="hidden" name="fsp_id" value="{{ i.fsp_id }}"><input type="hidden" name="next" value="/squads#squad-{{ s.id }}"><button class="{{ m.BTN_SM }}">Отозвать</button></form>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if captain and not s.full %}
+      <form method="post" action="/squads/{{ s.id }}/invite" class="mt-4 flex gap-2">
+        <input type="hidden" name="next" value="/squads#squad-{{ s.id }}">
+        <label for="inv-{{ s.id }}" class="sr-only">ФСП ID приглашаемого</label>
+        <input id="inv-{{ s.id }}" name="fsp_id" required placeholder="ФСП ID спортсмена, FSP-56-…" class="{{ m.INPUT }} !py-2 font-mono text-xs">
+        <button class="{{ m.BTN_SM }} shrink-0">{{ m.icon("link", "h-3.5 w-3.5") }}Пригласить</button>
+      </form>
+      {% endif %}
+      {% if member or admin %}
+      <div class="mt-4 flex flex-wrap gap-2 border-t border-fsp-line pt-3">
+        {% if member %}<form method="post" action="/squads/{{ s.id }}/leave" onsubmit="return confirm('Выйти из команды «{{ s.title }}»?{% if captain and s.size > 1 %} Капитаном станет следующий участник.{% endif %}{% if s.size == 1 %} Команда будет распущена.{% endif %}')"><input type="hidden" name="next" value="/squads"><button class="{{ m.BTN_SM }}">Выйти из команды</button></form>{% endif %}
+        {% if captain or admin %}<form method="post" action="/squads/{{ s.id }}/disband" onsubmit="return confirm('Распустить команду «{{ s.title }}»? Участники получат уведомление.')"><input type="hidden" name="next" value="/squads"><button class="{{ m.BTN_NO }}">Распустить</button></form>{% endif %}
+      </div>
+      {% endif %}
+    </li>
+    {% else %}
+    <li class="rounded-xl border border-dashed border-fsp-line2 p-5 text-sm text-fsp-muted lg:col-span-2">{% if filters.q or filters.discipline %}По фильтрам команд нет.{% else %}Команд пока нет — станьте первым капитаном.{% endif %}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

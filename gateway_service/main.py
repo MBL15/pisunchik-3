@@ -23,7 +23,7 @@ from gateway_service.listing_ui import chips, list_args, pages
 from gateway_service.qr import qr_svg
 from gateway_service.routes import (
     appeals, audit, awards, guide, integrations, judging, market, ministry, moderation, notifications, oidc, organizations, registry,
-    training,
+    squads, training,
 )
 from gateway_service.session import clear_session, write_session
 from gateway_service.web import (
@@ -58,7 +58,7 @@ app.mount("/api/market/v1", market_api.api)
 app.mount("/api/ext/v1", integrations_api.api)
 for router in (registry.router, moderation.router, audit.router, notifications.router, market.router, guide.router, judging.router,
                ministry.router, awards.router, appeals.router, training.router, organizations.router, oidc.router,
-               integrations.router):
+               integrations.router, squads.router):
     app.include_router(router)
 
 
@@ -429,12 +429,13 @@ async def _cabinet_trainer(request: Request, user: dict):
 async def _cabinet_athlete(request: Request, user: dict):
     degraded: list[str] = []
     fid = user["person"]["fsp_id"]
-    perf, links, open_comps, apps, quals = await asyncio.gather(
+    perf, links, open_comps, apps, quals, squads_info = await asyncio.gather(
         safe(clients["sportsman"].get(f"/api/v1/persons/{fid}/performance"), None, degraded),
         safe(clients["sportsman"].get(f"/api/v1/athletes/{fid}/links"), [], degraded),
         safe(clients["competition"].get("/api/v1/competitions", status="REGISTRATION_OPEN"), [], degraded),
         safe(clients["competition"].get("/api/v1/applications", athlete_fsp_id=fid), [], degraded),
         safe(clients["sportsman"].get("/api/v1/qualification-requests", person_fsp_id=fid, kind="RANK"), [], degraded),
+        safe(clients["sportsman"].get(f"/api/v1/athletes/{fid}/squads"), {"squads": [], "invites": [], "can_create": [], "team_disciplines": []}, degraded),
     )
     applied = {a["competition_id"] for a in apps if a["status"] != "REJECTED"}
     birth = user["person"]["birth_date"]
@@ -455,7 +456,7 @@ async def _cabinet_athlete(request: Request, user: dict):
                   can_apply=[c for c in comps if c["age_ok"] and not c["applied"]],
                   not_eligible=[c for c in comps if not c["age_ok"] and not c["applied"]],
                   quals=quals, rank_options=_rank_basis_options(perf["results"] if perf and perf.get("available") else []),
-                  degraded=sorted(set(degraded)))
+                  squads=squads_info, degraded=sorted(set(degraded)))
 
 
 async def _cabinet_judge(request: Request, user: dict):

@@ -1,7 +1,8 @@
 /* Интерактивный тур: подсвечивает реальные элементы страницы и объясняет их по порядку.
  * Данные — <script id="tour-data" type="application/json"> (см. gateway_service/tours.py).
  * Необязательный: предлагается один раз, пропускается в любой момент (кнопка, Esc), запускается кнопкой «?» или клавишей «?».
- * Прогресс хранится в localStorage отдельно для каждого аккаунта; без localStorage тур просто предлагается снова. */
+ * Прогресс хранится в localStorage отдельно для каждого аккаунта. «Больше не предлагать» действует на весь браузер (localStorage + cookie):
+ * демо-аккаунты переключаются быстро, и отказ не должен возвращаться при входе под другим. Без хранилища тур просто предлагается снова. */
 (() => {
   const node = document.getElementById('tour-data');
   if (!node) return;
@@ -14,6 +15,17 @@
   const KEY = `fsp.tour:${data.user || 'guest'}`;
   const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
   const write = (patch) => { try { localStorage.setItem(KEY, JSON.stringify({ ...read(), ...patch })); } catch { /* без хранилища — не страшно */ } };
+  // Отказ от предложений — на браузер, а не на аккаунт; cookie страхует от недоступного localStorage.
+  const MUTE_KEY = 'fsp.tour:muted', MUTE_COOKIE = 'fsp_tour_muted';
+  const isMuted = () => {
+    try { if (localStorage.getItem(MUTE_KEY)) return true; } catch { /* без хранилища — смотрим cookie */ }
+    return document.cookie.split('; ').includes(`${MUTE_COOKIE}=1`) || !!read().muted;
+  };
+  const mute = () => {
+    try { localStorage.setItem(MUTE_KEY, '1'); } catch { /* ничего */ }
+    document.cookie = `${MUTE_COOKIE}=1; max-age=31536000; path=/; SameSite=Lax`;
+    write({ muted: true });
+  };
   const mark = (field) => { const s = read(); write({ [field]: { ...(s[field] || {}), [tour.id]: Date.now() } }); };
 
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
@@ -221,7 +233,7 @@
     later.addEventListener('click', () => { mark('offered'); closeOffer(); });
     const never = el('button', 'tour-btn tour-btn-quiet', 'Больше не предлагать');
     never.type = 'button';
-    never.addEventListener('click', () => { write({ muted: true }); closeOffer(); toast('Хорошо. Тур всегда доступен по кнопке «?» внизу справа.'); });
+    never.addEventListener('click', () => { mute(); closeOffer(); toast('Хорошо. Тур всегда доступен по кнопке «?» внизу справа.'); });
     row.append(yes, later, never);
     offer.append(t, p, row);
     document.body.append(offer);
@@ -246,5 +258,5 @@
   }
   const state = read();
   const seen = (state.done && state.done[tour.id]) || (state.offered && state.offered[tour.id]);
-  if (!state.muted && !seen && !document.querySelector('[data-celebrate]')) setTimeout(showOffer, 1200);
+  if (!isMuted() && !seen && !document.querySelector('[data-celebrate]')) setTimeout(showOffer, 1200);
 })();

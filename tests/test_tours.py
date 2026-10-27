@@ -1,6 +1,7 @@
 """Интерактивные туры: структура шагов и привязка к страницам."""
 import json
 import unittest
+from pathlib import Path
 
 from gateway_service import tours
 
@@ -54,6 +55,18 @@ class ToursTest(unittest.TestCase):
     def test_protocol_highlight_step_is_admin_only(self):
         self.assertNotIn("th.no-print", [s["sel"] for s in tours.for_page("protocol.html", None)["steps"]])
         self.assertIn("th.no-print", [s["sel"] for s in tours.for_page("protocol.html", user())["steps"]])
+
+
+class OfferMuteTest(unittest.TestCase):
+    """«Больше не предлагать» хранится на весь браузер, а не на аккаунт: иначе предложение возвращается при входе под другим демо-аккаунтом."""
+
+    js = (Path(tours.__file__).parent / "static" / "tour.js").read_text(encoding="utf-8")
+
+    def test_mute_is_browser_wide_with_a_cookie_fallback_and_gates_the_offer(self):
+        for marker in ("fsp.tour:muted", "fsp_tour_muted", "const isMuted", "const mute"):
+            self.assertIn(marker, self.js)
+        self.assertIn("never.addEventListener('click', () => { mute();", self.js)
+        self.assertIn("if (!isMuted() && !seen", self.js)
 
 
 if __name__ == "__main__":

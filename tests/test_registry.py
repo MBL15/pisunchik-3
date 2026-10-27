@@ -68,6 +68,22 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(self.api.get("/api/v1/notifications", params={"fsp_id": VALIEVA}).json()["unread"], 0)
         self.assertGreaterEqual(self.api.get("/api/v1/notifications", params={"fsp_id": ADMIN}).json()["unread"], 1)  # сид
 
+    def test_read_marks_only_shown_notifications(self):
+        for title in ("A", "B", "C"):
+            self.api.post("/api/v1/notifications", json={"fsp_ids": [VALIEVA], "title": title})
+        items = self.api.get("/api/v1/notifications", params={"fsp_id": VALIEVA}).json()["items"]
+        shown = [n["id"] for n in items if n["title"] == "B"]
+        r = self.api.post("/api/v1/notifications/read", params={"fsp_id": VALIEVA}, json={"ids": shown})
+        self.assertEqual(r.json()["unread"], 2)
+        self.assertEqual(self.api.post("/api/v1/notifications/read", params={"fsp_id": VALIEVA}).json()["unread"], 0)
+
+    def test_organization_filters(self):
+        orsk = self.api.get("/api/v1/organizations", params={"municipality": "г. Орск"}).json()
+        self.assertTrue(orsk and all(o["municipality"] == "г. Орск" for o in orsk))
+        rob = self.api.get("/api/v1/organizations", params={"discipline": "ROB"}).json()
+        self.assertTrue(rob and all("ROB" in o["disciplines"] for o in rob))
+        self.assertEqual([o["type"] for o in self.api.get("/api/v1/organizations", params={"q": "вуз оренб"}).json()], ["Вуз"])
+
     def test_headcount_has_stage_cut(self):
         cuts = {c["key"]: c for c in self.api.get("/api/v1/reports/headcount").json()["cuts"]}
         self.assertIn("stage", cuts)
@@ -94,14 +110,15 @@ class DeadlinesTest(unittest.TestCase):
             return ids
 
         async def deadlines():
-            return [("FSP-1", "rank:2026-11-08", "Срок", "", 12, "/cabinet"), ("FSP-2", "judge:x", "Срок", "", 90, "/cabinet")]
+            return [("FSP-1", "rank:2026-11-08", "Срок", "", 12, "/cabinet"), ("FSP-2", "judge:x", "Срок", "", 90, "/cabinet"),
+                    ("FSP-3", "registration:5", "Приём", "", 3, "/c"), ("FSP-4", "registration:5", "Приём", "", 3, "/c")]
 
         old, notify._record = notify._record, record
         try:
             asyncio.run(notify.remind_pass(deadlines))
         finally:
             notify._record = old
-        self.assertEqual(sent, [(["FSP-1"], "rank:2026-11-08|d30")])
+        self.assertEqual(sent, [(["FSP-1"], "rank:2026-11-08|d30"), (["FSP-3", "FSP-4"], "registration:5|d7")])  # общий срок — одной рассылкой
 
 
 if __name__ == "__main__":

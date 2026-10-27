@@ -1,8 +1,9 @@
 """sportsman_service (port 8001): unified registry, FSP ID issuance, trainer↔athlete links, performance history."""
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import date, datetime
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from starlette.concurrency import run_in_threadpool
 
 from shared import config
@@ -11,12 +12,12 @@ from shared.domain import (
     ORGANIZATIONS, RANK_BY_CODE, RANK_ORDER, TRAINING_STAGES, ApplicationStatus, LinkStatus, Role,
 )
 from shared.fsp_id import is_valid_fsp_id
-from shared.listing import AUDIT_LIMIT, MAX_LIMIT, facets, matches, norm, page, search_audit, tokens
+from shared.listing import AUDIT_LIMIT, MAX_LIMIT, audit_page, facets, matches, norm, page, search_audit, tokens
 from shared.http import ServiceClient, ServiceError
 from sportsman_service.headcount import build_report
 from sportsman_service.models import (
     Antidoping, AntidopingIn, AuthIn, Guardian, JudgeCategoryRecord, LinkCreateIn, LinkEvent, LinkStatusIn, LookupIn,
-    NotificationIn, PersonRecord, QualificationDecisionIn, QualificationIn, QualificationRequest, RankRecord, RegistrationIn,
+    NotificationIn, NotificationsReadIn, PersonRecord, QualificationDecisionIn, QualificationIn, QualificationRequest, RankRecord, RegistrationIn,
 )
 from sportsman_service.security import hash_password, verify_password
 from shared.db import Persistence
@@ -106,17 +107,34 @@ def _hit(values: dict, key: str, want: str) -> bool:
     return want in v if isinstance(v, list) else v == want
 
 
-def _registry_rows(filters: dict, q: str | None, min_rank: str | None) -> list[tuple[PersonRecord, dict]]:
+@dataclass
+class PersonFilters:
+    """Фильтры реестра из query-параметров — одни и те же для полного списка и для страниц."""
+    role: str | None = None
+    discipline: str | None = None
+    municipality: str | None = None
+    organization: str | None = None
+    rank: str | None = None
+    stage: str | None = None
+    age_group: str | None = None
+    q: str | None = None
+    min_rank: str | None = None
+
+    def facet_filters(self) -> dict:
+        return {k: getattr(self, k) for k in REGISTRY_FACETS}
+
+
+def _registry_rows(f: PersonFilters) -> list[tuple[PersonRecord, dict]]:
     """Люди, прошедшие поиск и `min_rank`, с их значениями фасетов (фильтры по фасетам — отдельно, см. `_filtered`)."""
-    if filters.get("age_group") and filters["age_group"] not in AGE_GROUPS:
+    if f.age_group and f.age_group not in AGE_GROUPS:
         raise HTTPException(422, "Неизвестная возрастная группа")
-    today, words = config.today(), tokens(q)
+    today, words = config.today(), tokens(f.q)
     out = []
     for p in store.persons.values():
         if words and not matches(words, p.last_name, p.first_name, p.middle_name, p.fsp_id, p.email, p.organization,
                                  p.municipality):
             continue
-        if min_rank and (not p.rank or RANK_ORDER[p.rank.code] < RANK_ORDER.get(min_rank, 0)):
+        if f.min_rank and (not p.rank or RANK_ORDER[p.rank.code] < RANK_ORDER.get(f.min_rank, 0)):
             continue
         out.append((p, _facet_values(p, age_on(p.birth_date, today))))
     return out
@@ -128,22 +146,16 @@ def _filtered(rows: list[tuple[PersonRecord, dict]], filters: dict, skip: str | 
 
 
 @app.get("/api/v1/persons")
-async def list_persons(role: str | None = None, discipline: str | None = None, municipality: str | None = None,
-                       q: str | None = None, min_rank: str | None = None, rank: str | None = None,
-                       organization: str | None = None, age_group: str | None = None, stage: str | None = None):
+async def list_persons(f: PersonFilters = Depends()):
     """Весь список по фильтрам (для выпадающих списков и рассылок); для экранов реестра — `/api/v1/registry/persons`."""
-    filters = {"role": role, "discipline": discipline, "municipality": municipality, "rank": rank,
-               "organization": organization, "age_group": age_group, "stage": stage}
     today = config.today()
-    rows = _filtered(_registry_rows(filters, q, min_rank), filters)
+    rows = _filtered(_registry_rows(f), f.facet_filters())
     return [store.present(p, today) for p, _ in sorted(rows, key=lambda r: REGISTRY_SORTS["name"](r[0]))]
 
 
 @app.get("/api/v1/registry/persons")
-async def registry_persons(role: str | None = None, discipline: str | None = None, municipality: str | None = None,
-                           q: str | None = None, min_rank: str | None = None, rank: str | None = None,
-                           organization: str | None = None, age_group: str | None = None, stage: str | None = None,
-                           sort: str = "name", order: str = Query("asc", pattern="^(asc|desc)$"),
+async def registry_persons(f: PersonFilters = Depends(), sort: str = "name",
+                           order: str = Query("asc", pattern="^(asc|desc)$"),
                            offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=MAX_LIMIT)):
     """Страница реестра: `{total, offset, limit, items, facets}`.
 
@@ -151,9 +163,8 @@ async def registry_persons(role: str | None = None, discipline: str | None = Non
     """
     if sort not in REGISTRY_SORTS:
         raise HTTPException(422, f"Сортировка: {', '.join(REGISTRY_SORTS)}")
-    filters = {"role": role, "discipline": discipline, "municipality": municipality, "rank": rank,
-               "organization": organization, "age_group": age_group, "stage": stage}
-    base = _registry_rows(filters, q, min_rank)
+    filters = f.facet_filters()
+    base = _registry_rows(f)
     rows = _filtered(base, filters)
     rows.sort(key=lambda r: REGISTRY_SORTS[sort](r[0]), reverse=order == "desc")
     today = config.today()
@@ -165,18 +176,27 @@ async def registry_persons(role: str | None = None, discipline: str | None = Non
 
 
 @app.get("/api/v1/organizations")
-async def list_organizations():
-    """Организации реестра: карточка из справочника и состав по ролям и дисциплинам."""
+async def list_organizations(q: str | None = None, discipline: str | None = None, municipality: str | None = None):
+    """Организации реестра: карточка из справочника и состав по ролям и дисциплинам.
+
+    Фильтры: `q` — слова в названии, типе, муниципалитете; дисциплина, которую ведёт организация; муниципалитет.
+    """
     names = [o for o in ORGANIZATIONS if o != NO_ORGANIZATION]
     names += sorted({p.organization for p in store.persons.values()} - set(names) - {NO_ORGANIZATION})
+    words = tokens(q)
     out = []
     for name in names:
-        people = [p for p in store.persons.values() if p.organization == name]
-        athletes = [p for p in people if Role.ATHLETE in p.roles]
-        disciplines = sorted({d for p in people for d in p.disciplines}, key=list(DISCIPLINE_BY_CODE).index)
         info = ORGANIZATION_INFO.get(name, {})
+        kind, place = info.get("type", "—"), info.get("municipality", "—")
+        if (municipality and place != municipality) or not matches(words, name, kind, place):
+            continue
+        people = [p for p in store.persons.values() if p.organization == name]
+        disciplines = sorted({d for p in people for d in p.disciplines}, key=list(DISCIPLINE_BY_CODE).index)
+        if discipline and discipline not in disciplines:
+            continue
+        athletes = [p for p in people if Role.ATHLETE in p.roles]
         out.append({
-            "name": name, "type": info.get("type", "—"), "municipality": info.get("municipality", "—"),
+            "name": name, "type": kind, "municipality": place,
             "athletes": len(athletes), "trainers": sum(Role.TRAINER in p.roles for p in people),
             "judges": sum(Role.JUDGE in p.roles for p in people),
             "with_rank": sum(p.rank is not None for p in athletes),
@@ -286,6 +306,13 @@ async def audit(limit: int = Query(30, le=AUDIT_LIMIT), q: str | None = None, ac
     return search_audit(store.audit, q, actor, date_from, date_to)[:limit]
 
 
+@app.get("/api/v1/audit/search")
+async def audit_search(q: str | None = None, actor: str | None = None, date_from: date | None = None,
+                       date_to: date | None = None, order: str = Query("desc", pattern="^(asc|desc)$"),
+                       offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=AUDIT_LIMIT)):
+    return audit_page(store.audit, q, actor, date_from, date_to, order, offset, limit)
+
+
 # ---------------------------------------------------------------- notifications (лента в кабинете)
 @app.post("/api/v1/notifications", status_code=201)
 async def create_notifications(data: NotificationIn):
@@ -306,11 +333,13 @@ async def list_notifications(fsp_id: str, limit: int = Query(50, ge=1, le=200), 
 
 
 @app.post("/api/v1/notifications/read")
-async def read_notifications(fsp_id: str):
+async def read_notifications(fsp_id: str, data: NotificationsReadIn | None = None):
+    """Отметить прочитанными показанные уведомления (`ids`), без тела — все уведомления человека."""
+    ids = set(data.ids) if data and data.ids is not None else None
     for n in store.notifications:
-        if n.fsp_id == fsp_id:
+        if n.fsp_id == fsp_id and (ids is None or n.id in ids):
             n.read = True
-    return {"unread": 0}
+    return {"unread": sum(not n.read for n in store.notifications if n.fsp_id == fsp_id)}
 
 
 # ---------------------------------------------------------------- sanctions & alerts

@@ -107,6 +107,10 @@ class Notification(BaseModel):
     read: bool = False
 
 
+class NotificationsReadIn(BaseModel):
+    ids: list[int] | None = Field(default=None, max_length=500)
+
+
 class NotificationIn(BaseModel):
     fsp_ids: list[str] = Field(min_length=1, max_length=1000)
     title: str = Field(min_length=1, max_length=200)

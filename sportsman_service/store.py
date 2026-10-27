@@ -34,6 +34,7 @@ class Store:
         self.links: list[TrainerLink] = []
         self.requests: list[QualificationRequest] = []
         self.notifications: list[Notification] = []
+        self.notified_keys: set[tuple[str, str]] = set()  # (адресат, ключ) — напоминание уже было
         self.audit: list[dict] = []
         self._next_seq = 1
         self._next_link_id = 1
@@ -57,11 +58,12 @@ class Store:
     def notify(self, fsp_ids: list[str], title: str, text: str = "", link: str = "", key: str = "",
                at: datetime | None = None, read: bool = False) -> list[str]:
         """Добавляет уведомление каждому адресату; с `key` — не чаще одного раза на (адресат, ключ). Возвращает адресатов."""
-        sent = {(n.fsp_id, n.key) for n in self.notifications if n.key} if key else set()
         out = []
         for fid in dict.fromkeys(fsp_ids):
-            if fid not in self.persons or (fid, key) in sent:
+            if fid not in self.persons or (key and (fid, key) in self.notified_keys):
                 continue
+            if key:
+                self.notified_keys.add((fid, key))
             self.notifications.append(Notification(id=self._next_notification_id, fsp_id=fid, title=title, text=text,
                                                    link=link, key=key, at=at or datetime.now(), read=read))
             self._next_notification_id += 1
@@ -178,6 +180,7 @@ def restore(s: Store, rows: dict[str, dict[str, dict]]) -> None:
     s.requests = sorted((QualificationRequest.model_validate(d) for d in rows["sp_requests"].values()), key=lambda x: x.id)
     s.notifications = sorted((Notification.model_validate(d) for d in rows.get("sp_notifications", {}).values()),
                              key=lambda x: x.id)
+    s.notified_keys = {(n.fsp_id, n.key) for n in s.notifications if n.key}
     meta = rows["sp_meta"]
     s._next_seq = meta["counters"]["next_seq"]
     s._next_link_id = meta["counters"]["next_link_id"]

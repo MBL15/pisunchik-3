@@ -25,9 +25,14 @@ def matches(words: list[str], *fields) -> bool:
     return all(w in hay for w in words)
 
 
-def page(items: list, offset: int, limit: int, **extra) -> dict:
-    offset = max(offset, 0)
-    limit = min(max(limit, 1), MAX_LIMIT)
+def clamp_offset(total: int, offset: int, limit: int) -> int:
+    """Смещение не дальше последней страницы: номер страницы за концом списка (сузили фильтр) даёт последнюю."""
+    return max(0, min(offset, (total - 1) // limit * limit if total else 0))
+
+
+def page(items: list, offset: int, limit: int, max_limit: int = MAX_LIMIT, **extra) -> dict:
+    limit = min(max(limit, 1), max_limit)
+    offset = clamp_offset(len(items), offset, limit)
     return {"total": len(items), "offset": offset, "limit": limit, "items": items[offset:offset + limit], **extra}
 
 
@@ -53,3 +58,12 @@ def search_audit(entries: list[dict], q: str | None = None, actor: str | None = 
             if matches(words, a["action"], a["object"], a["actor"])
             and (not actor or a["actor"] == actor)
             and (not lo or a["at"][:10] >= lo) and (not hi or a["at"][:10] <= hi)]
+
+
+def audit_page(entries: list[dict], q=None, actor=None, date_from=None, date_to=None, order: str = "desc",
+               offset: int = 0, limit: int = 50) -> dict:
+    """Страница журнала (`entries` — новые сверху); `order=asc` — сначала старые."""
+    rows = search_audit(entries, q, actor, date_from, date_to)
+    if order == "asc":
+        rows.reverse()
+    return page(rows, offset, limit, max_limit=AUDIT_LIMIT)

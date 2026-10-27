@@ -3,18 +3,13 @@
 {% block title %}Реестр · ФСП Оренбург{% endblock %}
 {% block content %}
 {% set people = tab != "org" %}
-{# Вариант списка с числом найденных записей при выборе этого значения (фасет считается без собственного фильтра) #}
-{% macro opt(value, label, current, facet) -%}
-{% set n = facet.get(value, 0) if facet is not none else none %}
-<option value="{{ value }}" {% if current == value %}selected{% endif %}{% if n == 0 and current != value %} class="text-fsp-dim2"{% endif %}>{{ label }}{% if n is not none %} · {{ n }}{% endif %}</option>
-{%- endmacro %}
 <div class="pt-10">
   {{ m.section_head("registry --search --filter", "Реестр", "Спортсмены, тренеры, судьи и организации по всем шести дисциплинам. Поиск по словам (ФИО, ФСП ID, организация, муниципалитет), фильтры применяются сразу, рядом с каждым значением — сколько записей найдётся. «/» — к поиску, Esc — очистить.") }}
 
   <nav class="mb-4 flex flex-wrap gap-1.5" aria-label="Разделы реестра">
     {% for key, label in tabs.items() %}
     {% set n = facets.role.get(key) if facets and key != "org" else none %}
-    <a href="{{ qs(request, tab=key) }}" class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 font-mono text-xs {% if key == tab %}border-fsp-blue bg-fsp-blue text-white{% else %}border-fsp-line2 text-fsp-soft hover:border-fsp-blue hover:text-fsp-light{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}{% if n is not none %}<span class="rounded bg-black/25 px-1.5 text-[10px] tabular-nums">{{ n }}</span>{% endif %}</a>
+    <a href="{{ tab_links[key] }}" class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 font-mono text-xs {% if key == tab %}border-fsp-blue bg-fsp-blue text-white{% else %}border-fsp-line2 text-fsp-soft hover:border-fsp-blue hover:text-fsp-light{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}{% if n is not none %}<span class="rounded bg-black/25 px-1.5 text-[10px] tabular-nums">{{ n }}</span>{% endif %}</a>
     {% endfor %}
   </nav>
 
@@ -25,29 +20,29 @@
     <div class="sm:col-span-2 lg:col-span-4 xl:col-span-2">{{ m.search_box(filters.q, "ФИО, ФСП ID, организация, город" if people else "Название, тип, город", "r-q") }}</div>
     <div class="fsp-more">
       <label for="r-d" class="sr-only">Дисциплина</label>
-      <select id="r-d" name="discipline" class="{{ m.INPUT }}"><option value="">Все дисциплины</option>{% for d in D.DISCIPLINES %}{{ opt(d.code, d.short, filters.discipline, facets.discipline if people else none) }}{% endfor %}</select>
+      <select id="r-d" name="discipline" class="{{ m.INPUT }}"><option value="">Все дисциплины</option>{% for d in D.DISCIPLINES %}{{ m.facet_option(d.code, d.short, filters.discipline, facets.discipline if people else none) }}{% endfor %}</select>
     </div>
     <div class="fsp-more">
       <label for="r-m" class="sr-only">Муниципалитет</label>
-      <select id="r-m" name="municipality" class="{{ m.INPUT }}"><option value="">Все муниципалитеты</option>{% for x in D.MUNICIPALITIES %}{{ opt(x, x, filters.municipality, facets.municipality if people else none) }}{% endfor %}</select>
+      <select id="r-m" name="municipality" class="{{ m.INPUT }}"><option value="">Все муниципалитеты</option>{% for x in D.MUNICIPALITIES %}{{ m.facet_option(x, x, filters.municipality, facets.municipality if people else none) }}{% endfor %}</select>
     </div>
     {% if people %}
     <div class="fsp-more sm:col-span-2 xl:col-span-2">
       <label for="r-o" class="sr-only">Организация</label>
-      <select id="r-o" name="organization" class="{{ m.INPUT }}"><option value="">Все организации</option>{% for o in orgs %}{{ opt(o.name, o.name, filters.organization, facets.organization) }}{% endfor %}{{ opt(D.NO_ORGANIZATION, D.NO_ORGANIZATION, filters.organization, facets.organization) }}</select>
+      <select id="r-o" name="organization" class="{{ m.INPUT }}"><option value="">Все организации</option>{% for o in orgs %}{{ m.facet_option(o.name, o.name, filters.organization, facets.organization) }}{% endfor %}{{ m.facet_option(D.NO_ORGANIZATION, D.NO_ORGANIZATION, filters.organization, facets.organization) }}</select>
     </div>
     <div class="fsp-more">
       <label for="r-a" class="sr-only">Возрастная группа</label>
-      <select id="r-a" name="age_group" class="{{ m.INPUT }}"><option value="">Любой возраст</option>{% for g in D.AGE_GROUPS %}{{ opt(g, g, filters.age_group, facets.age_group) }}{% endfor %}</select>
+      <select id="r-a" name="age_group" class="{{ m.INPUT }}"><option value="">Любой возраст</option>{% for g in D.AGE_GROUPS %}{{ m.facet_option(g, g, filters.age_group, facets.age_group) }}{% endfor %}</select>
     </div>
     {% if tab == "athlete" %}
     <div class="fsp-more">
       <label for="r-r" class="sr-only">Разряд</label>
-      <select id="r-r" name="rank" class="{{ m.INPUT }}"><option value="">Любой разряд</option>{{ opt("none", "Без разряда", filters.rank, facets.rank) }}{% for r in D.SPORT_RANKS %}{{ opt(r.code, r.short, filters.rank, facets.rank) }}{% endfor %}</select>
+      <select id="r-r" name="rank" class="{{ m.INPUT }}"><option value="">Любой разряд</option>{{ m.facet_option("none", "Без разряда", filters.rank, facets.rank) }}{% for r in D.SPORT_RANKS %}{{ m.facet_option(r.code, r.short, filters.rank, facets.rank) }}{% endfor %}</select>
     </div>
     <div class="fsp-more">
       <label for="r-s" class="sr-only">Этап подготовки</label>
-      <select id="r-s" name="stage" class="{{ m.INPUT }}"><option value="">Любой этап</option>{% for k, v in D.TRAINING_STAGES.items() %}{{ opt(k, k ~ " — " ~ v|replace("Этап ", "")|replace(" этап", ""), filters.stage, facets.stage) }}{% endfor %}{{ opt("none", "Этап не указан", filters.stage, facets.stage) }}</select>
+      <select id="r-s" name="stage" class="{{ m.INPUT }}"><option value="">Любой этап</option>{% for k, v in D.TRAINING_STAGES.items() %}{{ m.facet_option(k, k ~ " — " ~ v|replace("Этап ", "")|replace(" этап", ""), filters.stage, facets.stage) }}{% endfor %}{{ m.facet_option("none", "Этап не указан", filters.stage, facets.stage) }}</select>
     </div>
     {% endif %}
     {% endif %}
@@ -56,7 +51,7 @@
   </form>
 
   <div class="no-print mb-3 flex flex-wrap items-center justify-between gap-3">
-    {{ m.filter_chips(chips, qs(request, q=None, discipline=None, organization=None, rank=None, age_group=None, municipality=None, stage=None)) }}
+    {{ m.filter_chips(chips, reset_href) }}
     <span class="ml-auto">{{ m.export_links("/registry/export", "Выгрузить всё найденное", export_qs) }}</span>
   </div>
 
@@ -95,7 +90,7 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="8" class="px-3 py-10 text-center font-mono text-sm text-fsp-muted">// никого не найдено — уберите часть фильтров{% if chips %} или <a href="{{ qs(request, q=None, discipline=None, organization=None, rank=None, age_group=None, municipality=None, stage=None) }}" class="text-fsp-violet underline">сбросьте всё</a>{% endif %}</td></tr>
+        <tr><td colspan="8" class="px-3 py-10 text-center font-mono text-sm text-fsp-muted">// никого не найдено — уберите часть фильтров{% if chips %} или <a href="{{ reset_href }}" class="text-fsp-violet underline">сбросьте всё</a>{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

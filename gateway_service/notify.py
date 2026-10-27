@@ -161,10 +161,16 @@ def remind_bucket(days: int) -> str:
 
 
 async def remind_pass(fetch_deadlines) -> None:
-    """`fetch_deadlines()` -> [(fsp_id, ключ, заголовок, текст, дней, ссылка)]; напоминает при входе в каждый порог."""
+    """`fetch_deadlines()` -> [(fsp_id, ключ, заголовок, текст, дней, ссылка)]; напоминает при входе в каждый порог.
+
+    Одинаковые напоминания (общий срок: отчёт, конец приёма заявок) уходят одной рассылкой на всех адресатов.
+    """
+    groups: dict[tuple[str, str, str, str], list[str]] = {}
     for fsp_id, key, title, text, days, link in await fetch_deadlines():
         if bucket := remind_bucket(days):
-            await notify(fsp_id, title, text, link, key=f"{key}|{bucket}")
+            groups.setdefault((f"{key}|{bucket}", title, text, link), []).append(fsp_id)
+    for (key, title, text, link), fsp_ids in groups.items():
+        await notify_many(fsp_ids, title, text, link, key=key)
 
 
 async def remind_loop(fetch_deadlines) -> None:

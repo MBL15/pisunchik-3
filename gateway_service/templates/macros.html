@@ -261,6 +261,13 @@
 </th>
 {%- endmacro %}
 
+{# Вариант списка фильтра с числом записей, которые найдутся при его выборе (фасет без собственного фильтра).
+   facet=None — без счётчика; варианты с нулём приглушены. #}
+{% macro facet_option(value, label, current, facet=None) -%}
+{% set n = facet.get(value, 0) if facet is not none else none %}
+<option value="{{ value }}" {% if current == value %}selected{% endif %}{% if n == 0 and current != value %} class="text-fsp-dim2"{% endif %}>{{ label }}{% if n is not none %} · {{ n }}{% endif %}</option>
+{%- endmacro %}
+
 {# chips: [(подпись, адрес без этого фильтра)] #}
 {% macro filter_chips(chips, reset_href) -%}
 {% if chips %}

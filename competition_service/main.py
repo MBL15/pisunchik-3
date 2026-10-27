@@ -28,7 +28,7 @@ from shared.domain import (
     LinkStatus, protocol_mode,
 )
 from shared.http import ServiceClient, ServiceError
-from shared.listing import AUDIT_LIMIT, MAX_LIMIT, facets, matches, page, search_audit, tokens
+from shared.listing import AUDIT_LIMIT, MAX_LIMIT, audit_page, facets, matches, page, search_audit, tokens
 
 db = Persistence(DDL)
 clients: dict[str, ServiceClient] = {}
@@ -95,6 +95,13 @@ async def audit(limit: int = Query(30, le=AUDIT_LIMIT), q: str | None = None, ac
                 date_from: date | None = None, date_to: date | None = None):
     """Журнал (новые сверху). Фильтры: слова в действии/объекте, автор, даты включительно."""
     return search_audit(store.audit, q, actor, date_from, date_to)[:limit]
+
+
+@app.get("/api/v1/audit/search")
+async def audit_search(q: str | None = None, actor: str | None = None, date_from: date | None = None,
+                       date_to: date | None = None, order: str = Query("desc", pattern="^(asc|desc)$"),
+                       offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=AUDIT_LIMIT)):
+    return audit_page(store.audit, q, actor, date_from, date_to, order, offset, limit)
 
 
 # ---------------------------------------------------------------- calendar

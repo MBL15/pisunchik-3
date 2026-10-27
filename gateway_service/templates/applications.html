@@ -2,10 +2,6 @@
 {% import "macros.html" as m %}
 {% block title %}Заявки на соревнования · ФСП Оренбург{% endblock %}
 {% block content %}
-{% macro opt(value, label, current, facet) -%}
-{% set n = facet.get(value, 0) %}
-<option value="{{ value }}" {% if current == value %}selected{% endif %}>{{ label }} · {{ n }}</option>
-{%- endmacro %}
 {% set fc = res.facets %}
 <div class="pt-10">
   {{ m.section_head("applications --moderate --bulk", "Заявки на соревнования", "Модерация любого объёма: поиск по спортсмену и соревнованию, фильтры со счётчиками, сортировка. Отметьте заявки флажками (Shift — диапазон) и примите решение сразу по всем — каждый получит уведомление.") }}
@@ -19,16 +15,16 @@
       <label for="a-s" class="sr-only">Статус</label>
       <select id="a-s" name="status" class="{{ m.INPUT }}">
         <option value="all" {% if f.status == "all" %}selected{% endif %}>Все статусы · {{ fc.status.values()|sum }}</option>
-        {% for k, v in D.APPLICATION_STATUS_LABELS.items() %}{{ opt(k, v, f.status, fc.status) }}{% endfor %}
+        {% for k, v in D.APPLICATION_STATUS_LABELS.items() %}{{ m.facet_option(k, v, f.status, fc.status) }}{% endfor %}
       </select>
     </div>
     <div class="fsp-more sm:col-span-2 lg:col-span-1">
       <label for="a-c" class="sr-only">Соревнование</label>
-      <select id="a-c" name="competition_id" class="{{ m.INPUT }}"><option value="">Все соревнования</option>{% for c in comps %}{{ opt(c.id|string, c.code ~ " · " ~ c.title, f.competition_id, fc.competition) }}{% endfor %}</select>
+      <select id="a-c" name="competition_id" class="{{ m.INPUT }}"><option value="">Все соревнования</option>{% for c in comps %}{{ m.facet_option(c.id|string, c.code ~ " · " ~ c.title, f.competition_id, fc.competition) }}{% endfor %}</select>
     </div>
     <div class="fsp-more">
       <label for="a-d" class="sr-only">Дисциплина</label>
-      <select id="a-d" name="discipline" class="{{ m.INPUT }}"><option value="">Все дисциплины</option>{% for d in D.DISCIPLINES %}{{ opt(d.code, d.short, f.discipline, fc.discipline) }}{% endfor %}</select>
+      <select id="a-d" name="discipline" class="{{ m.INPUT }}"><option value="">Все дисциплины</option>{% for d in D.DISCIPLINES %}{{ m.facet_option(d.code, d.short, f.discipline, fc.discipline) }}{% endfor %}</select>
     </div>
     <div class="fsp-more">
       <label for="a-b" class="sr-only">Кто подал</label>
@@ -38,9 +34,12 @@
     <noscript><button class="{{ m.BTN }} w-full">Найти</button></noscript>
   </form>
 
-  <div class="mb-3">{{ m.filter_chips(chips, qs(request, q=None, status="all", competition_id=None, discipline=None, by=None)) }}</div>
+  <div class="mb-3">{{ m.filter_chips(chips, reset_href) }}</div>
 
   <form method="post" action="/applications/decide" data-bulk>
+    {# Enter в поле комментария не должен отправлять форму кнопкой «Одобрить отмеченные»: неявная отправка берёт первую
+       кнопку формы, а отключённая первая кнопка её отменяет. #}
+    <button type="submit" disabled hidden aria-hidden="true" tabindex="-1"></button>
     <input type="hidden" name="back" value="{{ back_url }}">
     <div class="z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-fsp-line bg-fsp-panel px-4 py-3 transition-colors [&.is-selecting]:border-fsp-blue" aria-label="Решение по отмеченным">
       <span class="font-mono text-xs text-fsp-muted">отмечено: <span data-bulk-count class="font-bold text-fsp-light">0</span></span>

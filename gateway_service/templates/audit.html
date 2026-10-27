@@ -26,7 +26,7 @@
   </form>
 
   <div class="no-print mb-3 flex flex-wrap items-center justify-between gap-3">
-    {{ m.filter_chips(chips, qs(request, q=None, service=None, actor=None, date_from=None, date_to=None)) }}
+    {{ m.filter_chips(chips, reset_href) }}
     <span class="ml-auto">{{ m.export_links("/audit/export", "Выгрузить журнал", export_qs) }}</span>
   </div>
   <div class="mb-3">{{ m.pager(pg, request, "записей") }}</div>

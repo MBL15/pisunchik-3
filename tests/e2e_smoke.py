@@ -348,6 +348,17 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
     check("Модерация заявки" in audit, "audit search finds the bulk decision")
     check(c.get("/audit/export.xlsx", params={"q": "заявк"}).content.startswith(b"PK"), "audit export .xlsx")
     check("// завершённые" in c.get("/calendar", params={"q": "кубок"}).text, "calendar search")
+    check(re.search(r'data-bulk>\s*(\{#.*?#\}\s*)?<button type="submit" disabled hidden', apps, re.S) is not None,
+          "Enter in the bulk comment cannot submit (disabled default button first)")
+    reg = c.get("/registry", params={"rank": "КМС", "stage": "УТ"}).text
+    check('href="/registry?tab=trainer"' in reg, "registry: rank/stage filters are not carried to the trainers tab")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=30) as c:
+    login(c, "galiev@fsp56.ru")  # ленту в e2e ещё не открывал: есть новое напоминание о категории
+    before = c.get("/notifications", params={"q": "нет-такого-слова"})
+    check("ничего не найдено" in before.text and "Уведомления: новых" in before.text,
+          "notification search does not mark hidden notifications as read")
+    c.get("/notifications")
+    check("Уведомления: новых" not in c.get("/notifications").text, "opening the feed marks the shown notifications as read")
 
 print("\nRESULT:", "ALL PASSED" if ok else "FAILURES")
 sys.exit(0 if ok else 1)

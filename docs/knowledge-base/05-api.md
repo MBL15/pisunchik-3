@@ -9,17 +9,18 @@ Swagger: `http://127.0.0.1:8001/docs` (sportsman), `http://127.0.0.1:8002/docs` 
 | Метод и путь | Назначение | Правила |
 |---|---|---|
 | `GET /api/v1/persons` | Реестр: фильтры `role`, `q` (ФИО / ФСП ID), `discipline`, `municipality`, `organization`, `age_group`, `rank` (код или `none`), `min_rank`, `stage` (код этапа или `none`) | `422` на неизвестную возрастную группу |
-| `GET /api/v1/organizations` | Организации: тип и муниципалитет из `ORGANIZATION_INFO`, число спортсменов / с разрядом / тренеров / судей, дисциплины, спортсмены по этапам | «Без организации» не выводится |
+| `GET /api/v1/organizations?q=&discipline=&municipality=` | Организации: тип и муниципалитет из `ORGANIZATION_INFO`, число спортсменов / с разрядом / тренеров / судей, дисциплины, спортсмены по этапам. `q` — слова в названии, типе, муниципалитете | «Без организации» не выводится |
 | `POST /api/v1/persons/{fsp_id}/antidoping` | Отметка о курсе РУСАДА `{course_date, certificate_url}` | дата не в будущем, ссылка `http(s)://` |
 | `POST /api/v1/notifications` | В ленту кабинета `{fsp_ids, title, text, link, key}` → `{delivered}` | с `key` — не больше одного уведомления на (адресат, ключ) |
 | `GET /api/v1/notifications?fsp_id=&limit=&offset=&unread_only=&q=` | Лента: `{total, offset, limit, items, unread, all}` (новые сверху) | `limit` ≤ 200 |
-| `POST /api/v1/notifications/read?fsp_id=` | Отметить всё прочитанным | — |
+| `POST /api/v1/notifications/read?fsp_id=` | Отметить прочитанными показанные `{ids}` (без тела — все) → `{unread}` | до 500 id |
 | `GET /api/v1/persons/{fsp_id}` | Карточка участника с вычисляемыми полями | `404` |
 | `POST /api/v1/persons` | Регистрация, выдача ФСП ID | email уникален (`409`), возраст ≥ 6, представитель для < 18 |
 | `POST /api/v1/persons/lookup` | ФИО/муниципалитет по списку ФСП ID | Для парсера протоколов |
 | `POST /api/v1/auth/verify` | Проверка email + пароль | `401` при ошибке |
 | `GET /api/v1/stats` | Агрегаты реестра (по дисциплинам, муниципалитетам, годам) | Публичный через шлюз |
 | `GET /api/v1/audit?limit=&q=&actor=&date_from=&date_to=` | Журнал действий (новые сверху), поиск по словам в действии/объекте/авторе | `limit` ≤ 5000 (`AUDIT_LIMIT` — столько записей держит сервис) |
+| `GET /api/v1/audit/search?…&order=&offset=&limit=` | Страница журнала `{total, offset, limit, items}`; `order=asc` — сначала старые | то же в competition_service |
 | `GET /api/v1/registry/persons` | Страница реестра `{total, offset, limit, items, facets}`: те же фильтры, что у `/persons`, + `sort` (`name`, `age`, `rank`, `organization`, `municipality`, `start_year`, `created`), `order`, `offset`, `limit` ≤ 500. Фасеты (`role`, `discipline`, `organization`, `municipality`, `rank`, `stage`, `age_group`) считаются по всем фильтрам, кроме собственного | `422` на неизвестную сортировку |
 | `GET /api/v1/sanctions/active?on=` | Действующие санкции на дату | — |
 | `GET /api/v1/alerts/ranks?within_days=&trainer_fsp_id=` | Истекающие разряды (по тренеру — только активные подопечные) | 0…730 дней |

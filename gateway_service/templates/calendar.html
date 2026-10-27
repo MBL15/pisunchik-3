@@ -65,7 +65,7 @@
     <button type="button" data-filters-toggle aria-expanded="false" class="{{ m.BTN_SM }} justify-center sm:hidden">Фильтры{% if chips %} · {{ chips|length }}{% endif %} <span aria-hidden="true">▾</span></button>
     <noscript><button class="{{ m.BTN }} w-full">Фильтр</button></noscript>
   </form>
-  <div class="mb-8">{{ m.filter_chips(chips, qs(request, q=None, discipline=None, status=None, level=None, season=None, plan=None, format=None, age_group=None, mine=None)) }}</div>
+  <div class="mb-8">{{ m.filter_chips(chips, reset_href) }}</div>
 
   <h2 class="mb-3 font-mono text-xs font-bold uppercase tracking-wider text-fsp-violet">// предстоящие и идущие · {{ upcoming|length }}</h2>
   <ul class="grid gap-3" data-stagger>{% for c in upcoming %}{{ comp_row(c) }}{% else %}<li class="font-mono text-sm text-fsp-muted">// нет</li>{% endfor %}</ul>

@@ -2,9 +2,12 @@
 import unittest
 from datetime import date
 
+from fastapi import Request
 from fastapi.testclient import TestClient
 
 from competition_service import main as competition
+from gateway_service import listing_ui
+from gateway_service.routes import registry
 from shared import config, demo_scale, listing
 from sportsman_service import main as sportsman
 
@@ -17,21 +20,49 @@ class ListingHelpersTest(unittest.TestCase):
         self.assertTrue(listing.matches([], "что угодно"))
 
     def test_page_clamps_limit_and_reports_total(self):
-        res = listing.page(list(range(1234)), 1200, 10_000)
-        self.assertEqual((res["total"], res["limit"], len(res["items"])), (1234, listing.MAX_LIMIT, 34))
+        res = listing.page(list(range(1234)), 1200, 10_000)  # смещение не на границе страницы → последняя страница
+        self.assertEqual((res["total"], res["limit"], res["offset"], len(res["items"])), (1234, listing.MAX_LIMIT, 1000, 234))
+        far = listing.page(list(range(120)), 5000, 50)  # номер страницы за концом (сузили фильтр)
+        self.assertEqual((far["offset"], far["items"][0], len(far["items"])), (100, 100, 20))
+        self.assertEqual(listing.page([], 300, 50)["offset"], 0)
 
     def test_audit_search(self):
-        rows = [{"at": "2026-10-01T10:00:00", "actor": "A", "action": "Модерация заявки", "object": "#5 Иванов"},
-                {"at": "2026-10-03T10:00:00", "actor": "B", "action": "Регистрация", "object": "FSP-1"}]
+        rows = [{"at": "2026-10-03T10:00:00", "actor": "B", "action": "Регистрация", "object": "FSP-1"},  # новые сверху
+                {"at": "2026-10-01T10:00:00", "actor": "A", "action": "Модерация заявки", "object": "#5 Иванов"}]
         self.assertEqual(len(listing.search_audit(rows, q="иванов модерация")), 1)
         self.assertEqual(len(listing.search_audit(rows, actor="B")), 1)
         self.assertEqual(len(listing.search_audit(rows, date_from=date(2026, 10, 2))), 1)
+        oldest_first = listing.audit_page(rows, order="asc", limit=1)
+        self.assertEqual((oldest_first["total"], oldest_first["items"][0]["actor"]), (2, "A"))
 
     def test_scale_generator_is_deterministic(self):
         a, b = demo_scale.generate(200), demo_scale.generate(200)
         self.assertEqual(a, b)
         self.assertEqual(len({p["fsp_id"] for p in a}), 200)
         self.assertEqual(demo_scale.generate(0), [])
+
+
+def _request(query: str, path: str = "/registry"):
+    return Request({"type": "http", "method": "GET", "path": path, "query_string": query.encode(), "headers": []})
+
+
+class ListingUiTest(unittest.TestCase):
+    def test_chips_skip_defaults_and_reset(self):
+        req = _request("status=PENDING&q=%D0%B8%D0%B2%D0%B0%D0%BD&page=3")
+        items, reset = listing_ui.chips(req, {"q": "иван", "status": "PENDING", "by": ""}, {"q": lambda v: f"«{v}»"},
+                                        defaults={"status": "all"})
+        self.assertEqual([label for label, _ in items], ["«иван»", "PENDING"])
+        self.assertEqual(items[1][1], "/registry?status=all&q=%D0%B8%D0%B2%D0%B0%D0%BD")  # снятие статуса → «все», страница сброшена
+        self.assertEqual(reset, "/registry?status=all")
+
+    def test_registry_tabs_drop_filters_they_cannot_show(self):
+        tab, filters = registry._registry_args(_request("tab=trainer&rank=%D0%9A%D0%9C%D0%A1&discipline=ALG"))
+        self.assertEqual((tab, "rank" in filters, filters["discipline"]), ("trainer", False, "ALG"))
+        links = registry._tab_links({"rank": "КМС", "stage": "УТ", "discipline": "ALG", "organization": "ОГУ"})
+        self.assertIn("rank=", links["athlete"])
+        self.assertNotIn("rank=", links["trainer"])
+        self.assertNotIn("organization=", links["org"])
+        self.assertIn("discipline=ALG", links["judge"])
 
 
 class ScaledRegistryTest(unittest.TestCase):

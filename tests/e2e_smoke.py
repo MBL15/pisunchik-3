@@ -828,6 +828,11 @@ with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
           "спортсмен клубы не создаёт")
 with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as anon:
     check("Клуб «Код &amp; Ко»" in anon.get("/register").text, "клуб доступен в регистрации")
+    cr = anon.get("/rating/clubs")
+    check(cr.status_code == 200 and "Рейтинг клубов и организаций" in cr.text and "ОГУ" in cr.text, "рейтинг клубов открыт без входа и считает организации")
+    only = anon.get("/rating/clubs", params={"only_clubs": "1", "discipline": "ALG"})
+    check(only.status_code == 200 and "у клубов пока нет баллов" in only.text, "«только клубы»: у нового клуба баллов ещё нет")
+    check("Рейтинг клубов" in anon.get("/").text and "Рейтинг клубов" in anon.get("/rating").text, "ссылки на рейтинг клубов в меню и на странице рейтинга")
 
 print("\nRESULT:", "ALL PASSED" if ok else "FAILURES")
 sys.exit(0 if ok else 1)

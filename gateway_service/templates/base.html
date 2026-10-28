@@ -50,7 +50,7 @@
   {% if user %}{% set nav = nav + [("/market", "Биржа")] %}{% endif %}
   {% if user and user.role == "admin" %}{% set nav = nav + [("/registry", "Реестр")] %}{% endif %}
   {# Дополнительные разделы по роли: выпадающее «Ещё» на широком экране и продолжение списка в мобильном меню #}
-  {% set more = [("/glossary", "Справочник понятий")] %}
+  {% set more = [("/rating/clubs", "Рейтинг клубов"), ("/glossary", "Справочник понятий")] %}
   {% if user %}
     {% if user.role == "athlete" %}{% set more = more + [("/journey", "Мой путь"), ("/squads", "Команды"), ("/training", "Нормативы"), ("/appeals", "Апелляции")] %}
     {% elif user.role == "trainer" %}{% set more = more + [("/squads", "Команды"), ("/training", "Нормативы и аттестация"), ("/organizations", "Организации и группы"), ("/appeals", "Апелляции")] %}

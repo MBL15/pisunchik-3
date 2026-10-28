@@ -74,3 +74,46 @@ def compute_rating(results: list[dict], settings: RatingSettings, excluded: dict
             position, prev = i, key
         a["position"] = position
     return {"rows": rows, "excluded": excluded_rows}
+
+
+def compute_org_rating(rating_rows: list[dict], persons: dict[str, dict], orgs: dict[str, dict],
+                       no_organization: str = "Без организации", only_clubs: bool = False) -> list[dict]:
+    """Рейтинг организаций и клубов: сумма рейтинговых баллов их спортсменов.
+
+    `rating_rows` — строки уже посчитанных рейтингов спортсменов (по одной дисциплине или по нескольким подряд: спортсмен,
+    выступавший в двух дисциплинах, приносит баллы обеих); санкции и регион там уже учтены. `persons` — реестр
+    (`fsp_id` → карточка с `organization`), `orgs` — справочник организаций (`name` → {type, municipality}).
+    Организации без баллов и «Без организации» в таблицу не попадают; `only_clubs` оставляет только клубы (места считаются
+    внутри выборки). Места при равенстве баллов, побед и призов общие."""
+    agg: dict[str, dict] = {}
+    for r in rating_rows:
+        p = persons.get(r["fsp_id"])
+        name = p["organization"] if p else None
+        if not name or name == no_organization:
+            continue
+        a = agg.setdefault(name, {"athletes": {}, "points": Decimal("0"), "podiums": 0, "golds": 0, "starts": 0})
+        a["points"] += Decimal(str(r["final"]))
+        a["podiums"] += r["podiums"]
+        a["golds"] += r["golds"]
+        a["starts"] += r["starts"]
+        mine = a["athletes"].setdefault(r["fsp_id"], {"fsp_id": r["fsp_id"], "full_name": r["full_name"], "points": Decimal("0")})
+        mine["points"] += Decimal(str(r["final"]))
+    rows = []
+    for name, a in agg.items():
+        info = orgs.get(name, {})
+        best = max(a["athletes"].values(), key=lambda x: (x["points"], x["full_name"]))
+        rows.append({"name": name, "type": info.get("type", "—"), "municipality": info.get("municipality", "—"),
+                     "is_club": info.get("type") == "Клуб", "points": float(a["points"].quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)),
+                     "athletes": len(a["athletes"]), "podiums": a["podiums"], "golds": a["golds"], "starts": a["starts"],
+                     "best": {"fsp_id": best["fsp_id"], "full_name": best["full_name"], "points": float(best["points"])}})
+    if only_clubs:
+        rows = [r for r in rows if r["is_club"]]
+    rows.sort(key=lambda r: (-r["points"], -r["golds"], -r["podiums"], r["name"]))
+    prev, position = None, 0
+    for i, r in enumerate(rows, start=1):
+        key = (r["points"], r["golds"], r["podiums"])
+        if key != prev:
+            position, prev = i, key
+        r["position"] = position
+    return rows
+

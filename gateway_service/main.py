@@ -130,6 +130,17 @@ async def rating_page(request: Request, discipline: str = "ALG", season: int | N
                   can_pick=bool(user and user["role"] == Role.ADMIN))
 
 
+@app.get("/rating/clubs", response_class=HTMLResponse)
+async def clubs_rating_page(request: Request, discipline: str = "ALL", season: int | None = None, only_clubs: bool = False):
+    degraded: list[str] = []
+    user = await safe(current_user(request), None, degraded)
+    if discipline != "ALL" and discipline not in domain.DISCIPLINE_BY_CODE:
+        discipline = "ALL"
+    rating = await safe(clients["competition"].get("/api/v1/rating/organizations", discipline=discipline, season=season,
+                                                   only_clubs=str(only_clubs).lower()), None, degraded)
+    return render(request, "rating_clubs.html", user=user, rating=rating, discipline=discipline, only_clubs=only_clubs, degraded=degraded)
+
+
 @app.get("/calendar", response_class=HTMLResponse)
 async def calendar_page(request: Request, discipline: str = "", plan: str = "", format: str = "", age_group: str = "",
                         mine: bool = False, q: str = "", status: str = "", level: str = "", season: str = ""):

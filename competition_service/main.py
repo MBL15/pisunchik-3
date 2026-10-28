@@ -18,7 +18,7 @@ from competition_service.models import (
     IngestIn, JudgeAssignIn, JudgeAssignment, Protocol, RegistrationIn, ResultsIn, SettingsIn, Team, TeamApproveIn,
     TeamCreateIn, TeamMember, TeamMemberIn, TeamRoleIn, TeamUpdateIn,
 )
-from competition_service.rating import RatingSettings, compute_rating
+from competition_service.rating import RatingSettings, compute_org_rating, compute_rating
 from competition_service.seed import seed
 from competition_service.store import DDL, restore, snapshot, store
 from shared import config
@@ -400,6 +400,29 @@ def _seasons() -> list[int]:
 async def rating(discipline: str = "ALG", season: int | None = None, age_group: str | None = None,
                  min_rank: str | None = None):
     return (await _build_rating(discipline, season, age_group, min_rank))[0]
+
+
+@app.get("/api/v1/rating/organizations")
+async def organizations_rating(season: int | None = None, discipline: str = "ALL", only_clubs: bool = False):
+    """Рейтинг организаций и клубов: сумма баллов их спортсменов по одной дисциплине (`discipline=ALG`) или по всем (`ALL`)."""
+    if discipline != "ALL" and discipline not in DISCIPLINE_BY_CODE:
+        raise HTTPException(422, "Неизвестная дисциплина")
+    seasons = _seasons()
+    season = season or (seasons[0] if seasons else config.today().year)
+    rows: list[dict] = []
+    persons: dict[str, dict] = {}
+    for code in ([discipline] if discipline != "ALL" else list(DISCIPLINE_BY_CODE)):
+        payload, persons = await _build_rating(code, season, None, None)
+        rows += payload["rows"]
+    orgs: dict[str, dict] = {}
+    try:
+        orgs = {o["name"]: o for o in await clients["sportsman"].get("/api/v1/organizations")}
+    except ServiceError:
+        pass  # без справочника типы неизвестны: клубы не отличить, таблица всё равно считается
+    table = compute_org_rating(rows, persons, orgs, only_clubs=only_clubs)
+    return {"season": season, "seasons": seasons, "discipline": discipline,
+            "discipline_label": "Все дисциплины" if discipline == "ALL" else DISCIPLINE_BY_CODE[discipline]["short"],
+            "only_clubs": only_clubs, "rows": table, "sanctions_checked": bool(persons)}
 
 
 async def _build_rating(discipline: str, season: int | None, age_group: str | None, min_rank: str | None

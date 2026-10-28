@@ -6,6 +6,8 @@
   {{ m.section_head("rating --discipline=" ~ discipline ~ " --explain", "Рейтинг спортсменов региона", "Сумма баллов за места в протоколах сезона с учётом уровня соревнования; коэффициент стабильности — за призовые места минимум на двух соревнованиях. Используется федерацией при формировании сборной.") }}
   {{ m.degraded_notice(degraded) }}
 
+  <p class="mb-3 font-mono text-xs"><a href="/rating/clubs?discipline={{ discipline }}" class="text-fsp-violet hover:underline">Рейтинг клубов и организаций →</a></p>
+
   <nav class="mb-4 flex flex-wrap gap-2" aria-label="Дисциплина">
     {% for d in D.DISCIPLINES %}
     <a href="/rating?discipline={{ d.code }}" class="inline-flex items-center gap-2 border px-3 py-2 text-xs font-semibold transition-colors duration-150 {% if discipline == d.code %}border-fsp-blue bg-fsp-blue text-white{% else %}border-fsp-line2 text-fsp-soft hover:border-fsp-blue hover:text-fsp-violet{% endif %} rounded-md"{% if discipline == d.code %} aria-current="page"{% endif %}>

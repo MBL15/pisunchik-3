@@ -8,15 +8,15 @@
   {% endfor %}
   {% for b in c.bars %}
   <rect class="chart-bar" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="3" fill="#402FFF" style="animation-delay: {{ b.delay }}ms"><title>{{ b.label }}: {{ b.value }}</title></rect>
-  {% if not c.dots %}<text x="{{ b.cx }}" y="{{ b.y - 6 }}" text-anchor="middle" fill="#EDEDED" font-size="12">{{ b.value }}</text>{% endif %}
+  {% if not c.dots %}<text class="chart-pop" style="animation-delay: {{ b.delay + 450 }}ms" x="{{ b.cx }}" y="{{ b.y - 6 }}" text-anchor="middle" fill="#EDEDED" font-size="12">{{ b.value }}</text>{% endif %}
   <text x="{{ b.cx }}" y="{{ c.base + 18 }}" text-anchor="middle" fill="#9B9C9E" font-size="12">{{ b.label }}</text>
   {% endfor %}
   {% if c.dots %}
   <polyline class="chart-line" pathLength="1" points="{{ c.points }}" fill="none" stroke="#8C80FF" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
   {% for d in c.dots %}
-  <circle cx="{{ d.x }}" cy="{{ d.y }}" r="4" fill="#1B1C21" stroke="#8C80FF" stroke-width="2"><title>{{ d.label }}{% if line_name %} · {{ line_name }}{% endif %}: {{ d.value }}</title></circle>
+  <circle class="chart-dot" style="animation-delay: {{ 350 + loop.index0 * 140 }}ms" cx="{{ d.x }}" cy="{{ d.y }}" r="4" fill="#1B1C21" stroke="#8C80FF" stroke-width="2"><title>{{ d.label }}{% if line_name %} · {{ line_name }}{% endif %}: {{ d.value }}</title></circle>
   {% endfor %}
-  {% for b in c.bars %}<text x="{{ b.cx }}" y="{{ b.y - 6 }}" text-anchor="middle" fill="#EDEDED" font-size="12">{{ b.value }}</text>{% endfor %}
+  {% for b in c.bars %}<text class="chart-pop" style="animation-delay: {{ b.delay + 450 }}ms" x="{{ b.cx }}" y="{{ b.y - 6 }}" text-anchor="middle" fill="#EDEDED" font-size="12">{{ b.value }}</text>{% endfor %}
   {% endif %}
 </svg>
 {% endmacro %}
@@ -31,7 +31,7 @@
   {% for r in h.rows %}
   <li>
     <div class="flex items-baseline justify-between gap-3 text-sm"><span class="min-w-0 truncate text-fsp-light" title="{{ r.label }}">{{ r.label }}</span><span class="shrink-0 font-mono text-xs tabular-nums text-fsp-soft">{{ r.value }} · {{ r.share }}%</span></div>
-    <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-fsp-card" role="presentation"><div class="h-full rounded-full bg-fsp-blue" style="width: {{ r.width }}%"></div></div>
+    <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-fsp-card" role="presentation"><div class="h-full rounded-full bg-fsp-blue" data-bar style="width: {{ r.width }}%; --d: {{ loop.index0 * 70 }}ms"></div></div>
   </li>
   {% endfor %}
 </ul>
@@ -47,14 +47,14 @@
 
   {% if charts.athletes %}
   {% set p = charts.period %}
-  <div class="{{ m.CARD }} p-5">
+  <div class="{{ m.CARD }} chart-card p-5" data-reveal>
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div>
         <h3 class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Прирост занимающихся · {{ p.first }}–{{ p.last }}</h3>
         <p class="mt-1 text-sm text-fsp-muted">Численность на конец года и число начавших заниматься в течение года.</p>
       </div>
       <div class="text-right">
-        <p class="font-mono text-4xl leading-none tabular-nums {{ 'text-emerald-300' if p.delta > 0 else 'text-fsp-light' }}">{{ "%+d"|format(p.delta) }}</p>
+        <p class="font-mono text-4xl leading-none tabular-nums {{ 'text-emerald-300' if p.delta > 0 else 'text-fsp-light' }}" data-count="{{ p.delta }}"{% if p.delta > 0 %} data-prefix="+"{% endif %}>{{ "%+d"|format(p.delta) }}</p>
         <p class="mt-1 font-mono text-xs text-fsp-muted">{% if p.pct is not none %}{{ "%+.1f"|format(p.pct) }}% · {% endif %}с {{ p.start }} до {{ p.end }} чел.</p>
       </div>
     </div>
@@ -62,7 +62,7 @@
     <p class="mt-2 flex flex-wrap justify-center gap-x-5 gap-y-1 font-mono text-[11px] text-fsp-soft">{{ legend("#402FFF", "занимающихся на конец года") }}{{ legend("#8C80FF", "начали заниматься в году", true) }}</p>
     <ul class="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6" aria-label="Прирост к предыдущему году">
       {% for g in charts.growth %}
-      <li class="rounded-lg border border-fsp-line bg-fsp-bg/40 px-3 py-2 text-center">
+      <li class="rounded-lg border border-fsp-line bg-fsp-bg/40 px-3 py-2 text-center" data-reveal style="--d: {{ loop.index0 * 70 }}ms">
         <p class="font-mono text-[11px] text-fsp-muted">{{ g.year }}</p>
         <p class="font-mono text-sm tabular-nums {{ 'text-emerald-300' if g.delta and g.delta > 0 else 'text-fsp-light' }}">{{ delta_text(g.delta) }}</p>
         <p class="font-mono text-[11px] text-fsp-muted">{% if g.pct is not none %}{{ "%+.1f"|format(g.pct) }}%{% else %}&nbsp;{% endif %}</p>
@@ -77,14 +77,14 @@
   {% set cp = charts.comp_period %}{% set months = cp.mode == "months" %}
   <div class="mt-6 grid gap-6 lg:grid-cols-2">
     {% if charts.participants %}
-    <div class="{{ m.CARD }} p-5">
+    <div class="{{ m.CARD }} chart-card p-5" data-reveal>
       <h3 class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Участники проведённых соревнований{% if months %} · {{ cp.year }}{% endif %}</h3>
       <p class="mt-1 text-sm text-fsp-muted">Число участий по протоколам завершённых соревнований{% if months %} по месяцам{% else %} года{% endif %}.</p>
       <div class="mt-3">{{ combo(charts.participants, "Участников " ~ ("по месяцам" if months else "по годам")) }}</div>
     </div>
     {% endif %}
     {% if charts.competitions %}
-    <div class="{{ m.CARD }} p-5">
+    <div class="{{ m.CARD }} chart-card p-5" data-reveal>
       <h3 class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Соревнования региона{% if months %} · {{ cp.year }}{% endif %}</h3>
       <p class="mt-1 text-sm text-fsp-muted">Проведено и запланировано в календарных планах{% if months %} по месяцам{% else %} года{% endif %}.</p>
       <div class="mt-3">{{ combo(charts.competitions, "Проведённых соревнований " ~ ("по месяцам" if months else "по годам"), "в планах") }}</div>
@@ -96,14 +96,14 @@
 
   {% if charts.athletes %}
   <div class="mt-6 grid gap-6 lg:grid-cols-3">
-    <div class="{{ m.CARD }} p-5">
+    <div class="{{ m.CARD }} chart-card p-5" data-reveal>
       <h3 class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Дисциплины</h3>
       {% if charts.disciplines %}
       {% set d = charts.disciplines %}
       <div class="mt-3 flex flex-col items-center gap-4">
         <svg viewBox="0 0 100 100" class="h-36 w-36 shrink-0 -rotate-90" role="img" aria-label="Доли дисциплин: {% for s in d.segments %}{{ s.label }} {{ s.pct }}%{% if not loop.last %}; {% endif %}{% endfor %}">
           <circle cx="50" cy="50" r="{{ d.r }}" fill="none" stroke="#2D2E37" stroke-width="14"/>
-          {% for s in d.segments %}<circle class="chart-arc" cx="50" cy="50" r="{{ d.r }}" fill="none" stroke="{{ s.color }}" stroke-width="14" stroke-dasharray="{{ s.dash }} {{ s.gap }}" stroke-dashoffset="{{ s.offset }}" style="animation-delay: {{ loop.index0 * 120 }}ms"><title>{{ s.label }}: {{ s.value }}</title></circle>{% endfor %}
+          {% for s in d.segments %}<circle class="chart-arc" cx="50" cy="50" r="{{ d.r }}" fill="none" stroke="{{ s.color }}" stroke-width="14" stroke-dasharray="{{ s.dash }} {{ s.gap }}" stroke-dashoffset="{{ s.offset }}" style="animation-delay: {{ loop.index0 * 220 }}ms"><title>{{ s.label }}: {{ s.value }}</title></circle>{% endfor %}
         </svg>
         <ul class="grid w-full min-w-0 gap-1.5 text-sm">
           {% for s in d.segments %}<li class="flex items-center justify-between gap-2"><span class="flex min-w-0 items-center gap-2"><span class="h-2.5 w-2.5 shrink-0 rounded-[2px]" style="background:{{ s.color }}" aria-hidden="true"></span><span class="truncate text-fsp-light">{{ s.label }}</span></span><span class="shrink-0 font-mono text-xs tabular-nums text-fsp-soft">{{ s.value }} · {{ s.pct }}%</span></li>{% endfor %}
@@ -112,27 +112,27 @@
       <p class="mt-3 font-mono text-[11px] text-fsp-muted">Спортсмен учитывается в каждой своей дисциплине.</p>
       {% else %}<p class="mt-3 text-sm text-fsp-muted">Нет данных.</p>{% endif %}
     </div>
-    <div class="{{ m.CARD }} p-5">
+    <div class="{{ m.CARD }} chart-card p-5" data-reveal>
       <h3 class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-violet">Муниципальные образования</h3>
       {{ hbars(charts.municipalities) }}
     </div>
-    <div class="{{ m.CARD }} p-5">
+    <div class="{{ m.CARD }} chart-card p-5" data-reveal>
       <h3 class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-violet">Возрастные группы</h3>
       {{ hbars(charts.age) }}
     </div>
-    <div class="{{ m.CARD }} p-5">
+    <div class="{{ m.CARD }} chart-card p-5" data-reveal>
       <h3 class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-violet">Пол</h3>
       {{ hbars(charts.gender) }}
     </div>
-    <div class="{{ m.CARD }} p-5">
+    <div class="{{ m.CARD }} chart-card p-5" data-reveal>
       <h3 class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-violet">Этапы подготовки</h3>
       {{ hbars(charts.stages) }}
     </div>
     {% if charts.ranked %}
-    <div class="{{ m.CARD }} p-5">
+    <div class="{{ m.CARD }} chart-card p-5" data-reveal>
       <h3 class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Спортсмены с разрядом</h3>
-      <p class="mt-3 font-mono text-4xl leading-none tabular-nums text-fsp-light">{{ charts.ranked.pct }}%</p>
-      <div class="mt-3 h-2 overflow-hidden rounded-full bg-fsp-card" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ charts.ranked.pct }}" aria-label="Доля спортсменов с разрядом"><div class="h-full rounded-full bg-emerald-400" style="width: {{ charts.ranked.pct }}%"></div></div>
+      <p class="mt-3 font-mono text-4xl leading-none tabular-nums text-fsp-light" data-count="{{ charts.ranked.pct }}" data-suffix="%">{{ charts.ranked.pct }}%</p>
+      <div class="mt-3 h-2 overflow-hidden rounded-full bg-fsp-card" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ charts.ranked.pct }}" aria-label="Доля спортсменов с разрядом"><div class="h-full rounded-full bg-emerald-400" data-bar style="width: {{ charts.ranked.pct }}%"></div></div>
       <p class="mt-2 text-sm text-fsp-muted">{{ charts.ranked.with_rank }} из {{ charts.ranked.athletes }} спортсменов имеют действующий разряд.</p>
     </div>
     {% endif %}

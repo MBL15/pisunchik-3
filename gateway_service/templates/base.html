@@ -330,14 +330,15 @@
         const end = parseFloat(el.dataset.count);
         if (Number.isNaN(end) || reduce) return;
         const dur = 1400, t0 = performance.now();
+        const pre = el.dataset.prefix || '', suf = el.dataset.suffix || '';  // «+12», «87%»
         const step = (t) => {
           const p = Math.min(1, (t - t0) / dur);
-          el.textContent = Math.round(end * (1 - Math.pow(1 - p, 4))).toLocaleString('ru-RU');
+          el.textContent = pre + Math.round(end * (1 - Math.pow(1 - p, 4))).toLocaleString('ru-RU') + suf;
           if (p < 1) requestAnimationFrame(step);
         };
-        el.textContent = '0';
+        el.textContent = pre + '0' + suf;
         requestAnimationFrame(step);
-        setTimeout(() => { el.textContent = end.toLocaleString('ru-RU'); }, dur + 600);
+        setTimeout(() => { el.textContent = pre + end.toLocaleString('ru-RU') + suf; }, dur + 600);
       };
 
       // Scroll reveal. data-reveal is dropped once shown so hover transforms on cards keep working.

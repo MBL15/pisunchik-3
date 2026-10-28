@@ -22,8 +22,10 @@
     targets: 'Крупные кнопки и поля', calm: 'Спокойный режим', sr: 'Режим для экранного диктора', speak: 'Называть элемент при выборе',
   };
 
+  // Исходное состояние — как при первом заходе: значения по умолчанию, а при системном prefers-contrast: more — «Белое на чёрном» (то же делает ранний скрипт в base.html)
+  const initial = () => ({ ...DEFAULTS, rate: 1, ...(matchMedia('(prefers-contrast: more)').matches ? { theme: 'wb' } : {}) });
   const load = () => {
-    try { return { ...DEFAULTS, rate: 1, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { ...DEFAULTS, rate: 1 }; }
+    try { return { ...initial(), ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return initial(); }
   };
   let state = load();
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* приватный режим */ } };
@@ -41,6 +43,22 @@
     if (rate) rate.value = state.rate;
     const out = panel.querySelector('[data-a11y-rate-out]');
     if (out) out.textContent = `${Number(state.rate).toFixed(1)}×`;
+    syncReset();
+  };
+  // Кнопка «Вернуть по умолчанию» неактивна, пока менять нечего
+  const isInitial = () => Object.entries(initial()).every(([k, v]) => String(state[k]) === String(v));
+  function syncReset() {
+    const pristine = isInitial();
+    panel?.querySelectorAll('[data-a11y-reset]').forEach((b) => { b.disabled = pristine; });
+    const note = panel?.querySelector('[data-a11y-reset-note]');
+    if (note) note.textContent = pristine ? 'Сейчас всё по умолчанию.' : 'Есть изменения — их можно сбросить одним нажатием.';
+  }
+  // Полный сброс: удаляем сохранённые настройки (а не записываем значения по умолчанию), как будто панель ещё не открывали
+  const reset = () => {
+    try { localStorage.removeItem(KEY); } catch { /* приватный режим */ }
+    state = initial();
+    apply(); sync(); stopSpeech();
+    say('Все настройки сброшены к значениям по умолчанию');
   };
 
   const change = (patch, message) => {
@@ -74,6 +92,7 @@
       if (!e.target.matches('[data-a11y-rate]')) return;
       state.rate = Number(e.target.value); save();
       panel.querySelector('[data-a11y-rate-out]').textContent = `${state.rate.toFixed(1)}×`;
+      syncReset();
     });
     panel.addEventListener('click', (e) => {
       const preset = e.target.closest('[data-a11y-preset]');
@@ -81,7 +100,7 @@
         change({ ...DEFAULTS, ...PRESETS[preset.dataset.a11yPreset] }, `Профиль «${preset.querySelector('span').textContent}» включён`);
         return;
       }
-      if (e.target.closest('[data-a11y-reset]')) { change({ ...DEFAULTS, rate: 1 }, 'Все настройки сброшены'); stopSpeech(); return; }
+      if (e.target.closest('[data-a11y-reset]')) { reset(); return; }
       const read = e.target.closest('[data-a11y-read]');
       if (read) readAloud(read.dataset.a11yRead);
     });

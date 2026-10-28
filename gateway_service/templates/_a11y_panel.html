@@ -94,10 +94,12 @@
       <p class="mt-2 hidden text-xs text-amber-300" data-a11y-nospeech>Этот браузер не умеет озвучивать текст. Воспользуйтесь программой экранного доступа (NVDA, JAWS, VoiceOver) — страницы размечены для неё.</p>
     </section>
 
-    <div class="border-t border-fsp-line2 pt-4">
-      <button type="button" data-a11y-reset class="cursor-pointer rounded-lg border border-fsp-line2 px-4 py-2.5 text-sm font-medium hover:bg-fsp-card">Сбросить все настройки</button>
-      <p class="mt-3 text-xs text-fsp-muted">Открыть эту панель с клавиатуры: <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">Alt</kbd> + <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">Shift</kbd> + <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">A</kbd>. Закрыть — <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">Esc</kbd>.</p>
-    </div>
+    <p class="border-t border-fsp-line2 pt-4 text-xs text-fsp-muted">Открыть эту панель с клавиатуры: <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">Alt</kbd> + <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">Shift</kbd> + <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">A</kbd>. Закрыть — <kbd class="rounded border border-fsp-line2 px-1.5 py-0.5 font-mono">Esc</kbd>.</p>
+  </div>
+
+  <div class="shrink-0 border-t border-fsp-line2 bg-fsp-panel px-5 py-4">
+    <button type="button" data-a11y-reset class="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-fsp-blue bg-fsp-blue px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-fsp-violet hover:text-fsp-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet disabled:cursor-default disabled:border-fsp-line2 disabled:bg-transparent disabled:text-fsp-muted disabled:hover:bg-transparent disabled:hover:text-fsp-muted">{{ m.icon("undo", "h-4 w-4") }}Вернуть по умолчанию</button>
+    <p class="mt-2 text-center text-xs text-fsp-muted" data-a11y-reset-note>Сейчас всё по умолчанию.</p>
   </div>
   <p class="sr-only" role="status" aria-live="polite" data-a11y-status></p>
 </dialog>

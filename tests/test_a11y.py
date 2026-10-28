@@ -67,6 +67,23 @@ class A11yTest(unittest.TestCase):
         self.assertIn("Обновить таблицу", BASE)
         self.assertIn("data-a11y-sr", TOUR)
 
+    def test_reset_button_is_always_visible_and_clears_storage(self):
+        """«Вернуть по умолчанию» — вне прокручиваемой области панели; сброс удаляет сохранённое, а не пишет значения по умолчанию."""
+        self.assertEqual(PANEL.count("data-a11y-reset "), 1)
+        self.assertGreater(PANEL.index("data-a11y-reset "), PANEL.index('class="shrink-0'), "кнопка должна быть в закреплённом нижнем блоке")
+        self.assertIn("Вернуть по умолчанию", PANEL)
+        self.assertIn("data-a11y-reset-note", PANEL)
+        self.assertIn("localStorage.removeItem(KEY)", JS)
+        self.assertIn("const reset = () =>", JS)
+        self.assertNotIn("change({ ...DEFAULTS, rate: 1 }", JS)
+
+    def test_initial_state_matches_the_early_boot_script(self):
+        """Что видно при первом заходе (в т. ч. «Белое на чёрном» при prefers-contrast: more) — к тому же возвращает и сброс."""
+        self.assertIn("prefers-contrast: more", BASE)
+        self.assertIn("prefers-contrast: more", JS)
+        self.assertIn("theme: 'wb'", BASE)
+        self.assertIn("theme: 'wb'", JS)
+
 
 if __name__ == "__main__":
     unittest.main()

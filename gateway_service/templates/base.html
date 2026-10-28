@@ -58,6 +58,7 @@
     {% elif user.role == "admin" %}{% set more = more + [("/development", "Показатели развития"), ("/awards", "Премии Губернатора"), ("/squads", "Команды"), ("/training", "Нормативы и аттестация"), ("/organizations", "Организации и группы"), ("/appeals", "Апелляции и нарушения"), ("/integrations", "Интеграции"), ("/oidc/clients", "ФСП ID (OIDC)")] %}
     {% elif user.role == "ministry" %}{% set more = more + [("/development", "Показатели развития"), ("/awards", "Премии Губернатора"), ("/training/norms", "Нормативы ФССП"), ("/squads", "Команды"), ("/organizations", "Организации и группы")] %}{% endif %}
   {% endif %}
+  {% if user %}{% set more = more + [("/api-access", "API и MCP")] %}{% endif %}
   {% set path = request.url.path %}
   {# FSP-style floating light header island #}
   <header class="no-print sticky top-0 z-40 px-2.5 pt-2.5">

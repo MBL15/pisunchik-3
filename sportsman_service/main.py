@@ -14,7 +14,7 @@ from shared.domain import (
 from shared.fsp_id import is_valid_fsp_id
 from shared.listing import AUDIT_LIMIT, MAX_LIMIT, audit_page, facets, matches, norm, page, search_audit, tokens
 from shared.http import ServiceClient, ServiceError
-from sportsman_service import groups, norms, oidc, squads
+from sportsman_service import groups, norms, oidc, squads, user_tokens
 from sportsman_service.headcount import build_report
 from sportsman_service.models import (
     Antidoping, AntidopingIn, AuthIn, DisciplinesIn, Guardian, Sanction, SanctionIn, JudgeCategoryRecord, LinkCreateIn, LinkEvent, LinkStatusIn, LookupIn,
@@ -54,6 +54,7 @@ app.include_router(norms.router)
 app.include_router(groups.router)
 app.include_router(oidc.router)
 app.include_router(squads.router)
+app.include_router(user_tokens.router)
 
 
 @app.middleware("http")

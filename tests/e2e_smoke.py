@@ -552,6 +552,38 @@ with as_user("admin@fsp56.ru", "admin") as adm, as_user("athlete@fsp56.ru", "ath
     check("Файл положения удалён" in adm.post("/competitions/1/regulation-file/delete").text
           and guest.get("/competitions/1/regulation-file").status_code == 404, "файл удалён")
 
+print("== 13b. Личные токены роли и API участника (/api/me/v1)")
+
+
+def issue_token(client: httpx.Client, name: str) -> str:
+    r = client.post("/api-access/tokens", data={"name": name})
+    m = re.search(r"data-token>(fspu_[\w-]+)<", r.text)
+    check(r.status_code == 200 and bool(m) and "no-store" in r.headers.get("cache-control", ""), f"токен «{name}» выпущен и показан один раз")
+    return m.group(1) if m else ""
+
+
+with as_user("trainer@fsp56.ru", "trainer") as tr, as_user("ministry@fsp56.ru", "ministry") as mini, as_user("admin@fsp56.ru", "admin") as adm,         httpx.Client(base_url=f"{BASE}/api/me/v1", timeout=30) as api:
+    def get(token: str, path: str, **params):
+        return api.get(path, params=params, headers={"Authorization": f"Bearer {token}"})
+
+    tt, mt, at = issue_token(tr, "e2e тренер"), issue_token(mini, "e2e министр"), issue_token(adm, "e2e федерация")
+    check("API и MCP" in tr.get("/api-access").text and "e2e тренер" in tr.get("/api-access").text and tt not in tr.get("/api-access").text,
+          "страница «API и MCP»: токен в списке, открытое значение больше не показывается")
+    check(api.get("/me").status_code == 401 and get("fspu_" + "x" * 40, "/me").status_code == 401, "без токена и с чужим — 401")
+    me = get(tt, "/me").json()
+    check(me["role"] == "trainer" and "my_athletes" in me["can"], "токен тренера: роль и доступные операции")
+    wards = get(tt, "/trainer/athletes")
+    check(wards.status_code == 200 and wards.json() and "@" not in wards.text and "birth_date" not in wards.text, "подопечные тренера без e-mail и даты рождения")
+    check(get(tt, "/reports/headcount").status_code == 403 and get(tt, "/admin/applications").status_code == 403, "тренеру закрыты отчёты и решения федерации")
+    check(get(mt, "/reports/headcount", years=3).status_code == 200 and get(mt, "/dashboard").status_code == 200
+          and get(mt, "/teams").status_code == 200 and get(mt, "/development/competitions").status_code == 200, "токен министерства читает отчёты, показатели и сборные")
+    check(api.post("/admin/applications/1/decision", json={"status": "APPROVED"}, headers={"Authorization": f"Bearer {mt}"}).status_code == 403
+          and api.post("/applications", json={"competition_id": 1}, headers={"Authorization": f"Bearer {mt}"}).status_code == 403, "министерству действия закрыты")
+    check(get(at, "/admin/applications").status_code == 200 and get(at, "/competitions", upcoming="true").status_code == 200
+          and get(tt, "/competitions/1/protocol").status_code in (200, 403), "токен федерации видит заявки и календарь")
+    tid = re.search(r'/api-access/tokens/(\d+)/revoke', tr.get("/api-access").text).group(1)
+    check("Токен отозван" in tr.post(f"/api-access/tokens/{tid}/revoke").text and get(tt, "/me").status_code == 401, "отзыв токена закрывает доступ сразу")
+
 print("== 14. Д7 личный путь и справочник понятий")
 with as_user("athlete@fsp56.ru", "athlete") as ath, httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as guest:
     html = ath.get("/journey").text

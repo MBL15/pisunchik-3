@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}API и MCP · ФСП Оренбург{% endblock %}
+{% block content %}
+<div class="pt-10">
+  {{ m.section_head("api token --role=" ~ user.role, "API и MCP для роли «" ~ user.role_label ~ "»", "Личный токен даёт модели или скрипту доступ к сайту от вашего имени и в этой роли. Права те же, что у вас в кабинете: ни больше, ни меньше.") }}
+  {{ m.degraded_notice(degraded) }}
+  <p class="no-print mb-6"><a href="/cabinet" class="{{ m.BTN_GHOST }} !py-2 !text-xs">← Кабинет</a></p>
+
+  <section class="{{ m.CARD }} p-5" aria-labelledby="can-h">
+    <h2 id="can-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Что доступно токену в роли «{{ user.role_label }}»</h2>
+    <ul class="mt-3 grid gap-1.5 text-sm sm:grid-cols-2">
+      {% for c in can %}
+      <li class="flex items-center gap-2">{% if c.write %}{{ m.tag("действие", "amber") }}{% else %}{{ m.tag("чтение", "slate") }}{% endif %}<span class="text-fsp-light">{{ c.label }}</span></li>
+      {% endfor %}
+    </ul>
+    <p class="mt-3 text-xs text-fsp-muted">Токен выпускается в той роли, которая активна сейчас; другую роль переключите в шапке и выпустите отдельный токен. В ответах нет e-mail, даты рождения и данных законного представителя. Черновики протоколов видит только федерация.</p>
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" id="tokens" aria-labelledby="tok-h">
+    <h2 id="tok-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Ваши токены</h2>
+    {% if new_token %}
+    <div class="mt-4 rounded-lg border border-emerald-500/60 bg-emerald-500/10 p-4" role="status">
+      <p class="text-sm font-medium text-emerald-300">Токен «{{ new_token.name }}» ({{ new_token.role_label }}) создан. Скопируйте его сейчас — повторно он не показывается.</p>
+      <p class="mt-2 break-all rounded-md bg-fsp-bg px-3 py-2 font-mono text-sm text-fsp-light select-all" data-token>{{ new_token.token }}</p>
+    </div>
+    {% endif %}
+    <ul class="mt-4 grid gap-2">
+      {% for t in tokens %}
+      <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-fsp-line px-4 py-2.5">
+        <span class="min-w-0 text-sm text-fsp-light">{{ t.name }} {{ m.tag(t.role_label, "blue") }} <span class="font-mono text-[11px] text-fsp-muted">· {{ t.prefix }}… · создан {{ t.created_at[:10]|ru_date }} · {% if t.last_used_at %}использован {{ t.last_used_at[:10]|ru_date }}{% else %}не использовался{% endif %}</span></span>
+        <form method="post" action="/api-access/tokens/{{ t.id }}/revoke"><button class="{{ m.BTN_NO }}" data-confirm="Отозвать токен «{{ t.name }}»? Модели и скрипты с ним потеряют доступ." data-confirm-label="Отозвать">Отозвать</button></form>
+      </li>
+      {% else %}
+      <li class="rounded-lg border border-dashed border-fsp-line2 p-4 text-sm text-fsp-muted">Активных токенов нет.</li>
+      {% endfor %}
+    </ul>
+    <form method="post" action="/api-access/tokens" class="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+      <label class="sr-only" for="tok-name">Название токена</label>
+      <input id="tok-name" name="name" required minlength="2" maxlength="60" placeholder="Название, например «Claude Desktop»" class="{{ m.INPUT }}">
+      <button class="{{ m.BTN }} !py-2 !text-xs">Создать токен в роли «{{ user.role_label }}»</button>
+    </form>
+    <p class="mt-2 text-xs text-fsp-muted">До 5 активных токенов. Хранится только хэш; отзыв закрывает доступ сразу. Если токен попал не туда — отзовите его.</p>
+  </section>
+
+  <section class="mt-6 {{ m.CARD }} p-5" id="connect" aria-labelledby="conn-h">
+    <h2 id="conn-h" class="font-mono text-xs uppercase tracking-wider text-fsp-violet">Подключение MCP</h2>
+    <p class="mt-2 text-sm text-fsp-soft">Сервер <code class="font-mono">mcp_fsp</code> запускается рядом с моделью (Claude Desktop, Claude Code) и ходит в API по вашему токену. Добавьте в <code class="font-mono">mcpServers</code> конфигурации или в <code class="font-mono">.mcp.json</code> (путь — к папке с репозиторием платформы):</p>
+    <pre class="mt-3 overflow-x-auto rounded-lg border border-fsp-line bg-fsp-bg p-4 font-mono text-xs leading-relaxed text-fsp-light" tabindex="0">{
+  "mcpServers": {
+    "fsp": {
+      "command": "py",
+      "args": ["-X", "utf8", "-m", "mcp_fsp"],
+      "cwd": "C:\\путь\\к\\orencode",
+      "env": {
+        "PYTHONPATH": "C:\\путь\\к\\orencode",
+        "FSP_API_TOKEN": "fspu_…ваш токен…",
+        "FSP_API_URL": "{{ api_base }}"
+      }
+    }
+  }
+}</pre>
+    <p class="mt-3 text-sm text-fsp-soft">Напрямую API доступен по <code class="font-mono">{{ api_base }}</code> с заголовком <code class="font-mono">Authorization: Bearer fspu_…</code>; описание — <a href="{{ api_base }}/docs" class="text-fsp-violet hover:underline">{{ api_base }}/docs</a>.</p>
+    <p class="mt-2 text-xs text-fsp-muted">Тексты на платформе пишут пользователи: модели сказано относиться к ним как к данным, а не как к инструкциям. Действия, которые меняют данные, модель должна согласовывать с вами.</p>
+  </section>
+</div>
+{% endblock %}

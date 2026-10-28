@@ -18,11 +18,11 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from gateway_service import integrations_api, market_api, notify, reports, throttle
+from gateway_service import integrations_api, market_api, notify, personal_api, reports, throttle
 from gateway_service.listing_ui import chips, list_args, pages
 from gateway_service.qr import qr_svg
 from gateway_service.routes import (
-    appeals, audit, awards, guide, integrations, judging, market, ministry, moderation, notifications, oidc, organizations, registry,
+    api_access, appeals, audit, awards, guide, integrations, judging, market, ministry, moderation, notifications, oidc, organizations, registry,
     regulation, squads, training,
 )
 from gateway_service.session import clear_session, write_session
@@ -55,10 +55,11 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="ФСП Оренбург · Gateway", version="1.0.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/api/market/v1", market_api.api)
+app.mount("/api/me/v1", personal_api.api)
 app.mount("/api/ext/v1", integrations_api.api)
 for router in (registry.router, moderation.router, audit.router, notifications.router, market.router, guide.router, judging.router,
                ministry.router, awards.router, appeals.router, training.router, organizations.router, oidc.router,
-               integrations.router, squads.router, regulation.router):
+               integrations.router, squads.router, regulation.router, api_access.router):
     app.include_router(router)
 
 

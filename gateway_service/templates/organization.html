@@ -18,10 +18,12 @@
     <details class="mt-4 rounded-lg border border-fsp-line2 p-3"><summary class="cursor-pointer font-mono text-xs text-fsp-light">Редактировать карточку</summary>
       <form method="post" action="/organizations/card" class="mt-3 grid gap-3 sm:grid-cols-2">
         <input type="hidden" name="name" value="{{ c.name }}">
+        {% if can_license %}
         <div><label for="lc-n" class="{{ m.LABEL }}">Номер лицензии</label><input id="lc-n" name="license_number" value="{{ c.license.number if c.license else '' }}" class="{{ m.INPUT }}"></div>
         <div><label for="lc-i" class="{{ m.LABEL }}">Выдана</label><input id="lc-i" name="license_issued" type="date" value="{{ c.license.issued_at if c.license else '' }}" class="{{ m.INPUT }} [color-scheme:dark]"></div>
         <div><label for="lc-u" class="{{ m.LABEL }}">Действует до (пусто — бессрочная)</label><input id="lc-u" name="license_until" type="date" value="{{ (c.license.valid_until or '') if c.license else '' }}" class="{{ m.INPUT }} [color-scheme:dark]"></div>
         <div><label for="lc-o" class="{{ m.LABEL }}">Кем выдана</label><input id="lc-o" name="license_issuer" value="{{ c.license.issuer if c.license else '' }}" class="{{ m.INPUT }}"></div>
+        {% endif %}
         <div class="sm:col-span-2"><label for="lc-d" class="{{ m.LABEL }}">Описание</label><input id="lc-d" name="description" maxlength="500" value="{{ c.description }}" class="{{ m.INPUT }}"></div>
         <fieldset class="sm:col-span-2"><legend class="{{ m.LABEL }}">Программы подготовки (этап × дисциплина)</legend>
           <div class="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{% for st, st_label in stages.items() %}{% for d in disciplines %}

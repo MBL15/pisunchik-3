@@ -170,6 +170,11 @@ async def download(doc: exports.Doc, fmt: str) -> Response:
 
 
 # ---------------------------------------------------------------- адресаты уведомлений
+async def organization_names() -> list[str]:
+    """Все организации для списков выбора: справочник и клубы тренеров (их заводит сервис реестра, в константах шлюза их нет)."""
+    return await safe(clients["sportsman"].get("/api/v1/organizations-names"), list(domain.ORGANIZATIONS), [])
+
+
 async def admin_ids() -> list[str]:
     return [p["fsp_id"] for p in await safe(clients["sportsman"].get("/api/v1/persons", role="admin"), [], [])]
 

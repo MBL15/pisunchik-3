@@ -299,6 +299,24 @@ ORGANIZATIONS = [
     "Без организации",
 ]
 NO_ORGANIZATION = "Без организации"
+CLUB_TYPE = "Клуб"
+_club_names: set[str] = set()
+
+
+def sync_clubs(clubs: list[dict]) -> None:
+    """Клубы, созданные тренерами, живут в данных сервиса, а не в константах: добавляет их в общие списки организаций
+    (и убирает исчезнувшие — важно для тестов и перезапуска). Вызывается сервисом реестра при запуске и после создания клуба."""
+    wanted = {c["name"]: c for c in clubs}
+    for name in _club_names - set(wanted):
+        if name in ORGANIZATIONS:
+            ORGANIZATIONS.remove(name)
+        ORGANIZATION_INFO.pop(name, None)
+    _club_names.clear()
+    for name, c in wanted.items():
+        if name not in ORGANIZATIONS:
+            ORGANIZATIONS.insert(max(len(ORGANIZATIONS) - 1, 0), name)  # «Без организации» остаётся последней
+        ORGANIZATION_INFO[name] = {"type": CLUB_TYPE, "municipality": c["municipality"]}
+        _club_names.add(name)
 
 # Карточки организаций реестра: тип (школа, вуз, спортивная школа, клуб и т.п.) и муниципалитет.
 ORGANIZATION_INFO: dict[str, dict] = {

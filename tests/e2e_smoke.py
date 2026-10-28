@@ -797,5 +797,37 @@ with as_user("admin@fsp56.ru", "admin") as adm, httpx.Client(base_url=f"{BASE}/a
     check("Токен отозван" in r.text, "токен можно отозвать, вебхуки отключаются")
     check(ext.get("/competitions", headers={"Authorization": f"Bearer {token_w}"}).status_code == 401, "отозванный токен не работает")
 
+print("== 21. упрощённые кабинеты, главная без живого протокола, клуб тренера")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as anon:
+    home = anon.get("/").text
+    check('id="live"' not in home and "Живой протокол" not in home, "главная: онлайн-протокола нет")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
+    html = login(c, "admin@fsp56.ru")
+    check('aria-label="Профиль"' in html and "<canvas" not in html and "tail ./audit.log" not in html,
+          "кабинет федерации: короткая шапка, таблица журнала убрана с обзора")
+    check('href="/audit"' in html, "кабинет федерации: ссылка на журнал действий остаётся")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
+    html = login(c, "ministry@fsp56.ru")
+    check("Доступ только для чтения" in html and "<canvas" not in html and "<details" in html,
+          "кабинет министерства: короткая шапка, графики свёрнуты")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
+    login(c, "trainer@fsp56.ru")
+    org = page(c, "/organizations")
+    check('id="new-club"' in org and 'action="/organizations/clubs"' in org, "тренер видит форму «Создать клуб»")
+    r = c.post("/organizations/clubs", data={"name": "Клуб «Код & Ко» г. Оренбург", "municipality": "г. Оренбург", "description": "Олимпиадники"})
+    check("создан" in r.text and "Код &amp; Ко" in r.text and "Редактировать карточку" in r.text,
+          "клуб создан: открылась его карточка, основатель её редактирует")
+    check("Номер лицензии" not in r.text, "основатель клуба не вносит лицензию")
+    dup = c.post("/organizations/clubs", data={"name": "клуб «код & ко» г. оренбург", "municipality": "г. Оренбург"})
+    check("уже есть в реестре" in dup.text, "повтор названия отклонён")
+    check("Клуб «Код &amp; Ко» г. Оренбург" in page(c, "/organizations"), "клуб в списке организаций")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as c:
+    login(c, "athlete@fsp56.ru")
+    c.post("/role", data={"role": "athlete"})
+    check(c.post("/organizations/clubs", data={"name": "Клуб спортсмена", "municipality": "г. Оренбург"}).status_code == 403,
+          "спортсмен клубы не создаёт")
+with httpx.Client(base_url=BASE, follow_redirects=True, timeout=15) as anon:
+    check("Клуб «Код &amp; Ко»" in anon.get("/register").text, "клуб доступен в регистрации")
+
 print("\nRESULT:", "ALL PASSED" if ok else "FAILURES")
 sys.exit(0 if ok else 1)

@@ -53,7 +53,7 @@
         </div>
         <div class="sm:col-span-3">
           <label for="organization" class="{{ m.LABEL }}">Организация *</label>
-          <select id="organization" name="organization" class="{{ m.INPUT }}">{% for x in D.ORGANIZATIONS %}<option {% if v.organization == x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+          <select id="organization" name="organization" class="{{ m.INPUT }}">{% for x in organizations or D.ORGANIZATIONS %}<option {% if v.organization == x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
         </div>
       </div>
 

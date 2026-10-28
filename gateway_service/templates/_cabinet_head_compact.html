@@ -1,0 +1,38 @@
+{# Короткая шапка кабинета для федерации и министерства: имя, роль, ФСП ID. Без анимации и сроков разряда — их у этих ролей нет. #}
+{% import "macros.html" as m %}
+{% set p = user.person %}
+<section class="mt-8 rounded-xl border border-fsp-line bg-fsp-panel p-4 sm:p-5" aria-label="Профиль">
+  <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+    <div class="flex min-w-0 items-center gap-3">
+      <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-fsp-blue font-mono text-base text-white" aria-hidden="true">{{ p.last_name[0] }}{{ p.first_name[0] }}</div>
+      <div class="min-w-0">
+        <p class="font-mono text-[11px] uppercase tracking-widest text-fsp-violet">// кабинет: {{ user.role_label }}</p>
+        <h1 class="truncate font-mono text-xl font-normal text-fsp-light sm:text-2xl">{{ p.full_name }}</h1>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 font-mono text-xs text-fsp-muted">
+      <button type="button" data-copy="{{ p.fsp_id }}" class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-fsp-line2 bg-fsp-bg px-2 py-1 text-fsp-light transition-colors duration-150 hover:border-fsp-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet" title="Скопировать ФСП ID">
+        <span>{{ p.fsp_id }}</span><span class="text-[10px] text-fsp-violet" data-copy-label aria-live="polite">копировать</span>
+      </button>
+      {% if tg.enabled() %}
+      <form id="telegram" method="post" action="/cabinet/telegram" class="flex items-center gap-2" aria-label="Уведомления в Telegram">
+        {% if tg.is_linked(p.fsp_id) %}
+        <span class="text-emerald-400">Telegram подключён</span>
+        <button name="action" value="unlink" class="rounded-md border border-fsp-line2 px-2.5 py-1.5 text-[11px] font-bold uppercase text-fsp-soft hover:border-fsp-blue">Отключить</button>
+        {% else %}
+        <button name="action" value="link" class="rounded-md border border-fsp-blue bg-fsp-blue px-2.5 py-1.5 text-[11px] font-bold uppercase text-white">Подключить Telegram</button>
+        {% endif %}
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% if p.roles|length > 1 %}
+  <form method="post" action="/role" class="mt-3 flex flex-wrap items-center gap-1.5 border-t border-fsp-line pt-3 font-mono text-xs md:hidden" aria-label="Переключение роли">
+    <span class="text-fsp-muted">роль:</span>
+    {% for r in p.roles %}<button name="role" value="{{ r }}" class="rounded-md border px-2.5 py-1.5 text-[11px] font-bold uppercase {% if r == user.role %}border-fsp-blue bg-fsp-blue text-white{% else %}border-fsp-line2 text-fsp-soft{% endif %}">{{ D.ROLE_LABELS[r] }}</button>{% endfor %}
+  </form>
+  {% endif %}
+</section>
+
+{# Поиск функции — тот же, что в полной шапке #}
+{% include "_cabinet_finder.html" %}

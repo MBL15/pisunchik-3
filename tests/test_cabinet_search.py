@@ -61,9 +61,11 @@ class CabinetSearchTest(unittest.TestCase):
         self.assertEqual(rows[-1]["title"], "Моя анкета на бирже")
 
     def test_page_renders_the_catalog_and_the_script_ships_the_finder(self):
-        head = source("_cabinet_head.html")
-        self.assertIn("data-finder", head)
-        self.assertIn("finder_entries(user.role", head)
+        finder = source("_cabinet_finder.html")
+        for head in ("_cabinet_head.html", "_cabinet_head_compact.html"):
+            self.assertIn("_cabinet_finder.html", source(head))  # поиск есть в обеих шапках кабинета
+        self.assertIn("data-finder", finder)
+        self.assertIn("finder_entries(user.role", finder)
         js = (TEMPLATES.parent / "static" / "ux.js").read_text(encoding="utf-8")
         self.assertTrue(re.search(r"querySelectorAll\('\[data-finder\]'\)", js))
 

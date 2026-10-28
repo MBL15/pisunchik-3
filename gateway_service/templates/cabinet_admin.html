@@ -2,7 +2,7 @@
 {% import "macros.html" as m %}
 {% block title %}Кабинет федерации · ФСП Оренбург{% endblock %}
 {% block content %}
-{% include "_cabinet_head.html" %}
+{% include "_cabinet_head_compact.html" %}
 {% set INBOX_APPS = 6 %}
 {% macro inbox_group(title, n) %}<li class="sticky top-0 z-[1] flex items-center gap-2 bg-fsp-panel/95 px-5 py-2 font-mono text-[11px] uppercase tracking-wider text-fsp-muted backdrop-blur">{{ title }}<span class="rounded bg-fsp-card px-1.5 text-fsp-light">{{ n }}</span></li>{% endmacro %}
 
@@ -18,13 +18,11 @@
 {% if tab == "overview" %}
 
 {# ---------------- KPIs ---------------- #}
-<section class="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label="Ключевые показатели">
+<section class="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4" aria-label="Ключевые показатели">
   {{ m.kpi("занимающихся", stats.athletes if stats else "—", "в реестре региона") }}
-  {{ m.kpi("с разрядом", stats.with_rank if stats else "—", "присвоенные разряды", "emerald") }}
   {{ m.kpi("соревнований", dash.competitions_season if dash else "—", "сезон " ~ (dash.season if dash else ""), "blue") }}
   {{ m.kpi("участников", dash.participants_unique if dash else "—", (dash.starts if dash else 0) ~ " стартов спортсменов региона", "emerald") }}
   {{ m.kpi("ждут решения", inbox_count, "заявки, разряды, протоколы", "amber") }}
-  {{ m.kpi("справок", dash.documents_issued if dash else "—", "выдано с QR-кодом", "blue") }}
 </section>
 
 {# ---------------- QUICK ACTIONS ---------------- #}
@@ -35,10 +33,7 @@
     <a href="/cabinet?tab=results#results-entry" class="{{ m.BTN_SM }}">{{ m.icon("file", "h-3.5 w-3.5") }}Внести результаты{% if awaiting %}<span class="rounded bg-amber-400/20 px-1.5 text-amber-300">{{ awaiting|length }}</span>{% endif %}</a>
     <a href="/cabinet?tab=competitions#registration" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Приём заявок</a>
     <a href="/registry" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Реестр</a>
-    <a href="/applications" class="{{ m.BTN_SM }}">{{ m.icon("check", "h-3.5 w-3.5") }}Заявки{% if comp_apps %}<span class="rounded bg-amber-400/20 px-1.5 text-amber-300">{{ comp_apps|length }}</span>{% endif %}</a>
-    <a href="/audit" class="{{ m.BTN_SM }}">{{ m.icon("terminal", "h-3.5 w-3.5") }}Журнал</a>
-    <a href="/rating" class="{{ m.BTN_SM }}">{{ m.icon("users", "h-3.5 w-3.5") }}Сборная из рейтинга</a>
-    <a href="/reports/headcount" class="{{ m.BTN_SM }}">{{ m.icon("pulse", "h-3.5 w-3.5") }}Отчёт о численности</a>
+    <a href="/audit" class="{{ m.BTN_SM }}">{{ m.icon("terminal", "h-3.5 w-3.5") }}Журнал действий</a>
     <a href="/cabinet?tab=competitions#create" class="{{ m.BTN_SM }}">{{ m.icon("calendar", "h-3.5 w-3.5") }}Новое соревнование</a>
   </div>
 </section>
@@ -165,7 +160,7 @@
     <h2 id="upcoming-h" class="font-mono text-xs font-bold uppercase tracking-wider text-fsp-violet">// ближайшие соревнования</h2>
     <a href="/calendar" class="font-mono text-xs text-fsp-violet hover:underline">весь календарь →</a>
   </div>
-  {% set soon = (dash.live if dash else []) + (dash.upcoming if dash else []) %}
+  {% set soon = ((dash.live if dash else []) + (dash.upcoming if dash else []))[:4] %}
   <ul class="grid gap-2 md:grid-cols-2 [&>*]:min-w-0">
     {% for c in soon %}
     <li class="{{ m.CARD }} p-3 text-sm">
@@ -177,26 +172,6 @@
   </ul>
 </section>
 
-{# ---------------- AUDIT LOG ---------------- #}
-<section class="mt-12">
-  {{ m.section_head("tail ./audit.log", "Журнал действий") }}
-  <p class="-mt-3 mb-3"><a href="/audit" class="font-mono text-xs text-fsp-violet hover:underline">весь журнал с поиском и фильтрами →</a></p>
-  <div class="overflow-x-auto border border-fsp-line bg-black/50 rounded-xl">
-    <table class="w-full min-w-[640px] font-mono text-xs">
-      <tbody>
-        {% for a in audit %}
-        <tr class="border-b border-fsp-line/60">
-          <td class="whitespace-nowrap px-3 py-2 text-fsp-dim2">{{ a.at.replace("T", " ") }}</td>
-          <td class="px-3 py-2 {% if a.service == 'competition' %}text-fsp-violet{% else %}text-emerald-300{% endif %}">{{ a.service }}</td>
-          <td class="whitespace-nowrap px-3 py-2 text-fsp-muted">{{ a.actor }}</td>
-          <td class="px-3 py-2 text-fsp-light">{{ a.action }}</td>
-          <td class="px-3 py-2 text-fsp-muted">{{ a.object }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
 
 {% elif tab == "competitions" %}
 

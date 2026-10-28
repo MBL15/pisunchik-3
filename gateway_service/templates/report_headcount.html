@@ -26,7 +26,7 @@
     </div>
     <div>
       <label for="h-org" class="{{ m.LABEL }}">Организация</label>
-      <select id="h-org" name="organization" class="{{ m.INPUT }}"><option value="">Все</option>{% for x in D.ORGANIZATIONS %}<option {% if filters.organization == x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+      <select id="h-org" name="organization" class="{{ m.INPUT }}"><option value="">Все</option>{% for x in organizations or D.ORGANIZATIONS %}<option {% if filters.organization == x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
     </div>
     <div class="flex items-end"><button class="{{ m.BTN }} w-full">Построить</button></div>
   </form>

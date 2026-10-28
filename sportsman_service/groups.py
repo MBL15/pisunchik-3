@@ -184,6 +184,8 @@ async def organization_card(name: str):
             {**p, "stage_label": TRAINING_STAGES[p["stage"]], "discipline_label": DISCIPLINE_BY_CODE[p["discipline"]]["short"]}
             for p in card.get("programs", [])],
         "description": card.get("description", ""),
+        "club": info.get("type") == "Клуб", "founder_fsp_id": next(
+            (c["founder_fsp_id"] for c in store.ext.table("clubs").values() if c["name"] == name), None),
         "trainers": [{"fsp_id": p.fsp_id, "full_name": _full(p), "disciplines": p.disciplines,
                       "wards": sum(lk.trainer_fsp_id == p.fsp_id for lk in store.links if lk.status == "ACTIVE")}
                      for p in people if Role.TRAINER in p.roles],
@@ -197,9 +199,11 @@ async def organization_card(name: str):
 async def put_card(name: str, data: CardIn):
     if name not in ORGANIZATIONS or name == NO_ORGANIZATION:
         raise HTTPException(404, "Организация не найдена")
-    if not _admin(data.actor):
-        raise HTTPException(403, "Карточку организации ведёт федерация")
-    body = {"name": name, "license": data.license.model_dump(mode="json") if data.license else None,
+    founder = next((c["founder_fsp_id"] for c in store.ext.table("clubs").values() if c["name"] == name), None)
+    if not (_admin(data.actor) or data.actor == founder):
+        raise HTTPException(403, "Карточку организации ведёт федерация, карточку клуба — его основатель")
+    license_ = data.license if _admin(data.actor) else None  # лицензию вносит только федерация
+    body = {"name": name, "license": (license_.model_dump(mode="json") if license_ else (_card(name) or {}).get("license")),
             "programs": [p.model_dump() for p in data.programs], "description": data.description.strip(),
             "updated_at": datetime.now().isoformat(timespec="seconds")}
     if card := _card(name):

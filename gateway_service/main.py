@@ -28,7 +28,7 @@ from gateway_service.routes import (
 from gateway_service.session import clear_session, write_session
 from gateway_service.web import (
     BASE_DIR, Redirect, admin_ids, back, clients, current_user, discipline_audience, download, form_dict, humanize,
-    known_format, render, require, ru_date, safe, templates,
+    known_format, organization_names, render, require, ru_date, safe, templates,
 )
 from shared import config, domain, listing
 from shared.demo_roster import DEMO_ACCOUNTS
@@ -103,19 +103,18 @@ async def health():
 async def landing(request: Request):
     degraded: list[str] = []
     user = await safe(current_user(request), None, degraded)
-    sp_h, co_h, upcoming, rating, stats, live = await asyncio.gather(
+    sp_h, co_h, upcoming, rating, stats = await asyncio.gather(
         _health("sportsman"), _health("competition"),
         safe(clients["competition"].get("/api/v1/competitions", upcoming=True), [], degraded),
         safe(clients["competition"].get("/api/v1/rating", discipline="ALG"), None, degraded),
         safe(clients["sportsman"].get("/api/v1/stats"), None, degraded),
-        safe(clients["competition"].get("/api/v1/competitions", status="LIVE"), [], degraded),
     )
     nearest = {}
     for c in upcoming:
         nearest.setdefault(c["discipline"], c)
     return render(request, "landing.html", user=user, health={"sportsman": sp_h, "competition": co_h},
-                  upcoming=[c for c in upcoming if c["status"] != "LIVE"][:4], rating=rating, stats=stats,
-                  live=live[0] if live else None, nearest=nearest, degraded=sorted(set(degraded)))
+                  upcoming=upcoming[:4], rating=rating, stats=stats,
+                  nearest=nearest, organizations=await organization_names(), degraded=sorted(set(degraded)))
 
 
 @app.get("/rating", response_class=HTMLResponse)
@@ -206,7 +205,7 @@ async def verify_page(request: Request, number: str, c: str = ""):
 async def register_form(request: Request):
     if await current_user(request):
         return RedirectResponse("/cabinet", status_code=303)
-    return render(request, "register.html", user=None, values={}, errors=None)
+    return render(request, "register.html", user=None, values={}, errors=None, organizations=await organization_names())
 
 
 @app.post("/register", response_class=HTMLResponse)
@@ -229,7 +228,8 @@ async def register_submit(request: Request):
         if exc.unavailable:
             raise
         values.update(roles=roles, disciplines=disciplines)
-        return render(request, "register.html", user=None, values=values, errors=humanize(exc.detail))
+        return render(request, "register.html", user=None, values=values, errors=humanize(exc.detail),
+                      organizations=await organization_names())
     resp = back("/cabinet", "fsp_issued", f"Аккаунт создан. Ваш региональный идентификатор: {person['fsp_id']}",
                 fsp_id=person["fsp_id"], roles=person["role_labels"])
     write_session(resp, person["fsp_id"], person["roles"][0])
@@ -843,7 +843,7 @@ async def headcount_page(request: Request, years: int = 3, discipline: str = "",
             raise
         return back("/reports/headcount", "error", humanize(exc.detail))
     qs = urlencode({k: v for k, v in query.items() if v})
-    return render(request, "report_headcount.html", user=user, r=report, qs=qs, years=years,
+    return render(request, "report_headcount.html", user=user, r=report, qs=qs, years=years, organizations=await organization_names(),
                   filters={"discipline": discipline, "municipality": municipality, "organization": organization})
 
 

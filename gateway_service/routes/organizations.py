@@ -1,5 +1,6 @@
 """Д3. Организации спортивной подготовки: карточка (лицензия, программы), учебно-тренировочные группы по этапам, зачисление и перевод, журнал занятий."""
 import asyncio
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -20,9 +21,10 @@ async def organizations_page(request: Request):
     user = await require(request, *VIEW)
     degraded: list[str] = []
     orgs = await safe(clients["sportsman"].get("/api/v1/organizations"), [], degraded)
-    named = [o["name"] for o in orgs if o["name"] in domain.ORGANIZATION_INFO]
+    named = [o["name"] for o in orgs if o["type"] != "—"]  # со справочной карточкой: справочник и клубы тренеров
     cards = await asyncio.gather(*(safe(clients["sportsman"].get("/api/v1/organizations/" + n.replace("/", "%2F") + "/card"), None, degraded) for n in named))
-    return render(request, "organizations.html", user=user, cards=[c for c in cards if c], degraded=sorted(set(degraded)))
+    return render(request, "organizations.html", user=user, cards=[c for c in cards if c], degraded=sorted(set(degraded)),
+                  can_create_club=user["role"] in (Role.TRAINER, Role.ADMIN), municipalities=domain.MUNICIPALITIES)
 
 
 @router.get("/organizations/card", response_class=HTMLResponse)
@@ -31,26 +33,50 @@ async def organization_page(request: Request, name: str):
     card = await clients["sportsman"].get("/api/v1/organizations/" + name.replace("/", "%2F") + "/card")
     chosen = {(p["stage"], p["discipline"]) for p in card["programs"]}
     return render(request, "organization.html", user=user, c=card, stages=domain.TRAINING_STAGES, disciplines=domain.DISCIPLINES,
-                  chosen=chosen, can_edit=user["role"] == Role.ADMIN, can_group=user["role"] in (Role.ADMIN, Role.TRAINER))
+                  chosen=chosen, can_edit=_can_edit_card(user, card), can_license=user["role"] == Role.ADMIN,
+                  can_group=user["role"] in (Role.ADMIN, Role.TRAINER))
+
+
+def _can_edit_card(user: dict, card: dict) -> bool:
+    """Карточку ведёт федерация; карточку клуба — ещё и его основатель (лицензию — только федерация)."""
+    return user["role"] == Role.ADMIN or (user["role"] == Role.TRAINER and card.get("club") and card.get("founder_fsp_id") == user["person"]["fsp_id"])
+
+
+@router.post("/organizations/clubs")
+async def create_club(request: Request):
+    user = await require(request, Role.TRAINER, Role.ADMIN)
+    form = await request.form()
+    try:
+        club = await clients["sportsman"].post("/api/v1/clubs", json={
+            "name": str(form.get("name", "")), "municipality": str(form.get("municipality", "")),
+            "description": str(form.get("description", "")), "actor": user["person"]["fsp_id"]})
+    except ServiceError as exc:
+        if exc.unavailable:
+            raise
+        return back("/organizations", "error", humanize(exc.detail))
+    tail = " Вы указаны его тренером." if club["joined"] else ""
+    return back(f"/organizations/card?name={quote(club['name'])}", "ok",
+                f"Клуб «{club['name']}» создан.{tail} Укажите программы подготовки и создайте группу.")
 
 
 @router.post("/organizations/card")
 async def save_card(request: Request):
-    user = await require(request, Role.ADMIN)
+    user = await require(request, Role.ADMIN, Role.TRAINER)
     form = await request.form()
     name = str(form.get("name", ""))
     number = str(form.get("license_number", "")).strip()
     programs = [{"stage": s, "discipline": d} for s, _, d in (v.partition("|") for v in form.getlist("program"))]
+    is_admin = user["role"] == Role.ADMIN
     payload = {"actor": user["person"]["fsp_id"], "description": str(form.get("description", "")), "programs": programs,
                "license": {"number": number, "issued_at": str(form.get("license_issued", "")), "issuer": str(form.get("license_issuer", "")),
-                           "valid_until": str(form.get("license_until", "")) or None} if number else None}
+                           "valid_until": str(form.get("license_until", "")) or None} if (number and is_admin) else None}
     try:
         await clients["sportsman"].put("/api/v1/organizations/" + name.replace("/", "%2F") + "/card", json=payload)
     except ServiceError as exc:
         if exc.unavailable:
             raise
-        return back(f"/organizations/card?name={name}", "error", humanize(exc.detail))
-    return back(f"/organizations/card?name={name}", "ok", "Карточка организации сохранена")
+        return back(f"/organizations/card?name={quote(name)}", "error", humanize(exc.detail))
+    return back(f"/organizations/card?name={quote(name)}", "ok", "Карточка организации сохранена")
 
 
 @router.post("/organizations/groups")
@@ -66,7 +92,7 @@ async def create_group(request: Request):
     except ServiceError as exc:
         if exc.unavailable:
             raise
-        return back(f"/organizations/card?name={org}", "error", humanize(exc.detail))
+        return back(f"/organizations/card?name={quote(org)}", "error", humanize(exc.detail))
     return back(f"/groups/{g['id']}", "ok", f"Группа «{g['name']}» создана — зачислите спортсменов")
 
 

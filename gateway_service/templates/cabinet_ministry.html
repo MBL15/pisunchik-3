@@ -2,7 +2,7 @@
 {% import "macros.html" as m %}
 {% block title %}Кабинет министерства · ФСП Оренбург{% endblock %}
 {% block content %}
-{% include "_cabinet_head.html" %}
+{% include "_cabinet_head_compact.html" %}
 <p class="mt-6 flex items-center gap-2 rounded-xl border border-fsp-blue/50 bg-fsp-blue/10 px-4 py-3 text-sm text-fsp-light" role="note">
   {{ m.icon("shield", "h-4 w-4 shrink-0 text-fsp-violet") }}Доступ только для чтения: отчёты, календарь, состав сборной и показатели развития вида спорта. Изменять данные может федерация.
 </p>
@@ -15,7 +15,12 @@
   {{ m.kpi("участников", dash.participants_unique if dash else "—", "спортсменов региона в протоколах", "emerald") }}
 </section>
 
-{% include "_ministry_infographic.html" %}
+<details class="group mt-8 rounded-xl border border-fsp-line bg-fsp-panel/60">
+  <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-mono text-xs uppercase tracking-wider text-fsp-muted hover:text-fsp-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fsp-violet">
+    <span>Динамика за несколько лет — графики</span>{{ m.icon("chevron", "h-4 w-4 transition-transform group-open:rotate-180") }}
+  </summary>
+  <div class="px-4 pb-4">{% include "_ministry_infographic.html" %}</div>
+</details>
 
 <section class="mt-8" aria-labelledby="min-reports">
   <h2 id="min-reports" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">Отчёты</h2>
@@ -32,7 +37,7 @@
   <div aria-labelledby="min-cal">
     <h2 id="min-cal" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">Ближайшие соревнования</h2>
     <ul class="grid gap-2">
-      {% for c in upcoming %}
+      {% for c in upcoming[:4] %}
       <li class="{{ m.CARD }} p-3 text-sm">
         <div class="flex flex-wrap items-center gap-2">{{ m.comp_status(c) }}{{ m.tag(c.discipline_label, "blue") }}{{ m.tag(c.level_status) }}</div>
         <a href="/competitions/{{ c.id }}/regulation" class="mt-1 block font-medium text-white hover:text-fsp-violet hover:underline">{{ c.title }}</a>
@@ -44,7 +49,7 @@
   <div aria-labelledby="min-teams">
     <h2 id="min-teams" class="mb-3 font-mono text-xs uppercase tracking-wider text-fsp-muted">Сборные региона</h2>
     <ul class="grid gap-2">
-      {% for t in teams %}
+      {% for t in teams[:4] %}
       <li class="{{ m.CARD }} flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
         <div class="min-w-0">
           <a href="/teams/{{ t.id }}" class="font-medium text-white hover:text-fsp-violet hover:underline">{{ t.title }}</a>

@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from gateway_service import integrations_api, market_api, notify, personal_api, reports, throttle
+from gateway_service import apply, integrations_api, market_api, notify, personal_api, reports, throttle
 from gateway_service.listing_ui import chips, list_args, pages
 from gateway_service.qr import qr_svg
 from gateway_service.routes import (
@@ -448,8 +448,11 @@ async def _cabinet_trainer(request: Request, user: dict):
         rq = link.get("rank_request")
         link["handled"] = bool(rq and rq["status"] == "PENDING") or bool(link["active_apps"] and not link["rank_options"])
     open_comps = [c for c in open_comps if c["discipline"] in user["person"]["disciplines"]]
+    comp_apps = await asyncio.gather(*(safe(clients["competition"].get("/api/v1/applications", competition_id=c["id"]), [], degraded)
+                                       for c in open_comps))
     return render(request, "cabinet_trainer.html", user=user, links=links, active=active, alerts=alerts,
-                  open_comps=open_comps, apps=apps, quals=quals, degraded=sorted(set(degraded)))
+                  open_comps=open_comps, apps=apps, quals=quals, degraded=sorted(set(degraded)),
+                  start_rosters=apply.roster(open_comps, links, [a for chunk in comp_apps for a in chunk]))
 
 
 async def _cabinet_athlete(request: Request, user: dict):
@@ -530,20 +533,30 @@ async def change_link(request: Request, link_id: int):
 async def submit_application(request: Request):
     user = await require(request, Role.TRAINER, Role.ATHLETE)
     form = await request.form()
-    athlete = user["person"]["fsp_id"] if user["role"] == Role.ATHLETE else str(form.get("athlete_fsp_id", ""))
-    try:
-        app_ = await clients["competition"].post("/api/v1/applications", json={
-            "competition_id": int(form.get("competition_id", 0)), "athlete_fsp_id": athlete,
-            "submitted_by": user["person"]["fsp_id"]})
-    except ServiceError as exc:
-        return back("/cabinet", "error", humanize(exc.detail))
-    if app_["athlete_fsp_id"] != user["person"]["fsp_id"]:
-        await notify.notify(app_["athlete_fsp_id"], "Тренер подал заявку за вас", app_["competition_title"], "/cabinet")
-    await notify.notify_many(await admin_ids(), "Новая заявка на соревнование",
-                             f"{app_['athlete_name']} → {app_['competition_title']}", "/cabinet#inbox")
+    me = user["person"]["fsp_id"]
+    athletes = [me] if user["role"] == Role.ATHLETE else list(dict.fromkeys(str(a) for a in form.getlist("athlete_fsp_id") if a))
     anchor = "#starts" if user["role"] == Role.ATHLETE else "#apps"
-    return back(f"/cabinet{anchor}", "ok", f"Заявка #{app_['id']} подана: {app_['athlete_name']} → {app_['competition_title']}",
-                celebrate=True, app_id=app_["id"])
+    if not athletes:
+        return back("/cabinet#actions", "error", "Отметьте хотя бы одного ученика")
+    done, errors = [], []
+    for athlete in athletes:
+        try:
+            done.append(await clients["competition"].post("/api/v1/applications", json={
+                "competition_id": int(form.get("competition_id", 0)), "athlete_fsp_id": athlete, "submitted_by": me}))
+        except ServiceError as exc:
+            errors.append(f"{athlete}: {humanize(exc.detail)}" if len(athletes) > 1 else humanize(exc.detail))
+    for app_ in done:
+        await apply.announce(app_, me)
+    if done:
+        await notify.notify_many(await admin_ids(), "Новая заявка на соревнование" if len(done) == 1 else f"Новые заявки на соревнование: {len(done)}",
+                                 "; ".join(f"{a['athlete_name']} → {a['competition_title']}" for a in done), "/cabinet#inbox")
+    if not done:
+        return back("/cabinet#actions", "error", "; ".join(errors))
+    text = (f"Заявка #{done[0]['id']} подана: {done[0]['athlete_name']} → {done[0]['competition_title']}" if len(done) == 1 else
+            f"Подано заявок: {len(done)} → {done[0]['competition_title']}")
+    if errors:
+        text += f". Не поданы: {'; '.join(errors)}"
+    return back(f"/cabinet{anchor}", "ok", text, celebrate=True, app_id=done[0]["id"])
 
 
 _QUAL_ANCHOR = {Role.ATHLETE: "#todo", Role.TRAINER: "#ranks", Role.JUDGE: "#category"}

@@ -36,7 +36,7 @@
 | `GET /athlete/results` · `/athlete/applications` | спортсмен | Моя история выступлений · мои заявки |
 | `GET /judge/assignments` | судья | Мои назначения |
 | `GET /trainer/athletes` · `/trainer/applications` | тренер | Подопечные с результатами · поданные заявки |
-| `POST /applications` `{competition_id, athlete_fsp_id?}` | тренер, спортсмен | Подать заявку (спортсмен — всегда за себя) + уведомления федерации и спортсмену |
+| `POST /applications` `{competition_id, athlete_fsp_id?}` | тренер, спортсмен | Подать заявку (спортсмен — всегда за себя) + уведомления федерации и спортсмену (без отметки РУСАДА — ещё и напоминание приложить сертификат) |
 | `GET /reports/headcount`, `/development/competitions`, `/dashboard`, `/teams`, `/teams/{id}`, `/awards/candidates` | министерство, федерация | Отчёты и показатели (только чтение) |
 | `GET /admin/applications` · `/admin/competitions/{id}/entry-sheet` | федерация | Заявки на решение · лист ввода результатов |
 | `POST /admin/applications/{id}/decision` `{status, comment}` | федерация | Одобрить / отклонить (окончательно) + уведомления |

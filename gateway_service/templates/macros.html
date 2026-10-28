@@ -86,6 +86,12 @@
 {%- endif -%}
 {%- endmacro %}
 
+{# Состояние документа спортсмена (РУСАДА, согласия, разряд, санкция): цвет дублируется иконкой и текстом #}
+{% macro doc_chip(d) -%}
+{%- set tones = {"ok": "border-emerald-500/50 bg-emerald-500/5 text-emerald-300", "warn": "border-amber-400/70 bg-amber-400/10 text-amber-300", "bad": "border-rose-500/70 bg-rose-500/10 text-rose-300"} -%}
+<span class="inline-flex items-center gap-1 whitespace-nowrap border {{ tones[d.tone] }} px-2 py-0.5 font-mono text-[11px] rounded-md" title="{{ d.label }}: {{ d.text }}{% if d.date %} · {{ d.date|ru_date }}{% endif %}">{{ icon("check" if d.tone == "ok" else "alert", "h-3 w-3") }}<span class="font-semibold">{{ d.label }}</span> {{ d.text }}</span>
+{%- endmacro %}
+
 {% macro tag(text, tone="slate") -%}
 {%- set tones = {"slate": "border-fsp-line2 text-fsp-soft", "blue": "border-fsp-blue/60 text-fsp-violet", "emerald": "border-emerald-500/60 text-emerald-300", "amber": "border-amber-400/60 text-amber-300"} -%}
 <span class="inline-flex items-center whitespace-nowrap border {{ tones[tone] }} px-1.5 py-0.5 font-mono text-[11px] rounded-md">{{ text }}</span>

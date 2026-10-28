@@ -101,7 +101,7 @@ Swagger: `http://127.0.0.1:8001/docs` (sportsman), `http://127.0.0.1:8002/docs` 
 | `GET /registry/export.{fmt}?…` | федерация | Выгрузка **всего** отфильтрованного списка (не только страницы) в .xlsx / .docx / .pdf; больше 20 000 строк — `422` |
 | `POST /cabinet/links` | тренер | Запрос на привязку |
 | `POST /cabinet/links/{id}/status` | тренер, спортсмен | Смена статуса связи (конфетти при `ACTIVE`) |
-| `POST /cabinet/applications` | тренер, спортсмен | Подача заявки → `/cabinet#starts` или `#apps`, подсветка и конфетти |
+| `POST /cabinet/applications` | тренер, спортсмен | Подача заявки → `/cabinet#starts` или `#apps`, подсветка и конфетти. Тренер может передать несколько `athlete_fsp_id` (отмеченные ученики); ученику — уведомление, без сертификата РУСАДА — напоминание его приложить |
 | `POST /cabinet/admin/applications/{id}` | федерация | Решение по заявке |
 | `POST /cabinet/admin/rating-settings` | федерация | Настройки рейтинга |
 | `POST /cabinet/admin/protocol/{id}/results` | федерация | Ввод результатов: `action=draft` — черновик, `action=publish` — публикация и переход на протокол |

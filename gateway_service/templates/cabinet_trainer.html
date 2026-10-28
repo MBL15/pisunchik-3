@@ -76,27 +76,52 @@
 {# ================= 02 · ACTIONS ================= #}
 <section id="actions" class="mt-14 scroll-mt-36" aria-labelledby="actions-title">
   {{ m.step_head("02", "Заявки и привязка", "actions-title") }}
-  <div class="grid gap-6 lg:grid-cols-2 xl:grid-cols-3" data-stagger>
-    <form method="post" action="/cabinet/applications" class="spotlight grid content-start gap-4 rounded-xl border border-fsp-line bg-fsp-panel p-6">
-      <div>
-        <h3 class="font-mono text-lg font-normal text-fsp-light">Заявка за спортсмена</h3>
-        <p class="mt-1 text-sm text-fsp-muted">Возраст, дисциплину, санкции и привязку платформа проверит сама.</p>
-      </div>
-      <div>
-        <label for="app-athlete" class="{{ m.LABEL }}">Спортсмен</label>
-        <select id="app-athlete" name="athlete_fsp_id" class="{{ m.INPUT }}">
-          {% for l in active %}<option value="{{ l.athlete_fsp_id }}">{{ l.athlete.full_name }} · {{ l.discipline }}</option>{% endfor %}
-        </select>
-      </div>
-      <div>
-        <label for="app-comp" class="{{ m.LABEL }}">Соревнование</label>
-        <select id="app-comp" name="competition_id" class="{{ m.INPUT }}">
-          {% for c in open_comps %}<option value="{{ c.id }}">{{ c.discipline }} · {{ c.start_date|ru_date }} · {{ c.title }} (до {{ c.registration_deadline|ru_date }})</option>{% else %}<option value="">нет открытых соревнований</option>{% endfor %}
-        </select>
-      </div>
-      <div><button class="{{ m.BTN }}" {% if not open_comps or not active %}disabled{% endif %}>Подать заявку</button></div>
-    </form>
-
+  <div class="spotlight mb-6 rounded-xl border border-fsp-line bg-fsp-panel p-6">
+    <h3 class="font-mono text-lg font-normal text-fsp-light">Заявка на соревнование</h3>
+    <p class="mt-1 max-w-3xl text-sm text-fsp-muted">Раскройте старт — увидите своих учеников по этой дисциплине и состояние их документов. Отметьте, кого заявить: возраст, санкции и повтор платформа проверит сама, ученику придёт уведомление, а без сертификата РУСАДА — напоминание его приложить.</p>
+    <div class="mt-5 grid gap-3">
+      {% for r in start_rosters %}{% set c = r.comp %}
+      <details class="rounded-xl border border-fsp-line2 bg-fsp-bg/40" {% if loop.first %}open{% endif %}>
+        <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+          <span class="min-w-0">
+            <span class="block font-medium text-white">{{ c.title }}</span>
+            <span class="block font-mono text-[11px] text-fsp-muted">{{ c.discipline }} · {{ c.age_group }} · старт {{ c.start_date|ru_date }} · приём до {{ c.registration_deadline|ru_date }}</span>
+          </span>
+          <span class="font-mono text-xs {% if r.free %}text-fsp-violet{% else %}text-fsp-muted{% endif %}">{% if r.rows %}можно заявить: {{ r.free }} из {{ r.rows|length }}{% else %}нет учеников по дисциплине{% endif %}</span>
+        </summary>
+        {% if r.rows %}
+        <form method="post" action="/cabinet/applications" class="border-t border-fsp-line p-4">
+          <input type="hidden" name="competition_id" value="{{ c.id }}">
+          <ul class="grid gap-2" data-trainer-roster>
+            {% for row in r.rows %}{% set a = row.athlete %}
+            <li>
+              <label class="flex items-start gap-3 rounded-lg border border-fsp-line px-3 py-2.5 {% if row.blocked %}opacity-60{% else %}cursor-pointer hover:border-fsp-blue{% endif %}">
+                <input type="checkbox" name="athlete_fsp_id" value="{{ row.athlete_fsp_id }}" {% if row.blocked %}disabled{% endif %} class="mt-1 h-4 w-4 shrink-0 accent-fsp-blue">
+                <span class="min-w-0 flex-1">
+                  <span class="block font-medium text-white">{{ a.full_name }} <span class="font-mono text-[11px] font-normal text-fsp-muted">{{ a.fsp_id }} · {{ row.age }} {{ plural(row.age, "год", "года", "лет") }} к старту</span></span>
+                  {% if row.blocked %}
+                  <span class="mt-1 block font-mono text-[11px] text-rose-300">{{ m.icon("alert", "mr-1 inline h-3 w-3") }}{{ row.blocked }}</span>
+                  {% else %}
+                  <span class="mt-1.5 flex flex-wrap gap-1.5">{% for d in row.docs %}{{ m.doc_chip(d) }}{% endfor %}</span>
+                  {% endif %}
+                </span>
+              </label>
+            </li>
+            {% endfor %}
+          </ul>
+          <div class="mt-4 flex flex-wrap items-center gap-3">
+            <button class="{{ m.BTN }}" {% if not r.free %}disabled{% endif %}>Подать заявку за отмеченных</button>
+            <p class="font-mono text-[11px] text-fsp-muted">Без РУСАДА заявку подать можно — ученик получит напоминание приложить сертификат.</p>
+          </div>
+        </form>
+        {% endif %}
+      </details>
+      {% else %}
+      <p class="rounded-lg border border-fsp-line px-4 py-3 text-sm text-fsp-muted">Открытых соревнований по вашим дисциплинам нет — следите за <a href="/calendar" class="text-fsp-violet hover:underline">календарём</a>.</p>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="grid gap-6 lg:grid-cols-2" data-stagger>
     <form method="post" action="/cabinet/qualification" class="spotlight grid content-start gap-4 rounded-xl border border-fsp-line bg-fsp-panel p-6">
       <div>
         <h3 class="font-mono text-lg font-normal text-fsp-light">Заявка на разряд</h3>

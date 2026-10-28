@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from gateway_service import notify
+from gateway_service import apply, notify
 from gateway_service.web import admin_ids, clients
 from shared import config
 from shared.domain import ROLE_LABELS, Role
@@ -169,8 +169,7 @@ async def submit_application(body: ApplicationBody, who: dict = TRAINER_OR_ATHLE
         raise HTTPException(422, "Укажите athlete_fsp_id подопечного")
     app_ = await clients["competition"].post("/api/v1/applications", json={
         "competition_id": body.competition_id, "athlete_fsp_id": athlete, "submitted_by": me_id})
-    if app_["athlete_fsp_id"] != me_id:
-        await notify.notify(app_["athlete_fsp_id"], "Тренер подал заявку за вас", app_["competition_title"], "/cabinet")
+    await apply.announce(app_, me_id)
     await notify.notify_many(await admin_ids(), "Новая заявка на соревнование",
                              f"{app_['athlete_name']} → {app_['competition_title']}", "/cabinet#inbox")
     return app_

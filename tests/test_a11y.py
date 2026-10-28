@@ -61,6 +61,18 @@ class A11yTest(unittest.TestCase):
         """Псевдоэлемент внутри :is() делает весь селектор недействительным — правило молча не работает."""
         self.assertIsNone(re.search(r":is\([^)]*::", CSS))
 
+    def test_default_theme_keeps_the_decor(self):
+        """Скрипт панели ставит `data-a11y-theme="default"` на каждую страницу, поэтому правила контрастных схем
+        (скрыть холст с сетью узлов, лучи, свечение, сетку) не должны срабатывать от самого наличия атрибута."""
+        self.assertEqual(DEFAULTS["theme"], "default")
+        self.assertIn("root.setAttribute(`data-a11y-${k}`", JS)  # атрибут ставится всегда, в том числе для значения по умолчанию
+        bare = re.findall(r'html\[data-a11y-theme\](?!:not\(\[data-a11y-theme="default"\]\))', CSS)
+        self.assertEqual(bare, [], "селектор html[data-a11y-theme] без значения срабатывает и для схемы по умолчанию")
+        hiding = [line for line in CSS.splitlines() if "[data-network]" in line and "display: none" in line]
+        self.assertTrue(hiding)
+        for line in hiding:
+            self.assertTrue('data-a11y-theme]:not([data-a11y-theme="default"])' in line or "data-a11y-calm" in line, line)
+
     def test_calm_mode_reaches_effects_script_and_live_tables(self):
         self.assertIn("data-a11y-calm", BASE)
         self.assertIn("data-a11y-sr", BASE)

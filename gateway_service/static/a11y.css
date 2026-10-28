@@ -51,15 +51,15 @@ html[data-a11y-theme="yb"] [data-spy] a[aria-current="true"], html[data-a11y-the
 html[data-a11y-theme="yb"] [data-spy] a[aria-current="true"] span { color: #000 !important; }
 
 /* Контрастные схемы: сплошные рамки, без декора и полупрозрачности текста, заметный фокус */
-html[data-a11y-theme] :is([data-network], .beam, .fsp-glow, .bg-blueprint, .cursor-grid) { display: none !important; }
-html[data-a11y-theme] .bg-fsp-grid { background-image: none !important; }
-html[data-a11y-theme] ::placeholder { opacity: 1; }
-html[data-a11y-theme] :is(.spotlight)::before, html[data-a11y-theme] :is(.spotlight)::after { display: none; }
-html[data-a11y-theme] a { text-decoration-thickness: 1px; }
-html[data-a11y-theme] body { background-image: none; }
+html[data-a11y-theme]:not([data-a11y-theme="default"]) :is([data-network], .beam, .fsp-glow, .bg-blueprint, .cursor-grid) { display: none !important; }
+html[data-a11y-theme]:not([data-a11y-theme="default"]) .bg-fsp-grid { background-image: none !important; }
+html[data-a11y-theme]:not([data-a11y-theme="default"]) ::placeholder { opacity: 1; }
+html[data-a11y-theme]:not([data-a11y-theme="default"]) :is(.spotlight)::before, html[data-a11y-theme]:not([data-a11y-theme="default"]) :is(.spotlight)::after { display: none; }
+html[data-a11y-theme]:not([data-a11y-theme="default"]) a { text-decoration-thickness: 1px; }
+html[data-a11y-theme]:not([data-a11y-theme="default"]) body { background-image: none; }
 
 /* ---------- Заметный фокус (всегда в контрастных схемах, по желанию — отдельно) ---------- */
-html[data-a11y-focus="1"] :focus-visible, html[data-a11y-theme] :focus-visible {
+html[data-a11y-focus="1"] :focus-visible, html[data-a11y-theme]:not([data-a11y-theme="default"]) :focus-visible {
   outline: 4px solid #ffbf00 !important; outline-offset: 3px !important; box-shadow: 0 0 0 7px #000 !important;
 }
 

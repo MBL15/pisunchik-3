@@ -158,9 +158,11 @@ e2e меняет данные (в памяти или в Postgres) — посл�
 1. Локально: тесты зелёные, коммит запушен в `origin/main`.
 2. Залить снимок `HEAD` (только отслеживаемые файлы, `.env` и `business-card/` не попадают): `git archive --format=tar HEAD | ssh -i <ключ.pem> ubuntu@<ip> 'tar -xf - -C ~/fsp56'`. Удалённые в репозитории файлы на сервере остаются — при подозрении на мусор чистите руками.
 3. На сервере: `cd ~/fsp56 && sudo docker compose up -d --build`. Postgres и тома (`fsp_pg`, `fsp_tg`) не пересоздаются, данные и привязки Telegram сохраняются.
-4. Проверка: `docker compose ps` (все `Up`, Postgres `healthy`), `curl -s -o /dev/null -w "%{http_code}" http://<ip>:8000/login` → 200, `docker compose logs --since 2m` без `Traceback`.
+4. Проверка: `docker compose ps` (все `Up`, Postgres `healthy`), `curl -s -o /dev/null -w "%{http_code}" http://<ip>/login` → 200, `docker compose logs --since 2m` без `Traceback`.
 
-Серверный `.env` живёт только на сервере и в репозиторий не попадает (права `600`): `FSP_PUBLIC_BASE_URL`, `FSP_SECRET_KEY`, `FSP_SERVICE_TOKEN`, `FSP_TELEGRAM_TOKEN`, `FSP_TELEGRAM_BOT`, `COMPOSE_FILE` и `FSP_TELEGRAM_PROXY` (если включён туннель). Токены в репозиторий, коммиты и чат не кладём; засветившийся токен бота перевыпускают в BotFather (`/revoke`) и обновляют в серверном и локальном `.env`.
+Снаружи сайт открыт на «чистом» IP (`http://<ip>/`, порт 80): на хосте стоит nginx, единственный сайт `/etc/nginx/sites-available/fsp` — `proxy_pass http://127.0.0.1:8000` с заголовками `Host`/`X-Forwarded-*`. Порт шлюза наружу закрыт: в серверном `.env` `FSP_GATEWAY_BIND=127.0.0.1` (по умолчанию в compose `0.0.0.0`, локально ничего менять не нужно). Другие сайты на этом хосте не держим — они заняли бы порт 80.
+
+Серверный `.env` живёт только на сервере и в репозиторий не попадает (права `600`): `FSP_PUBLIC_BASE_URL` (`http://<ip>`), `FSP_GATEWAY_BIND`, `FSP_SECRET_KEY`, `FSP_SERVICE_TOKEN`, `FSP_TELEGRAM_TOKEN`, `FSP_TELEGRAM_BOT`, `COMPOSE_FILE` и `FSP_TELEGRAM_PROXY` (если включён туннель). Токены в репозиторий, коммиты и чат не кладём; засветившийся токен бота перевыпускают в BotFather (`/revoke`) и обновляют в серверном и локальном `.env`.
 
 Пока бот работает на сервере, локально запускайте стек без токена (`FSP_TELEGRAM_TOKEN= py -X utf8 run_all.py`): два опроса одного бота перехватывают апдейты друг у друга, и привязка срабатывает случайно. Привязки лежат в томе `fsp_tg`, поэтому пересборка и деплой их не стирают; `docker compose down -v` стирает.
 

@@ -59,7 +59,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"  # доступ к туннельному прокси на хосте (docs/knowledge-base/08-dev-runbook.md)
     ports:
-      - "8000:8000"
+      - "${FSP_GATEWAY_BIND:-0.0.0.0}:8000:8000"  # на сервере за nginx: FSP_GATEWAY_BIND=127.0.0.1
     depends_on:
       - sportsman
       - competition
